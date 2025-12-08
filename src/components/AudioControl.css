@@ -1,0 +1,66 @@
+.audio-control {
+	position: fixed;
+	bottom: 32px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+}
+
+.mic-button {
+	width: 64px;
+	height: 64px;
+	border-radius: 50%;
+	background: #0e639c;
+	border: 3px solid #1177bb;
+	color: white;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.3s;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mic-button:hover {
+	background: #1177bb;
+	transform: scale(1.05);
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.mic-button.listening {
+	background: #ff4444;
+	border-color: #ff6666;
+	animation: pulse-ring 1.5s infinite;
+}
+
+.mic-button.processing {
+	background: #ffa500;
+	border-color: #ffb732;
+	animation: spin 1s linear infinite;
+}
+
+.mic-button.executing {
+	background: #44ff44;
+	border-color: #66ff66;
+}
+
+@keyframes pulse-ring {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7);
+	}
+	50% {
+		box-shadow: 0 0 0 15px rgba(255, 68, 68, 0);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 68, 68, 0);
+	}
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
