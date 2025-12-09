@@ -24,12 +24,14 @@ A voice-controlled markdown editor with semantic command recognition, built with
   - File watcher for vault changes
   - Auto-save functionality
 
-### 🚧 In Progress
-- **ML Models**: Whisper and embedding models scaffolded, ready for model files
-- **AudioWorklet**: Currently using ScriptProcessor, needs AudioWorklet implementation
-- **Model Download**: HTTP download with progress tracking ready
+- **Model Management**:
+  - Integrated Whisper model downloader and selector
+  - Support for Distil-Whisper and standard Whisper models (Tiny, Base, Small, Medium, Large v3)
+  - Real-time download progress tracking
 
-## Development
+## Quick Start
+
+### Installation & Setup
 
 ```bash
 # Install dependencies
@@ -37,9 +39,44 @@ pnpm install
 
 # Run in development mode
 pnpm tauri:dev
+
+# Build for production
+pnpm tauri:build
 ```
+
+### First Time Setup
+
+1. Launch the app
+2. Click **"Open Folder"** in the sidebar to select your vault directory
+3. Click **"+ New Note"** to create a note
+4. Click the **microphone icon** to enable voice commands
+5. On first use, you'll be prompted to download a Whisper model (Recommended: Distil Whisper Medium)
+
+## Voice Commands
+
+### Formatting
+- **"Make this bold"** - Wraps selection in `**text**`
+- **"Make this italic"** - Wraps selection in `*text*`
+- **"Turn into heading"** or **"Heading one"** - Adds `# ` prefix
+- **"Heading two"** - Adds `## ` prefix
+- **"Quote this"** - Adds `> ` prefix
+- **"Make this a list"** - Adds `- ` prefix
+
+### Editor Actions
+- **"Undo"** - Undo last change
+- **"Redo"** - Redo last change
+- **"Delete that"** - Delete selection
+
+### Usage Tips
+1. Select text first for commands that need selection (bold, italic)
+2. For headings/lists, place cursor on the line
+3. Wait for silence detection (~800ms) after speaking
+4. Watch the microphone icon for feedback:
+   - 🟢 Listening
+   - ⏳ Processing
+   - ✅ Executing
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6
+- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui
 - **Backend**: Rust, Tauri v2, Candle 0.8 (ML), Tokio (async)

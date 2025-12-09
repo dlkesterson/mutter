@@ -1,0 +1,132 @@
+.ambiguity-popover {
+	position: absolute;
+	background: #2d2d2d;
+	border: 1px solid #4a4a4a;
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	padding: 12px;
+	min-width: 300px;
+	max-width: 400px;
+	z-index: 1000;
+	animation: popoverFadeIn 0.2s ease-out;
+}
+
+@keyframes popoverFadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.ambiguity-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	font-size: 14px;
+	color: #d4d4d4;
+}
+
+.ambiguity-icon {
+	background: #f59e0b;
+	color: #1e1e1e;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: bold;
+	font-size: 12px;
+}
+
+.ambiguity-title {
+	flex: 1;
+	font-weight: 500;
+}
+
+.ambiguity-confidence {
+	background: #3b82f6;
+	color: white;
+	padding: 2px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.ambiguity-options {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.ambiguity-option {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	background: #1e1e1e;
+	border: 1px solid #4a4a4a;
+	border-radius: 6px;
+	color: #d4d4d4;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	text-align: left;
+	font-size: 14px;
+}
+
+.ambiguity-option:hover,
+.ambiguity-option.selected {
+	background: #3b82f6;
+	border-color: #3b82f6;
+	color: white;
+	transform: translateX(4px);
+}
+
+.option-number {
+	background: #4a4a4a;
+	color: #d4d4d4;
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: bold;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+
+.ambiguity-option:hover .option-number,
+.ambiguity-option.selected .option-number {
+	background: rgba(255, 255, 255, 0.2);
+	color: white;
+}
+
+.option-text {
+	flex: 1;
+	line-height: 1.4;
+}
+
+.ambiguity-hint {
+	font-size: 11px;
+	color: #888;
+	text-align: center;
+	padding-top: 8px;
+	border-top: 1px solid #3a3a3a;
+}
+
+.ambiguity-hint kbd {
+	background: #1e1e1e;
+	border: 1px solid #4a4a4a;
+	border-radius: 3px;
+	padding: 2px 6px;
+	font-family: monospace;
+	font-size: 10px;
+	margin: 0 2px;
+}

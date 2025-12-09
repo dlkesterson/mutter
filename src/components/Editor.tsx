@@ -5,14 +5,36 @@ import { markdown } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { livePreviewPlugin, cursorPosField } from '../editor/livePreview';
 import { editorTheme } from '../editor/theme';
 import { executeCommand, CommandAction } from '../editor/commands';
+import { flashEffect, addFlash } from '../editor/flashEffect';
+import { markdownAutoPairExtension } from '../editor/autoPairs';
+import {
+	ghostTextExtension,
+	setGhostText,
+	clearGhostText,
+} from '../editor/ghostText';
+import { useToast } from '../hooks/use-toast';
+import AmbiguityPopover from './AmbiguityPopover';
 import './Editor.css';
 
 interface EditorProps {
 	filePath: string | null;
 	audioState: 'idle' | 'listening' | 'processing' | 'executing';
+	onVoiceLogEntry?: (entry: {
+		transcript: string;
+		interpretation: string;
+		confidence: number;
+		action: 'command' | 'text' | 'ambiguous';
+		timings?: {
+			stt_ms?: number;
+			embed_ms?: number;
+			search_ms?: number;
+			total_ms?: number;
+		};
+	}) => void;
 }
 
 interface ClassificationResult {
@@ -28,47 +50,202 @@ interface ClassificationResult {
 	requires_disambiguation: boolean;
 }
 
-export default function Editor({ filePath, audioState }: EditorProps) {
+interface PartialTranscription {
+	text: string;
+	is_final: boolean;
+	timestamp: number;
+}
+
+export default function Editor({
+	filePath,
+	audioState,
+	onVoiceLogEntry,
+}: EditorProps) {
+	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const [content, setContent] = useState('');
+	const [ambiguityData, setAmbiguityData] = useState<{
+		text: string;
+		command: CommandAction;
+		confidence: number;
+		position: { top: number; left: number };
+	} | null>(null);
+
+	// Listen for partial transcription events (Ghost Text)
+	useEffect(() => {
+		const unlisten = listen<PartialTranscription>(
+			'transcription-partial',
+			(event) => {
+				if (viewRef.current && event.payload.text) {
+					viewRef.current.dispatch({
+						effects: setGhostText.of(event.payload.text),
+					});
+				}
+			}
+		);
+
+		return () => {
+			unlisten.then((f) => f());
+		};
+	}, []);
 
 	// Handle transcription results
 	useEffect(() => {
 		const handleTranscription = async (text: string) => {
-			if (!viewRef.current) return;
+			if (!viewRef.current) {
+				console.warn('Editor not ready for transcription');
+				return;
+			}
+
+			// Clear ghost text
+			viewRef.current.dispatch({
+				effects: clearGhostText.of(),
+			});
+
+			// Check if editor has content (file is loaded)
+			const docLength = viewRef.current.state.doc.length;
+			if (docLength === 0 && !filePath) {
+				console.warn(
+					'No file loaded. Please create or open a file first.'
+				);
+				alert(
+					'Please create or open a file before using voice commands.'
+				);
+				return;
+			}
 
 			try {
 				const hasSelection =
 					viewRef.current.state.selection.main.from !==
 					viewRef.current.state.selection.main.to;
 
-				const result: ClassificationResult = await invoke(
-					'classify_text',
-					{
-						text,
-						hasSelection,
-					}
-				);
+				const classifyResult: {
+					result: ClassificationResult;
+					timings: {
+						embed_ms: number;
+						search_ms: number;
+						total_ms: number;
+					};
+				} = await invoke('classify_text', {
+					text,
+					hasSelection,
+				});
+
+				console.log('Classification timings:', classifyResult.timings);
+				const result = classifyResult.result;
+
+				// Log to voice log sidebar
+				let actionType: 'command' | 'text' | 'ambiguous' = 'text';
+				let interpretation = 'Insert text';
 
 				if (result.action.ExecuteCommand) {
+					actionType = 'command';
+					const cmd = result.action.ExecuteCommand;
+					if (cmd.Format) {
+						interpretation = `Format: ${JSON.stringify(
+							cmd.Format
+						)}`;
+					} else if (cmd.Editor) {
+						interpretation = `Editor: ${cmd.Editor}`;
+					} else if (cmd.System) {
+						interpretation = `System: ${JSON.stringify(
+							cmd.System
+						)}`;
+					}
+				} else if (result.action.Ambiguous) {
+					actionType = 'ambiguous';
+					interpretation = 'Requires disambiguation';
+				}
+
+				if (onVoiceLogEntry) {
+					onVoiceLogEntry({
+						transcript: text,
+						interpretation,
+						confidence: result.confidence,
+						action: actionType,
+						timings: classifyResult.timings,
+					});
+				}
+
+				if (result.action.ExecuteCommand) {
+					const { from, to } = viewRef.current.state.selection.main;
 					executeCommand(
 						viewRef.current,
 						result.action.ExecuteCommand
 					);
+					// Add flash effect for formatting commands
+					viewRef.current.dispatch({
+						effects: addFlash.of({ from, to, type: 'format' }),
+					});
+					toast({
+						title: 'Command Executed',
+						description: `Executed: ${JSON.stringify(
+							result.action.ExecuteCommand
+						)}`,
+						duration: 2000,
+					});
 				} else if (result.action.InsertText) {
 					const { from } = viewRef.current.state.selection.main;
+					const docLength = viewRef.current.state.doc.length;
+
+					// Safety check: ensure cursor position is valid
+					if (from > docLength) {
+						console.error(
+							'Invalid cursor position:',
+							from,
+							'document length:',
+							docLength
+						);
+						return;
+					}
+
+					const textToInsert = result.action.InsertText;
+					const insertLength = textToInsert.length;
+
+					// Insert text without flash effect first
 					viewRef.current.dispatch({
-						changes: { from, insert: result.action.InsertText },
+						changes: { from, insert: textToInsert },
+					});
+
+					// Then add flash effect on the next frame after document updates
+					// Ensure the range is valid in the new document state
+					requestAnimationFrame(() => {
+						if (viewRef.current) {
+							const currentDocLen =
+								viewRef.current.state.doc.length;
+							const safeTo = Math.min(
+								from + insertLength,
+								currentDocLen
+							);
+
+							if (from <= currentDocLen) {
+								viewRef.current.dispatch({
+									effects: addFlash.of({
+										from,
+										to: safeTo,
+										type: 'insert',
+									}),
+								});
+							}
+						}
 					});
 				} else if (result.action.Ambiguous) {
-					// TODO: Show disambiguation UI
-					console.log('Ambiguous command:', result.action.Ambiguous);
-					// For now, insert as text
-					const { from } = viewRef.current.state.selection.main;
-					viewRef.current.dispatch({
-						changes: { from, insert: result.action.Ambiguous.text },
-					});
+					// Show disambiguation UI
+					const coords = viewRef.current.coordsAtPos(
+						viewRef.current.state.selection.main.from
+					);
+					if (coords) {
+						setAmbiguityData({
+							text: result.action.Ambiguous.text,
+							command: result.action.Ambiguous.possible_command,
+							confidence: result.confidence,
+							position: {
+								top: coords.top + 24,
+								left: coords.left,
+							},
+						});
+					}
 				}
 			} catch (error) {
 				console.error('Error handling transcription:', error);
@@ -83,6 +260,30 @@ export default function Editor({ filePath, audioState }: EditorProps) {
 		};
 	}, []);
 
+	// Listen for streaming transcription events
+	useEffect(() => {
+		const unlistenPartial = listen(
+			'transcription-partial',
+			(event: any) => {
+				if (viewRef.current) {
+					const text = event.payload.text;
+					viewRef.current.dispatch({
+						effects: setGhostText.of(text),
+					});
+				}
+			}
+		);
+
+		const unlistenProcessing = listen('transcription-processing', () => {
+			// Maybe show a spinner or something
+		});
+
+		return () => {
+			unlistenPartial.then((unlisten) => unlisten());
+			unlistenProcessing.then((unlisten) => unlisten());
+		};
+	}, []);
+
 	useEffect(() => {
 		if (!editorRef.current) return;
 
@@ -94,6 +295,9 @@ export default function Editor({ filePath, audioState }: EditorProps) {
 				editorTheme,
 				cursorPosField,
 				livePreviewPlugin,
+				flashEffect,
+				markdownAutoPairExtension,
+				ghostTextExtension,
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
@@ -148,6 +352,48 @@ export default function Editor({ filePath, audioState }: EditorProps) {
 			<div className={`editor-wrapper audio-${audioState}`}>
 				<div ref={editorRef} className='editor' />
 			</div>
+			{ambiguityData && (
+				<AmbiguityPopover
+					text={ambiguityData.text}
+					possibleCommand={ambiguityData.command}
+					confidence={ambiguityData.confidence}
+					position={ambiguityData.position}
+					onChoose={(choice) => {
+						if (!viewRef.current) return;
+						const { from } = viewRef.current.state.selection.main;
+
+						if (choice === 'command') {
+							executeCommand(
+								viewRef.current,
+								ambiguityData.command
+							);
+							viewRef.current.dispatch({
+								effects: addFlash.of({
+									from,
+									to: viewRef.current.state.selection.main.to,
+									type: 'format',
+								}),
+							});
+							toast({
+								title: 'Command Executed',
+								description: `Executed: ${ambiguityData.command}`,
+								duration: 2000,
+							});
+						} else {
+							viewRef.current.dispatch({
+								changes: { from, insert: ambiguityData.text },
+								effects: addFlash.of({
+									from,
+									to: from + ambiguityData.text.length,
+									type: 'insert',
+								}),
+							});
+						}
+						setAmbiguityData(null);
+					}}
+					onDismiss={() => setAmbiguityData(null)}
+				/>
+			)}
 			{audioState !== 'idle' && (
 				<div className='audio-status'>
 					{audioState === 'listening' && (

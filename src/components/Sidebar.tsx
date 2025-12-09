@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { readDir, writeTextFile } from '@tauri-apps/plugin-fs';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getStorageItem, setStorageItem, StorageKeys } from '../utils/storage';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -28,6 +29,8 @@ export default function Sidebar({ onFileSelect }: SidebarProps) {
 			console.log('Selected folder:', selected);
 			if (selected && typeof selected === 'string') {
 				setVaultPath(selected);
+				// Save to IndexedDB
+				await setStorageItem(StorageKeys.VAULT_PATH, selected);
 				const fileList = await loadFiles(selected);
 				console.log('Loaded files:', fileList);
 				setFiles(fileList);
@@ -70,8 +73,37 @@ export default function Sidebar({ onFileSelect }: SidebarProps) {
 	};
 
 	useEffect(() => {
-		// TODO: Load vault path from settings
-		// For now, use a default or prompt user
+		// Load vault path from IndexedDB on mount
+		const loadVaultPath = async () => {
+			try {
+				const savedPath = await getStorageItem<string>(
+					StorageKeys.VAULT_PATH
+				);
+				if (savedPath) {
+					console.log('Loaded vault path from storage:', savedPath);
+					setVaultPath(savedPath);
+					try {
+						const fileList = await loadFiles(savedPath);
+						setFiles(fileList);
+					} catch (loadError) {
+						console.warn(
+							'Failed to load files from saved vault path:',
+							loadError
+						);
+						console.log(
+							'The folder may have been moved or deleted. Please select a new vault folder.'
+						);
+						// Clear the invalid path
+						await setStorageItem(StorageKeys.VAULT_PATH, null);
+						setVaultPath('');
+					}
+				}
+			} catch (error) {
+				console.error('Error loading vault path from storage:', error);
+			}
+		};
+
+		loadVaultPath();
 	}, []);
 
 	const loadFiles = async (path: string) => {

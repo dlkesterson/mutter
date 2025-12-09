@@ -1,0 +1,99 @@
+.streaming-transcription {
+	position: fixed;
+	top: 20px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 1000;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.3s ease-in-out;
+}
+
+.streaming-transcription.visible {
+	opacity: 1;
+}
+
+.transcription-container {
+	background: var(--color-card);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	padding: 16px 24px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	backdrop-filter: blur(10px);
+	min-width: 400px;
+	max-width: 600px;
+}
+
+.transcription-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.live-indicator {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.live-dot {
+	width: 8px;
+	height: 8px;
+	background: #ef4444;
+	border-radius: 50%;
+	animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+.live-text {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--color-muted-foreground);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.transcription-content {
+	font-size: 16px;
+	line-height: 1.5;
+	color: var(--color-foreground);
+	min-height: 24px;
+}
+
+.partial-text {
+	color: var(--color-foreground);
+	font-weight: 400;
+}
+
+.processing-text {
+	color: var(--color-muted-foreground);
+	font-style: italic;
+	animation: fadeInOut 1.5s infinite;
+}
+
+@keyframes fadeInOut {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* Make it work well with dark mode */
+@media (prefers-color-scheme: dark) {
+	.transcription-container {
+		background: rgba(30, 30, 30, 0.95);
+	}
+}

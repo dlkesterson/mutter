@@ -21,23 +21,6 @@ impl AudioBuffer {
             buffer.push_overwrite(sample);
         }
     }
-
-    pub fn get_last(&self, duration_secs: f32) -> Vec<f32> {
-        let buffer = self.buffer.lock().unwrap();
-        let sample_count = (16000.0 * duration_secs) as usize;
-        let available = buffer.len().min(sample_count);
-
-        let mut result = Vec::with_capacity(available);
-        let slice = buffer.as_slices();
-
-        // Copy from ring buffer slices
-        for &sample in slice.0.iter().rev().take(available) {
-            result.push(sample);
-        }
-
-        result.reverse();
-        result
-    }
 }
 
 /// Voice Activity Detection state
@@ -45,6 +28,7 @@ pub struct VadState {
     is_speaking: bool,
     silence_duration: f32,
     speech_duration: f32,
+    energy_threshold: f32,
 }
 
 impl VadState {
@@ -53,33 +37,35 @@ impl VadState {
             is_speaking: false,
             silence_duration: 0.0,
             speech_duration: 0.0,
+            energy_threshold: 0.002, // Increased from 0.0005 to reduce false positives
         }
     }
 
-    pub fn update(&mut self, has_voice: bool, chunk_duration: f32) {
+    pub fn process(&mut self, samples: &[f32], sample_rate: f32) -> bool {
+        let chunk_duration = samples.len() as f32 / sample_rate;
+        let energy: f32 = samples.iter().map(|&s| s * s).sum::<f32>() / samples.len() as f32;
+
+        let has_voice = energy > self.energy_threshold;
+
         if has_voice {
             self.silence_duration = 0.0;
             self.speech_duration += chunk_duration;
             self.is_speaking = true;
         } else {
-            self.silence_duration += chunk_duration;
-            if self.silence_duration > 0.5 {
-                self.is_speaking = false;
-                self.speech_duration = 0.0;
+            if self.is_speaking {
+                self.silence_duration += chunk_duration;
+                // Require 800ms of silence to stop
+                if self.silence_duration > 0.8 {
+                    self.is_speaking = false;
+                    // Only return true (stop) if we had enough speech
+                    if self.speech_duration > 0.5 {
+                        self.speech_duration = 0.0;
+                        return true; // End of speech detected
+                    }
+                    self.speech_duration = 0.0;
+                }
             }
         }
+        false
     }
-
-    pub fn should_transcribe(&self) -> bool {
-        !self.is_speaking && self.speech_duration > 0.3
-    }
-}
-
-/// Simple energy-based VAD (will be replaced with Silero VAD)
-pub fn detect_voice_activity(samples: &[f32]) -> bool {
-    let energy: f32 = samples.iter().map(|&s| s * s).sum();
-    let avg_energy = energy / samples.len() as f32;
-
-    // Simple threshold - tune this or replace with ML model
-    avg_energy > 0.001
 }

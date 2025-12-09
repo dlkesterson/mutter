@@ -50,6 +50,45 @@
 	line-height: 1.3;
 }
 
+/* Flash effect animations */
+.cm-flash-insert {
+	background-color: rgba(34, 197, 94, 0.3);
+	border-radius: 2px;
+	transition: opacity 0.1s ease-out;
+}
+
+.cm-flash-delete {
+	background-color: rgba(239, 68, 68, 0.3);
+	border-radius: 2px;
+	transition: opacity 0.1s ease-out;
+}
+
+.cm-flash-format {
+	background-color: rgba(251, 191, 36, 0.3);
+	border-radius: 2px;
+	transition: opacity 0.1s ease-out;
+}
+
+/* Ghost text for real-time transcription */
+.cm-ghost-text {
+	color: #666;
+	font-style: italic;
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+/* Links */
+.cm-link {
+	color: #3b82f6;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.cm-link:hover {
+	color: #60a5fa;
+	text-decoration: underline;
+}
+
 .editor .cm-heading-1 {
 	font-size: 2em;
 	margin-top: 0.5em;

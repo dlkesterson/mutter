@@ -21,6 +21,31 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
 
         constructor(view: EditorView) {
             this.decorations = this.buildDecorations(view);
+
+            // Add click handler for links
+            view.dom.addEventListener('click', this.handleClick.bind(this));
+        }
+
+        destroy() {
+            // Clean up event listener if needed
+        }
+
+        handleClick(e: MouseEvent) {
+            const target = e.target as HTMLElement;
+
+            // Check if we clicked on a link
+            if (target.classList.contains('cm-link')) {
+                const url = target.getAttribute('data-url');
+                if (url) {
+                    e.preventDefault();
+                    // Open URL in default browser using window.open as fallback
+                    if (url.startsWith('http://') || url.startsWith('https://')) {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                    } else {
+                        console.warn('Only http/https URLs are supported:', url);
+                    }
+                }
+            }
         }
 
         update(update: ViewUpdate) {

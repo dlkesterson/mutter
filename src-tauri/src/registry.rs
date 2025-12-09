@@ -69,7 +69,7 @@ impl CommandRegistry {
                     "bold text".to_string(),
                     "make it bold".to_string(),
                 ],
-                embedding: vec![0.0; 384], // Will be computed on first run
+                embedding: vec![], // Will be computed on first run
                 action: CommandAction::Format(FormatType::Bold),
                 selection_required: true,
             },
@@ -80,7 +80,7 @@ impl CommandRegistry {
                     "italicize this".to_string(),
                     "italic text".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Format(FormatType::Italic),
                 selection_required: true,
             },
@@ -93,7 +93,7 @@ impl CommandRegistry {
                     "big heading".to_string(),
                     "title".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 1 }),
                 selection_required: false,
             },
@@ -104,7 +104,7 @@ impl CommandRegistry {
                     "h2".to_string(),
                     "subheading".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 2 }),
                 selection_required: false,
             },
@@ -116,7 +116,7 @@ impl CommandRegistry {
                     "turn into list".to_string(),
                     "list items".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Format(FormatType::BulletList),
                 selection_required: false,
             },
@@ -127,7 +127,7 @@ impl CommandRegistry {
                     "make this a quote".to_string(),
                     "block quote".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Format(FormatType::Quote),
                 selection_required: false,
             },
@@ -139,7 +139,7 @@ impl CommandRegistry {
                     "go back".to_string(),
                     "revert".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Undo),
                 selection_required: false,
             },
@@ -150,7 +150,7 @@ impl CommandRegistry {
                     "redo that".to_string(),
                     "go forward".to_string(),
                 ],
-                embedding: vec![0.0; 384],
+                embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Redo),
                 selection_required: false,
             },
@@ -182,14 +182,6 @@ impl CommandRegistry {
         }
 
         best_match
-    }
-
-    pub fn update_embeddings(&mut self, embeddings: Vec<(String, Vec<f32>)>) {
-        for (id, embedding) in embeddings {
-            if let Some(command) = self.commands.iter_mut().find(|c| c.id == id) {
-                command.embedding = embedding;
-            }
-        }
     }
 }
 
