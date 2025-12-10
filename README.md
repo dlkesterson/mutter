@@ -13,11 +13,19 @@ A voice-controlled markdown editor with semantic command recognition, built with
   - Audio capture with Web Audio API
   - VAD (Voice Activity Detection) with ring buffer
   - Rust backend with Candle ML framework integration
+  - **Streaming Transcription**: Real-time visual feedback of speech-to-text
   
 - **Semantic Command Router**:
   - Command registry with confidence-based matching
   - Disambiguation UI for ambiguous commands
   - Context-aware command execution (selection required/optional)
+  - **Voice Log**: Detailed history of voice interactions, including confidence scores, execution times, and interpretation debugging
+
+- **User Interface**:
+  - **Flexible Layout**: Resizable panels for file navigation, editor, and voice log
+  - **Collapsible Sidebars**: Maximize writing space by collapsing navigation and logs
+  - **Layout Persistence**: Remembers your panel sizes and preferences
+  - **Dark Mode**: Optimized for focus
 
 - **File System**:
   - Sidebar with file navigation
@@ -28,6 +36,7 @@ A voice-controlled markdown editor with semantic command recognition, built with
   - Integrated Whisper model downloader and selector
   - Support for Distil-Whisper and standard Whisper models (Tiny, Base, Small, Medium, Large v3)
   - Real-time download progress tracking
+  - **Local Embeddings**: Uses BERT for semantic understanding of commands
 
 ## Quick Start
 
@@ -78,5 +87,5 @@ pnpm tauri:build
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui
+- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui, react-resizable-panels
 - **Backend**: Rust, Tauri v2, Candle 0.8 (ML), Tokio (async)

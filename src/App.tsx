@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useAudioRecorder } from './hooks/useAudioRecorder';
 import Editor from './components/Editor';
-import Sidebar from './components/Sidebar';
-import AudioControl from './components/AudioControl';
-import VoiceLogSidebar, { VoiceLogEntry } from './components/VoiceLogSidebar';
+import { Omnibox } from './components/Omnibox';
+import { VoiceIndicator } from './components/VoiceIndicator';
+import { FileNavigatorDialog } from './components/dialogs/file-navigator-dialog';
+import { VoiceLogDialog } from './components/dialogs/voice-log-dialog';
+import { SettingsDialog } from './components/dialogs/settings-dialog';
 import { WhisperModelSelector } from './components/WhisperModelSelector';
 import { StreamingTranscription } from './components/StreamingTranscription';
 import { Toaster } from './components/ui/toaster';
 import { getStorageItem, setStorageItem } from './utils/storage';
-import './styles/App.css';
+import { VoiceLogEntry } from './types';
+
+type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
 function App() {
 	const [currentFile, setCurrentFile] = useState<string | null>(null);
@@ -17,8 +22,12 @@ function App() {
 	>('idle');
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
-	const [isVoiceLogCollapsed, setIsVoiceLogCollapsed] = useState(false);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+	const [openDialog, setOpenDialog] = useState<DialogType>(null);
+
+	const { startRecording, stopRecording } = useAudioRecorder(() => {
+		console.log('Silence detected');
+	});
 
 	const addVoiceLogEntry = (
 		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>
@@ -96,39 +105,103 @@ function App() {
 		}
 	}, [isInitialized]);
 
-	const isReady = isInitialized;
+	// Handle keyboard shortcuts for dialogs
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Ctrl/Cmd + O for file navigation
+			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+				e.preventDefault();
+				setOpenDialog('files');
+			}
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, []);
+
+	const handleVoiceCommand = async (
+		command: string,
+		transcription: string
+	) => {
+		console.log('Voice command:', command, transcription);
+		// Execute the command via Editor's handler
+		if ((window as any).handleTranscription) {
+			setAudioState('executing');
+			await (window as any).handleTranscription(transcription || command);
+			setAudioState('idle');
+		}
+	};
+
+	const toggleListening = async () => {
+		if (audioState === 'listening') {
+			setAudioState('processing');
+			const result = await stopRecording();
+			if (result) {
+				if ((window as any).handleTranscription) {
+					setAudioState('executing');
+					await (window as any).handleTranscription(result.text);
+				}
+			}
+			setAudioState('idle');
+		} else {
+			await startRecording();
+			setAudioState('listening');
+		}
+	};
 
 	return (
-		<div className='app'>
+		<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
 			<StreamingTranscription isRecording={audioState === 'listening'} />
-			<Sidebar onFileSelect={setCurrentFile} />
-			<main className='main-content'>
+
+			<main className='flex-1 flex flex-col overflow-hidden relative'>
 				<Editor
 					filePath={currentFile}
 					audioState={audioState}
 					onVoiceLogEntry={addVoiceLogEntry}
 				/>
-				{isReady && (
-					<AudioControl
-						audioState={audioState}
-						onStateChange={setAudioState}
-						onOpenModelSelector={() => setModelSelectorOpen(true)}
-					/>
-				)}
+
+				<Omnibox
+					onCommand={handleVoiceCommand}
+					onDialogOpen={setOpenDialog}
+					isListening={audioState === 'listening'}
+					onToggleListening={toggleListening}
+				/>
+
+				<VoiceIndicator
+					state={audioState}
+					onLogClick={() => setOpenDialog('voice-log')}
+					onToggleListening={toggleListening}
+				/>
 			</main>
-			<VoiceLogSidebar
-				entries={voiceLogEntries}
-				isCollapsed={isVoiceLogCollapsed}
-				onToggle={() => setIsVoiceLogCollapsed(!isVoiceLogCollapsed)}
+
+			{/* Dialogs */}
+			<FileNavigatorDialog
+				open={openDialog === 'files'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
 			/>
+			<VoiceLogDialog
+				open={openDialog === 'voice-log'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
+				entries={voiceLogEntries.map((e) => ({
+					transcription: e.transcript,
+					command: e.interpretation,
+					confidence: e.confidence,
+				}))}
+			/>
+			<SettingsDialog
+				open={openDialog === 'settings'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
+			/>
+
 			<WhisperModelSelector
 				open={modelSelectorOpen}
 				onOpenChange={setModelSelectorOpen}
 			/>
 			<Toaster />
+
 			{!isInitialized && (
-				<div className='loading-overlay'>
-					<div className='loading-spinner'>
+				<div className='fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm'>
+					<div className='text-lg font-medium animate-pulse'>
 						Initializing AI Brain...
 					</div>
 				</div>

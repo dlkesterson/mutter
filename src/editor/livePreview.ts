@@ -1,5 +1,37 @@
-import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { StateField, Range } from '@codemirror/state';
+
+class ImageWidget extends WidgetType {
+    constructor(readonly url: string, readonly alt: string) { super() }
+
+    toDOM() {
+        const img = document.createElement("img");
+        img.src = this.url;
+        img.alt = this.alt;
+        img.className = "cm-image";
+        return img;
+    }
+}
+
+class CheckboxWidget extends WidgetType {
+    constructor(readonly checked: boolean) { super() }
+
+    toDOM() {
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = this.checked;
+        input.className = "cm-checkbox";
+        return input;
+    }
+}
+
+class HorizontalRuleWidget extends WidgetType {
+    toDOM() {
+        const hr = document.createElement("hr");
+        hr.className = "cm-hr";
+        return hr;
+    }
+}
 
 // Track cursor position
 export const cursorPosField = StateField.define<number>({
@@ -18,8 +50,10 @@ export const cursorPosField = StateField.define<number>({
 export const livePreviewPlugin = ViewPlugin.fromClass(
     class {
         decorations: DecorationSet;
+        view: EditorView;
 
         constructor(view: EditorView) {
+            this.view = view;
             this.decorations = this.buildDecorations(view);
 
             // Add click handler for links
@@ -32,6 +66,22 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
 
         handleClick(e: MouseEvent) {
             const target = e.target as HTMLElement;
+
+            // Check if we clicked on a checkbox
+            if (target.classList.contains('cm-checkbox')) {
+                const pos = this.view.posAtDOM(target);
+                const line = this.view.state.doc.lineAt(pos);
+                const match = line.text.match(/^(\s*)- \[(x| )\] /);
+                if (match) {
+                    const checked = match[2] === 'x';
+                    const charPos = line.from + match[1].length + 3;
+
+                    this.view.dispatch({
+                        changes: { from: charPos, to: charPos + 1, insert: checked ? ' ' : 'x' }
+                    });
+                    return;
+                }
+            }
 
             // Check if we clicked on a link
             if (target.classList.contains('cm-link')) {
@@ -60,136 +110,130 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
             const doc = view.state.doc;
 
             for (let { from, to } of view.visibleRanges) {
-                const text = doc.sliceString(from, to);
                 let pos = from;
+                while (pos <= to) {
+                    const line = doc.lineAt(pos);
+                    const text = line.text;
+                    const lineStart = line.from;
+                    const lineEnd = line.to;
 
-                // Bold: **text**
-                const boldRegex = /\*\*([^*]+)\*\*/g;
-                let match;
-                while ((match = boldRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
-                    const end = start + match[0].length;
+                    // --- Block Level Elements ---
 
-                    // Only hide syntax if cursor is not in this range
-                    if (cursorPos < start || cursorPos > end) {
-                        // Hide opening **
-                        decorations.push(
-                            Decoration.replace({}).range(start, start + 2)
-                        );
-                        // Style the content
-                        decorations.push(
-                            Decoration.mark({ class: 'cm-bold' }).range(start + 2, end - 2)
-                        );
-                        // Hide closing **
-                        decorations.push(
-                            Decoration.replace({}).range(end - 2, end)
-                        );
-                    }
-                }
-
-                // Italic: *text*
-                const italicRegex = /(?<!\*)\*([^*]+)\*(?!\*)/g;
-                while ((match = italicRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
-                    const end = start + match[0].length;
-
-                    if (cursorPos < start || cursorPos > end) {
-                        decorations.push(
-                            Decoration.replace({}).range(start, start + 1)
-                        );
-                        decorations.push(
-                            Decoration.mark({ class: 'cm-italic' }).range(start + 1, end - 1)
-                        );
-                        decorations.push(
-                            Decoration.replace({}).range(end - 1, end)
-                        );
-                    }
-                }
-
-                // Headers: # text
-                const lines = text.split('\n');
-                let linePos = pos;
-                for (const line of lines) {
-                    const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+                    // Headers
+                    const headerMatch = text.match(/^(#{1,6})\s+(.+)$/);
                     if (headerMatch) {
-                        const start = linePos;
+                        const start = lineStart;
                         const hashEnd = start + headerMatch[1].length + 1;
-                        const lineEnd = start + line.length;
+                        const level = headerMatch[1].length;
 
                         if (cursorPos < start || cursorPos > lineEnd) {
-                            // Hide the # symbols and space
-                            decorations.push(
-                                Decoration.replace({}).range(start, hashEnd)
-                            );
-                            // Style the header text
-                            const level = headerMatch[1].length;
-                            decorations.push(
-                                Decoration.mark({
-                                    class: `cm-heading cm-heading-${level}`
-                                }).range(hashEnd, lineEnd)
-                            );
+                            decorations.push(Decoration.replace({}).range(start, hashEnd));
+                            decorations.push(Decoration.mark({ class: `cm-heading cm-heading-${level}` }).range(hashEnd, lineEnd));
+                        } else {
+                            // When editing, keep the hash visible but apply the heading style to the whole line
+                            decorations.push(Decoration.mark({ class: `cm-heading cm-heading-${level}` }).range(start, lineEnd));
                         }
                     }
-                    linePos += line.length + 1; // +1 for newline
-                }
 
-                // Links: [text](url)
-                const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-                while ((match = linkRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
-                    const end = start + match[0].length;
-                    const linkText = match[1];
-                    const linkTextStart = start + 1;
-                    const linkTextEnd = linkTextStart + linkText.length;
-
-                    if (cursorPos < start || cursorPos > end) {
-                        // Hide opening [
-                        decorations.push(
-                            Decoration.replace({}).range(start, linkTextStart)
-                        );
-                        // Style the link text
-                        decorations.push(
-                            Decoration.mark({
-                                class: 'cm-link',
-                                attributes: { 'data-url': match[2] }
-                            }).range(linkTextStart, linkTextEnd)
-                        );
-                        // Hide ](url)
-                        decorations.push(
-                            Decoration.replace({}).range(linkTextEnd, end)
-                        );
-                    }
-                }
-
-                // Bullet lists: - item or * item
-                pos = from;
-                for (const line of text.split('\n')) {
-                    const listMatch = line.match(/^(\s*)([-*])\s+(.+)$/);
-                    if (listMatch) {
-                        const start = pos + listMatch[1].length;
-                        const bulletEnd = start + 2; // bullet + space
-                        const lineEnd = pos + line.length;
-
-                        if (cursorPos < start || cursorPos > lineEnd) {
-                            // Style bullet with marker
-                            decorations.push(
-                                Decoration.mark({
-                                    class: 'cm-list-marker'
-                                }).range(start, bulletEnd)
-                            );
-                            // Style list item
-                            decorations.push(
-                                Decoration.mark({
-                                    class: 'cm-list-item'
-                                }).range(bulletEnd, lineEnd)
-                            );
+                    // Horizontal Rule
+                    if (text === '---' || text === '***' || text === '___') {
+                        if (cursorPos < lineStart || cursorPos > lineEnd) {
+                            decorations.push(Decoration.replace({ widget: new HorizontalRuleWidget() }).range(lineStart, lineEnd));
                         }
                     }
-                    pos += line.length + 1;
+
+                    // Task Lists
+                    const taskMatch = text.match(/^(\s*)- \[(x| )\] /);
+                    if (taskMatch) {
+                        const start = lineStart + taskMatch[1].length;
+                        const end = start + 6;
+                        const checked = taskMatch[2] === 'x';
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(start, end));
+                        }
+                    }
+                    // Bullet Lists (only if not a task list)
+                    else {
+                        const listMatch = text.match(/^(\s*)([-*])\s+(.+)$/);
+                        if (listMatch) {
+                            const start = lineStart + listMatch[1].length;
+                            const bulletEnd = start + 2;
+                            if (cursorPos < start || cursorPos > lineEnd) {
+                                decorations.push(Decoration.mark({ class: 'cm-list-marker' }).range(start, bulletEnd));
+                                decorations.push(Decoration.mark({ class: 'cm-list-item' }).range(bulletEnd, lineEnd));
+                            }
+                        }
+                    }
+
+                    // --- Inline Elements (Processed per line to avoid multi-line glitches) ---
+
+                    // Bold
+                    const boldRegex = /\*\*([^*\n]+)\*\*/g;
+                    let match;
+                    while ((match = boldRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({}).range(start, start + 2));
+                            decorations.push(Decoration.mark({ class: 'cm-bold' }).range(start + 2, end - 2));
+                            decorations.push(Decoration.replace({}).range(end - 2, end));
+                        }
+                    }
+
+                    // Italic
+                    const italicRegex = /(?<!\*)\*(?!\s)([^*\n]+)\*(?!\*)/g;
+                    while ((match = italicRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({}).range(start, start + 1));
+                            decorations.push(Decoration.mark({ class: 'cm-italic' }).range(start + 1, end - 1));
+                            decorations.push(Decoration.replace({}).range(end - 1, end));
+                        }
+                    }
+
+                    // Links
+                    const linkRegex = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+                    while ((match = linkRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        const linkText = match[1];
+                        const linkTextStart = start + 1;
+                        const linkTextEnd = linkTextStart + linkText.length;
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({}).range(start, linkTextStart));
+                            decorations.push(Decoration.mark({ class: 'cm-link', attributes: { 'data-url': match[2] } }).range(linkTextStart, linkTextEnd));
+                            decorations.push(Decoration.replace({}).range(linkTextEnd, end));
+                        }
+                    }
+
+                    // Images
+                    const imageRegex = /!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
+                    while ((match = imageRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({ widget: new ImageWidget(match[2], match[1]) }).range(start, end));
+                        }
+                    }
+
+                    // Inline Code
+                    const inlineCodeRegex = /`([^`\n]+)`/g;
+                    while ((match = inlineCodeRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({}).range(start, start + 1));
+                            decorations.push(Decoration.mark({ class: 'cm-inline-code' }).range(start + 1, end - 1));
+                            decorations.push(Decoration.replace({}).range(end - 1, end));
+                        }
+                    }
+
+                    pos = line.to + 1;
                 }
             }
 
-            return Decoration.set(decorations, true);
+            return Decoration.set(decorations.sort((a, b) => a.from - b.from), true);
         }
     },
     {

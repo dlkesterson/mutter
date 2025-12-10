@@ -42,27 +42,25 @@ The content is organized as follows:
 <directory_structure>
 src/
   components/
+    dialogs/
+      file-navigator-dialog.tsx
+      settings-dialog.tsx
+      voice-log-dialog.tsx
     ui/
       button.tsx
       dialog.tsx
+      label.tsx
+      select.tsx
       toast.tsx
       toaster.tsx
+      use-mobile.tsx
+      use-toast.ts
     AmbiguityPopover.css
     AmbiguityPopover.tsx
-    AudioControl.css
-    AudioControl.tsx
-    Editor.css
     Editor.tsx
-    ModelManager.css
-    ModelManager.tsx
-    Sidebar.css
-    Sidebar.tsx
-    SimpleModelDialog.css
-    SimpleModelDialog.tsx
+    Omnibox.tsx
     StreamingTranscription.css
     StreamingTranscription.tsx
-    VoiceLogSidebar.css
-    VoiceLogSidebar.tsx
     WaveformVisualizer.css
     WaveformVisualizer.tsx
     WhisperModelSelector.tsx
@@ -75,16 +73,18 @@ src/
     theme.ts
   hooks/
     use-toast.ts
+    useAudioRecorder.ts
     useModelDownload.ts
   lib/
     utils.ts
   styles/
-    App.css
+    globals.css
     index.css
   utils/
     storage.ts
   App.tsx
   main.tsx
+  types.ts
 src-tauri/
   capabilities/
     default.json
@@ -95,7 +95,6 @@ src-tauri/
     main.rs
     ml.rs
     registry.rs
-    vault.rs
   .gitignore
   build.rs
   Cargo.toml
@@ -103,6 +102,7 @@ src-tauri/
 .gitattributes
 .gitignore
 download-model.sh
+font.css
 index.html
 package.json
 postcss.config.js
@@ -115,352 +115,1509 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/components/ui/button.tsx">
-import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { cn } from '@/lib/utils';
+<file path="src/components/dialogs/file-navigator-dialog.tsx">
+"use client"
 
-const buttonVariants = cva(
-	'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
-	{
-		variants: {
-			variant: {
-				default:
-					'bg-primary text-primary-foreground shadow hover:bg-primary/90',
-				destructive:
-					'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
-				outline:
-					'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
-				secondary:
-					'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
-				ghost: 'hover:bg-accent hover:text-accent-foreground',
-				link: 'text-primary underline-offset-4 hover:underline',
-			},
-			size: {
-				default: 'h-9 px-4 py-2',
-				sm: 'h-8 rounded-md px-3 text-xs',
-				lg: 'h-10 rounded-md px-8',
-				icon: 'h-9 w-9',
-			},
-		},
-		defaultVariants: {
-			variant: 'default',
-			size: 'default',
-		},
-	}
-);
+import { useState } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Search, FileText, Folder } from "lucide-react"
 
-export interface ButtonProps
-	extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-		VariantProps<typeof buttonVariants> {
-	asChild?: boolean;
+interface FileNavigatorDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-	({ className, variant, size, ...props }, ref) => {
-		return (
-			<button
-				className={cn(buttonVariants({ variant, size, className }))}
-				ref={ref}
-				{...props}
-			/>
-		);
-	}
-);
-Button.displayName = 'Button';
+const mockFiles = [
+  { id: "1", name: "Getting Started", type: "file", icon: FileText },
+  { id: "2", name: "Project Notes", type: "file", icon: FileText },
+  { id: "3", name: "Meeting Notes", type: "file", icon: FileText },
+  { id: "4", name: "Ideas", type: "folder", icon: Folder },
+  { id: "5", name: "Research", type: "folder", icon: Folder },
+]
 
-export { Button, buttonVariants };
+export function FileNavigatorDialog({ open, onOpenChange }: FileNavigatorDialogProps) {
+  const [search, setSearch] = useState("")
+
+  const filtered = mockFiles.filter((file) => file.name.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Open File</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search files..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:outline-none focus:border-primary"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1 max-h-96 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No files found</div>
+            ) : (
+              filtered.map((file) => {
+                const Icon = file.icon
+                return (
+                  <button
+                    key={file.id}
+                    className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-muted transition-colors text-left"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <Icon className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <div className="font-medium text-foreground">{file.name}</div>
+                      <div className="text-sm text-muted-foreground">{file.type === "file" ? "Note" : "Folder"}</div>
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+</file>
+
+<file path="src/components/dialogs/settings-dialog.tsx">
+"use client"
+
+import { useState } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+interface SettingsDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const [voiceProvider, setVoiceProvider] = useState("system")
+  const [fontSize, setFontSize] = useState("16")
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Settings</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="voice-provider">Voice Provider</Label>
+            <Select value={voiceProvider} onValueChange={setVoiceProvider}>
+              <SelectTrigger id="voice-provider">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">System Default</SelectItem>
+                <SelectItem value="google">Google Cloud Speech</SelectItem>
+                <SelectItem value="openai">OpenAI Whisper</SelectItem>
+                <SelectItem value="azure">Azure Speech</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="font-size">Editor Font Size</Label>
+            <Select value={fontSize} onValueChange={setFontSize}>
+              <SelectTrigger id="font-size">
+                <SelectValue placeholder="Select size" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="14">14px</SelectItem>
+                <SelectItem value="16">16px</SelectItem>
+                <SelectItem value="18">18px</SelectItem>
+                <SelectItem value="20">20px</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <input type="checkbox" defaultChecked className="rounded" />
+              Auto-save on voice command
+            </Label>
+            <Label className="flex items-center gap-2">
+              <input type="checkbox" defaultChecked className="rounded" />
+              Show syntax highlighting
+            </Label>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+</file>
+
+<file path="src/components/dialogs/voice-log-dialog.tsx">
+"use client"
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+interface VoiceLogEntry {
+  transcription: string
+  command: string
+  confidence: number
+}
+
+interface VoiceLogDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  entries: VoiceLogEntry[]
+}
+
+export function VoiceLogDialog({ open, onOpenChange, entries }: VoiceLogDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Voice Command History</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {entries.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No voice commands yet. Use the voice indicator to start.
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {entries.map((entry, idx) => (
+                <div key={idx} className="p-3 bg-muted rounded-lg border border-border">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground break-words">{entry.transcription}</div>
+                      <div className="text-sm text-muted-foreground mt-1">Interpreted: {entry.command}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Confidence: {Math.round(entry.confidence * 100)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+</file>
+
+<file path="src/components/ui/label.tsx">
+'use client'
+
+import * as React from 'react'
+import * as LabelPrimitive from '@radix-ui/react-label'
+
+import { cn } from '@/lib/utils'
+
+function Label({
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+  return (
+    <LabelPrimitive.Root
+      data-slot="label"
+      className={cn(
+        'flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Label }
+</file>
+
+<file path="src/components/ui/select.tsx">
+'use client'
+
+import * as React from 'react'
+import * as SelectPrimitive from '@radix-ui/react-select'
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+
+function Select({
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  return <SelectPrimitive.Root data-slot="select" {...props} />
+}
+
+function SelectGroup({
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Group>) {
+  return <SelectPrimitive.Group data-slot="select-group" {...props} />
+}
+
+function SelectValue({
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Value>) {
+  return <SelectPrimitive.Value data-slot="select-value" {...props} />
+}
+
+function SelectTrigger({
+  className,
+  size = 'default',
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
+  size?: 'sm' | 'default'
+}) {
+  return (
+    <SelectPrimitive.Trigger
+      data-slot="select-trigger"
+      data-size={size}
+      className={cn(
+        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:hover:bg-input/50 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <SelectPrimitive.Icon asChild>
+        <ChevronDownIcon className="size-4 opacity-50" />
+      </SelectPrimitive.Icon>
+    </SelectPrimitive.Trigger>
+  )
+}
+
+function SelectContent({
+  className,
+  children,
+  position = 'popper',
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        data-slot="select-content"
+        className={cn(
+          'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border shadow-md',
+          position === 'popper' &&
+            'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
+          className,
+        )}
+        position={position}
+        {...props}
+      >
+        <SelectScrollUpButton />
+        <SelectPrimitive.Viewport
+          className={cn(
+            'p-1',
+            position === 'popper' &&
+              'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1',
+          )}
+        >
+          {children}
+        </SelectPrimitive.Viewport>
+        <SelectScrollDownButton />
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  )
+}
+
+function SelectLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Label>) {
+  return (
+    <SelectPrimitive.Label
+      data-slot="select-label"
+      className={cn('text-muted-foreground px-2 py-1.5 text-xs', className)}
+      {...props}
+    />
+  )
+}
+
+function SelectItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+  return (
+    <SelectPrimitive.Item
+      data-slot="select-item"
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        className,
+      )}
+      {...props}
+    >
+      <span className="absolute right-2 flex size-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <CheckIcon className="size-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  )
+}
+
+function SelectSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Separator>) {
+  return (
+    <SelectPrimitive.Separator
+      data-slot="select-separator"
+      className={cn('bg-border pointer-events-none -mx-1 my-1 h-px', className)}
+      {...props}
+    />
+  )
+}
+
+function SelectScrollUpButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
+  return (
+    <SelectPrimitive.ScrollUpButton
+      data-slot="select-scroll-up-button"
+      className={cn(
+        'flex cursor-default items-center justify-center py-1',
+        className,
+      )}
+      {...props}
+    >
+      <ChevronUpIcon className="size-4" />
+    </SelectPrimitive.ScrollUpButton>
+  )
+}
+
+function SelectScrollDownButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>) {
+  return (
+    <SelectPrimitive.ScrollDownButton
+      data-slot="select-scroll-down-button"
+      className={cn(
+        'flex cursor-default items-center justify-center py-1',
+        className,
+      )}
+      {...props}
+    >
+      <ChevronDownIcon className="size-4" />
+    </SelectPrimitive.ScrollDownButton>
+  )
+}
+
+export {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+}
+</file>
+
+<file path="src/components/ui/use-mobile.tsx">
+import * as React from 'react'
+
+const MOBILE_BREAKPOINT = 768
+
+export function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+    const onChange = () => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    }
+    mql.addEventListener('change', onChange)
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
+  return !!isMobile
+}
+</file>
+
+<file path="src/components/ui/use-toast.ts">
+'use client'
+
+// Inspired by react-hot-toast library
+import * as React from 'react'
+
+import type { ToastActionElement, ToastProps } from '@/components/ui/toast'
+
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
+
+type ToasterToast = ToastProps & {
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+}
+
+const actionTypes = {
+  ADD_TOAST: 'ADD_TOAST',
+  UPDATE_TOAST: 'UPDATE_TOAST',
+  DISMISS_TOAST: 'DISMISS_TOAST',
+  REMOVE_TOAST: 'REMOVE_TOAST',
+} as const
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
+}
+
+type ActionType = typeof actionTypes
+
+type Action =
+  | {
+      type: ActionType['ADD_TOAST']
+      toast: ToasterToast
+    }
+  | {
+      type: ActionType['UPDATE_TOAST']
+      toast: Partial<ToasterToast>
+    }
+  | {
+      type: ActionType['DISMISS_TOAST']
+      toastId?: ToasterToast['id']
+    }
+  | {
+      type: ActionType['REMOVE_TOAST']
+      toastId?: ToasterToast['id']
+    }
+
+interface State {
+  toasts: ToasterToast[]
+}
+
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const addToRemoveQueue = (toastId: string) => {
+  if (toastTimeouts.has(toastId)) {
+    return
+  }
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId)
+    dispatch({
+      type: 'REMOVE_TOAST',
+      toastId: toastId,
+    })
+  }, TOAST_REMOVE_DELAY)
+
+  toastTimeouts.set(toastId, timeout)
+}
+
+export const reducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case 'ADD_TOAST':
+      return {
+        ...state,
+        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+      }
+
+    case 'UPDATE_TOAST':
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t,
+        ),
+      }
+
+    case 'DISMISS_TOAST': {
+      const { toastId } = action
+
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
+      if (toastId) {
+        addToRemoveQueue(toastId)
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id)
+        })
+      }
+
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === toastId || toastId === undefined
+            ? {
+                ...t,
+                open: false,
+              }
+            : t,
+        ),
+      }
+    }
+    case 'REMOVE_TOAST':
+      if (action.toastId === undefined) {
+        return {
+          ...state,
+          toasts: [],
+        }
+      }
+      return {
+        ...state,
+        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+      }
+  }
+}
+
+const listeners: Array<(state: State) => void> = []
+
+let memoryState: State = { toasts: [] }
+
+function dispatch(action: Action) {
+  memoryState = reducer(memoryState, action)
+  listeners.forEach((listener) => {
+    listener(memoryState)
+  })
+}
+
+type Toast = Omit<ToasterToast, 'id'>
+
+function toast({ ...props }: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: 'UPDATE_TOAST',
+      toast: { ...props, id },
+    })
+  const dismiss = () => dispatch({ type: 'DISMISS_TOAST', toastId: id })
+
+  dispatch({
+    type: 'ADD_TOAST',
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
+    },
+  })
+
+  return {
+    id: id,
+    dismiss,
+    update,
+  }
+}
+
+function useToast() {
+  const [state, setState] = React.useState<State>(memoryState)
+
+  React.useEffect(() => {
+    listeners.push(setState)
+    return () => {
+      const index = listeners.indexOf(setState)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }, [state])
+
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: 'DISMISS_TOAST', toastId }),
+  }
+}
+
+export { useToast, toast }
+</file>
+
+<file path="src/components/Omnibox.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Search, Mic } from 'lucide-react';
+
+interface OmniboxProps {
+	onCommand: (command: string, transcription: string) => void;
+	onDialogOpen: (type: 'files' | 'voice-log' | 'settings') => void;
+	isListening: boolean;
+	onToggleListening: () => void;
+}
+
+const commands = [
+	{
+		label: 'Make bold',
+		description: 'Format selection as bold',
+		command: 'bold',
+	},
+	{
+		label: 'Make italic',
+		description: 'Format selection as italic',
+		command: 'italic',
+	},
+	{ label: 'Add heading', description: 'Insert heading', command: 'heading' },
+	{
+		label: 'Insert code',
+		description: 'Insert inline code',
+		command: 'code',
+	},
+	{ label: 'Undo', description: 'Undo last action', command: 'undo' },
+	{
+		label: 'Open file',
+		description: 'Navigate to a file',
+		command: 'open file',
+	},
+	{
+		label: 'Settings',
+		description: 'Open app settings',
+		command: 'settings',
+	},
+];
+
+export function Omnibox({
+	onCommand,
+	onDialogOpen,
+	isListening,
+	onToggleListening,
+}: OmniboxProps) {
+	const [open, setOpen] = useState(false);
+	const [searchValue, setSearchValue] = useState('');
+
+	useEffect(() => {
+		const down = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+				e.preventDefault();
+				setOpen((open) => !open);
+				setSearchValue('');
+			}
+			if (e.key === 'Escape') {
+				setOpen(false);
+			}
+		};
+
+		document.addEventListener('keydown', down);
+		return () => document.removeEventListener('keydown', down);
+	}, []);
+
+	const handleSelect = (command: string) => {
+		if (command === 'settings') {
+			onDialogOpen('settings');
+		} else if (command === 'open file') {
+			onDialogOpen('files');
+		} else {
+			onCommand(command, `Voice command: ${command}`);
+		}
+		setOpen(false);
+		setSearchValue('');
+	};
+
+	const startVoiceInput = () => {
+		onToggleListening();
+		// The actual listening logic is handled by the parent via StreamingTranscription
+	};
+
+	const filteredCommands = searchValue
+		? commands.filter(
+				(cmd) =>
+					cmd.label
+						.toLowerCase()
+						.includes(searchValue.toLowerCase()) ||
+					cmd.description
+						.toLowerCase()
+						.includes(searchValue.toLowerCase())
+		  )
+		: commands;
+
+	if (!open) {
+		return null;
+	}
+
+	return (
+		<div
+			className='fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/50'
+			onClick={() => setOpen(false)}
+		>
+			<div
+				className='w-full max-w-2xl'
+				onClick={(e) => e.stopPropagation()}
+			>
+				<div className='bg-card border border-border rounded-lg shadow-lg'>
+					<div className='flex items-center gap-3 px-4 py-3 border-b border-border'>
+						<Search className='w-5 h-5 text-muted-foreground' />
+						<input
+							type='text'
+							placeholder='Search commands...'
+							value={searchValue}
+							onChange={(e) => setSearchValue(e.target.value)}
+							className='flex-1 bg-transparent text-foreground outline-none'
+							autoFocus
+						/>
+						<button
+							onClick={startVoiceInput}
+							disabled={isListening}
+							className='p-2 hover:bg-muted rounded transition-colors'
+							title='Voice input'
+						>
+							<Mic
+								className={`w-5 h-5 ${
+									isListening
+										? 'text-blue-500'
+										: 'text-muted-foreground'
+								}`}
+							/>
+						</button>
+					</div>
+
+					<div className='max-h-96 overflow-y-auto'>
+						{filteredCommands.length === 0 ? (
+							<div className='px-4 py-8 text-center text-muted-foreground'>
+								No commands found
+							</div>
+						) : (
+							<div className='p-2'>
+								{filteredCommands.map((cmd) => (
+									<button
+										key={cmd.command}
+										onClick={() =>
+											handleSelect(cmd.command)
+										}
+										className='w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors mb-1 last:mb-0'
+									>
+										<div className='font-medium text-foreground'>
+											{cmd.label}
+										</div>
+										<div className='text-sm text-muted-foreground'>
+											{cmd.description}
+										</div>
+									</button>
+								))}
+							</div>
+						)}
+					</div>
+
+					<div className='px-4 py-2 border-t border-border text-xs text-muted-foreground'>
+						Press{' '}
+						<kbd className='px-1.5 py-0.5 bg-muted rounded text-foreground'>
+							ESC
+						</kbd>{' '}
+						to close
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+</file>
+
+<file path="src/hooks/useAudioRecorder.ts">
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+export interface TranscriptionResult {
+    text: string;
+    duration_ms: number;
+}
+
+export function useAudioRecorder(onSilenceDetected?: () => void) {
+    const [isRecording, setIsRecording] = useState(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const processorRef = useRef<ScriptProcessorNode | null>(null);
+    const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const audioBufferRef = useRef<number[]>([]);
+    const lastTranscriptionTimeRef = useRef<number>(0);
+    const isRecordingRef = useRef(false);
+
+    useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
+
+    useEffect(() => {
+        const unlisten = listen('vad-silence-detected', () => {
+            if (isRecordingRef.current) {
+                console.log('VAD detected silence');
+                if (onSilenceDetected) onSilenceDetected();
+            }
+        });
+        return () => {
+            unlisten.then(f => f());
+        };
+    }, [onSilenceDetected]);
+
+    const startRecording = useCallback(async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+
+            const audioContext = new AudioContext({ sampleRate: 16000 });
+            audioContextRef.current = audioContext;
+
+            const source = audioContext.createMediaStreamSource(stream);
+            sourceRef.current = source;
+
+            // Buffer size 4096
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
+
+            audioBufferRef.current = [];
+            setIsRecording(true);
+
+            processor.onaudioprocess = (e) => {
+                if (!isRecordingRef.current) return;
+
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcmData = Array.from(inputData);
+
+                // Add to local buffer
+                audioBufferRef.current.push(...pcmData);
+
+                // Send to VAD
+                invoke('process_audio_chunk', { pcmData });
+
+                // Streaming transcription every 500ms
+                const now = Date.now();
+                if (now - lastTranscriptionTimeRef.current > 500) {
+                    lastTranscriptionTimeRef.current = now;
+                    // Send accumulated buffer for streaming transcription
+                    invoke('transcribe_streaming', { audioBuffer: audioBufferRef.current });
+                }
+            };
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            setIsRecording(false);
+        }
+    }, []);
+
+    const stopRecording = useCallback(async (): Promise<TranscriptionResult | null> => {
+        if (processorRef.current && sourceRef.current) {
+            sourceRef.current.disconnect();
+            processorRef.current.disconnect();
+        }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+        }
+        setIsRecording(false);
+
+        // Final transcription
+        if (audioBufferRef.current.length > 0) {
+            try {
+                return await invoke<TranscriptionResult>('transcribe_audio', { audioBuffer: audioBufferRef.current });
+            } catch (e) {
+                console.error("Transcription failed", e);
+                return null;
+            }
+        }
+        return null;
+    }, []);
+
+    return { isRecording, startRecording, stopRecording };
+}
+</file>
+
+<file path="src/styles/globals.css">
+@import 'tailwindcss';
+@plugin "tailwindcss-animate";
+
+@font-face {
+	font-family: 'Atkinson Hyperlegible Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('../assets/fonts/AtkinsonHyperlegibleMono-Regular.ttf')
+		format('truetype');
+}
+
+@font-face {
+	font-family: 'Atkinson Hyperlegible Mono';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('../assets/fonts/AtkinsonHyperlegibleMono-Bold.ttf')
+		format('truetype');
+}
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+	--font-mono: 'Atkinson Hyperlegible Mono', monospace;
+	--background: oklch(0.12 0 0);
+	--foreground: oklch(0.95 0 0);
+	--card: oklch(0.15 0 0);
+	--card-foreground: oklch(0.95 0 0);
+	--popover: oklch(0.15 0 0);
+	--popover-foreground: oklch(0.95 0 0);
+	--primary: oklch(0.45 0.15 200);
+	--primary-foreground: oklch(0.95 0 0);
+	--secondary: oklch(0.2 0 0);
+	--secondary-foreground: oklch(0.95 0 0);
+	--muted: oklch(0.22 0 0);
+	--muted-foreground: oklch(0.65 0 0);
+	--accent: oklch(0.55 0.15 200);
+	--accent-foreground: oklch(0.95 0 0);
+	--destructive: oklch(0.5 0.2 20);
+	--destructive-foreground: oklch(0.95 0 0);
+	--border: oklch(0.22 0 0);
+	--input: oklch(0.22 0 0);
+	--ring: oklch(0.45 0.15 200);
+	--chart-1: oklch(0.6 0.15 20);
+	--chart-2: oklch(0.6 0.15 120);
+	--chart-3: oklch(0.6 0.15 200);
+	--chart-4: oklch(0.6 0.15 280);
+	--chart-5: oklch(0.6 0.15 40);
+	--radius: 0.5rem;
+	--sidebar: oklch(0.985 0 0);
+	--sidebar-foreground: oklch(0.145 0 0);
+	--sidebar-primary: oklch(0.205 0 0);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.97 0 0);
+	--sidebar-accent-foreground: oklch(0.205 0 0);
+	--sidebar-border: oklch(0.922 0 0);
+	--sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+	--background: oklch(0.12 0 0);
+	--foreground: oklch(0.95 0 0);
+	--card: oklch(0.15 0 0);
+	--card-foreground: oklch(0.95 0 0);
+	--popover: oklch(0.15 0 0);
+	--popover-foreground: oklch(0.95 0 0);
+	--primary: oklch(0.45 0.15 200);
+	--primary-foreground: oklch(0.95 0 0);
+	--secondary: oklch(0.2 0 0);
+	--secondary-foreground: oklch(0.95 0 0);
+	--muted: oklch(0.22 0 0);
+	--muted-foreground: oklch(0.65 0 0);
+	--accent: oklch(0.55 0.15 200);
+	--accent-foreground: oklch(0.95 0 0);
+	--destructive: oklch(0.5 0.2 20);
+	--destructive-foreground: oklch(0.95 0 0);
+	--border: oklch(0.22 0 0);
+	--input: oklch(0.22 0 0);
+	--ring: oklch(0.45 0.15 200);
+	--chart-1: oklch(0.6 0.15 20);
+	--chart-2: oklch(0.6 0.15 120);
+	--chart-3: oklch(0.6 0.15 200);
+	--chart-4: oklch(0.6 0.15 280);
+	--chart-5: oklch(0.6 0.15 40);
+	--sidebar: oklch(0.205 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.488 0.243 264.376);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.269 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(0.269 0 0);
+	--sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+	--font-sans: 'Geist', 'Geist Fallback';
+	--font-mono: 'Geist Mono', 'Geist Mono Fallback';
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--muted);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--muted-foreground);
+}
+
+/* Flash Effects */
+.cm-flash-insert {
+	background-color: rgba(74, 222, 128, 0.3); /* green-400/30 */
+}
+
+.cm-flash-delete {
+	background-color: rgba(248, 113, 113, 0.3); /* red-400/30 */
+}
+
+.cm-flash-format {
+	background-color: rgba(96, 165, 250, 0.3); /* blue-400/30 */
+}
+
+.cm-flash-command {
+	background-color: rgba(250, 204, 21, 0.3); /* yellow-400/30 */
+}
+</file>
+
+<file path="src/types.ts">
+export interface VoiceLogEntry {
+    id: string;
+    timestamp: Date;
+    transcript: string;
+    interpretation: string;
+    confidence: number;
+    action: 'command' | 'text' | 'ambiguous';
+    timings?: {
+        stt_ms?: number;
+        embed_ms?: number;
+        search_ms?: number;
+        total_ms?: number;
+    };
+}
+</file>
+
+<file path="font.css">
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegiblemono/v8/tssNAoFBci4C4gvhPXrt3wjT1MqSzhA4t7IIcncBiyihrK15gZ4k_SaZHNeiDQ.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegiblemono/v8/tssNAoFBci4C4gvhPXrt3wjT1MqSzhA4t7IIcncBiyihrK15gZ4k_SaZ-9CiDQ.ttf) format('truetype');
+}
+</file>
+
+<file path="src/components/ui/button.tsx">
+import * as React from 'react'
+import { Slot } from '@radix-ui/react-slot'
+import { cva, type VariantProps } from 'class-variance-authority'
+
+import { cn } from '@/lib/utils'
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive:
+          'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+        outline:
+          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+        secondary:
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost:
+          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
+        link: 'text-primary underline-offset-4 hover:underline',
+      },
+      size: {
+        default: 'h-9 px-4 py-2 has-[>svg]:px-3',
+        sm: 'h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5',
+        lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
+        icon: 'size-9',
+        'icon-sm': 'size-8',
+        'icon-lg': 'size-10',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'default',
+    },
+  },
+)
+
+function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: React.ComponentProps<'button'> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot : 'button'
+
+  return (
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+
+export { Button, buttonVariants }
 </file>
 
 <file path="src/components/ui/dialog.tsx">
-import * as React from 'react';
-import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+'use client'
 
-const Dialog = DialogPrimitive.Root;
-const DialogTrigger = DialogPrimitive.Trigger;
-const DialogPortal = DialogPrimitive.Portal;
-const DialogClose = DialogPrimitive.Close;
+import * as React from 'react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { XIcon } from 'lucide-react'
 
-const DialogOverlay = React.forwardRef<
-	React.ElementRef<typeof DialogPrimitive.Overlay>,
-	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-	<DialogPrimitive.Overlay
-		ref={ref}
-		className={cn(
-			'fixed inset-0 z-[9999] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-			className
-		)}
-		{...props}
-	/>
-));
-DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
+import { cn } from '@/lib/utils'
 
-const DialogContent = React.forwardRef<
-	React.ElementRef<typeof DialogPrimitive.Content>,
-	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-	<DialogPortal>
-		<DialogOverlay />
-		<DialogPrimitive.Content
-			ref={ref}
-			className={cn(
-				'fixed left-[50%] top-[50%] z-[10000] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
-				className
-			)}
-			{...props}
-		>
-			{children}
-			<DialogPrimitive.Close className='absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground'>
-				<X className='h-4 w-4' />
-				<span className='sr-only'>Close</span>
-			</DialogPrimitive.Close>
-		</DialogPrimitive.Content>
-	</DialogPortal>
-));
-DialogContent.displayName = DialogPrimitive.Content.displayName;
+function Dialog({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+}
 
-const DialogHeader = ({
-	className,
-	...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-	<div
-		className={cn(
-			'flex flex-col space-y-1.5 text-center sm:text-left',
-			className
-		)}
-		{...props}
-	/>
-);
-DialogHeader.displayName = 'DialogHeader';
+function DialogTrigger({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+}
 
-const DialogFooter = ({
-	className,
-	...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-	<div
-		className={cn(
-			'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
-			className
-		)}
-		{...props}
-	/>
-);
-DialogFooter.displayName = 'DialogFooter';
+function DialogPortal({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+}
 
-const DialogTitle = React.forwardRef<
-	React.ElementRef<typeof DialogPrimitive.Title>,
-	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
->(({ className, ...props }, ref) => (
-	<DialogPrimitive.Title
-		ref={ref}
-		className={cn(
-			'text-lg font-semibold leading-none tracking-tight',
-			className
-		)}
-		{...props}
-	/>
-));
-DialogTitle.displayName = DialogPrimitive.Title.displayName;
+function DialogClose({
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Close>) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+}
 
-const DialogDescription = React.forwardRef<
-	React.ElementRef<typeof DialogPrimitive.Description>,
-	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, ...props }, ref) => (
-	<DialogPrimitive.Description
-		ref={ref}
-		className={cn('text-sm text-muted-foreground', className)}
-		{...props}
-	/>
-));
-DialogDescription.displayName = DialogPrimitive.Description.displayName;
+function DialogOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+  return (
+    <DialogPrimitive.Overlay
+      data-slot="dialog-overlay"
+      className={cn(
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal data-slot="dialog-portal">
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        data-slot="dialog-content"
+        className={cn(
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+          >
+            <XIcon />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  )
+}
+
+function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn('flex flex-col gap-2 text-center sm:text-left', className)}
+      {...props}
+    />
+  )
+}
+
+function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>) {
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={cn('text-lg leading-none font-semibold', className)}
+      {...props}
+    />
+  )
+}
+
+function DialogDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn('text-muted-foreground text-sm', className)}
+      {...props}
+    />
+  )
+}
 
 export {
-	Dialog,
-	DialogPortal,
-	DialogOverlay,
-	DialogClose,
-	DialogTrigger,
-	DialogContent,
-	DialogHeader,
-	DialogFooter,
-	DialogTitle,
-	DialogDescription,
-};
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+}
 </file>
 
 <file path="src/components/ui/toast.tsx">
-import * as React from 'react';
-import * as ToastPrimitives from '@radix-ui/react-toast';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+'use client'
 
-const ToastProvider = ToastPrimitives.Provider;
+import * as React from 'react'
+import * as ToastPrimitives from '@radix-ui/react-toast'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { X } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+
+const ToastProvider = ToastPrimitives.Provider
 
 const ToastViewport = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Viewport>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
+  React.ElementRef<typeof ToastPrimitives.Viewport>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
 >(({ className, ...props }, ref) => (
-	<ToastPrimitives.Viewport
-		ref={ref}
-		className={cn(
-			'fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]',
-			className
-		)}
-		{...props}
-	/>
-));
-ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
+  <ToastPrimitives.Viewport
+    ref={ref}
+    className={cn(
+      'fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]',
+      className,
+    )}
+    {...props}
+  />
+))
+ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-	'group pointer-events-auto relative flex w-full items-center justify-between space-x-2 overflow-hidden rounded-md border p-4 pr-6 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full',
-	{
-		variants: {
-			variant: {
-				default: 'border bg-background text-foreground',
-				destructive:
-					'destructive group border-destructive bg-destructive text-destructive-foreground',
-			},
-		},
-		defaultVariants: {
-			variant: 'default',
-		},
-	}
-);
+  'group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full',
+  {
+    variants: {
+      variant: {
+        default: 'border bg-background text-foreground',
+        destructive:
+          'destructive group border-destructive bg-destructive text-destructive-foreground',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+)
 
 const Toast = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Root>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-		VariantProps<typeof toastVariants>
+  React.ElementRef<typeof ToastPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
+    VariantProps<typeof toastVariants>
 >(({ className, variant, ...props }, ref) => {
-	return (
-		<ToastPrimitives.Root
-			ref={ref}
-			className={cn(toastVariants({ variant }), className)}
-			{...props}
-		/>
-	);
-});
-Toast.displayName = ToastPrimitives.Root.displayName;
+  return (
+    <ToastPrimitives.Root
+      ref={ref}
+      className={cn(toastVariants({ variant }), className)}
+      {...props}
+    />
+  )
+})
+Toast.displayName = ToastPrimitives.Root.displayName
 
 const ToastAction = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Action>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
+  React.ElementRef<typeof ToastPrimitives.Action>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
 >(({ className, ...props }, ref) => (
-	<ToastPrimitives.Action
-		ref={ref}
-		className={cn(
-			'inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium transition-colors hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive',
-			className
-		)}
-		{...props}
-	/>
-));
-ToastAction.displayName = ToastPrimitives.Action.displayName;
+  <ToastPrimitives.Action
+    ref={ref}
+    className={cn(
+      'inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive',
+      className,
+    )}
+    {...props}
+  />
+))
+ToastAction.displayName = ToastPrimitives.Action.displayName
 
 const ToastClose = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Close>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
+  React.ElementRef<typeof ToastPrimitives.Close>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
 >(({ className, ...props }, ref) => (
-	<ToastPrimitives.Close
-		ref={ref}
-		className={cn(
-			'absolute right-1 top-1 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-1 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600',
-			className
-		)}
-		toast-close=''
-		{...props}
-	>
-		<X className='h-4 w-4' />
-	</ToastPrimitives.Close>
-));
-ToastClose.displayName = ToastPrimitives.Close.displayName;
+  <ToastPrimitives.Close
+    ref={ref}
+    className={cn(
+      'absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600',
+      className,
+    )}
+    toast-close=""
+    {...props}
+  >
+    <X className="h-4 w-4" />
+  </ToastPrimitives.Close>
+))
+ToastClose.displayName = ToastPrimitives.Close.displayName
 
 const ToastTitle = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Title>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>
+  React.ElementRef<typeof ToastPrimitives.Title>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>
 >(({ className, ...props }, ref) => (
-	<ToastPrimitives.Title
-		ref={ref}
-		className={cn('text-sm font-semibold [&+div]:text-xs', className)}
-		{...props}
-	/>
-));
-ToastTitle.displayName = ToastPrimitives.Title.displayName;
+  <ToastPrimitives.Title
+    ref={ref}
+    className={cn('text-sm font-semibold', className)}
+    {...props}
+  />
+))
+ToastTitle.displayName = ToastPrimitives.Title.displayName
 
 const ToastDescription = React.forwardRef<
-	React.ElementRef<typeof ToastPrimitives.Description>,
-	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
+  React.ElementRef<typeof ToastPrimitives.Description>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
 >(({ className, ...props }, ref) => (
-	<ToastPrimitives.Description
-		ref={ref}
-		className={cn('text-sm opacity-90', className)}
-		{...props}
-	/>
-));
-ToastDescription.displayName = ToastPrimitives.Description.displayName;
+  <ToastPrimitives.Description
+    ref={ref}
+    className={cn('text-sm opacity-90', className)}
+    {...props}
+  />
+))
+ToastDescription.displayName = ToastPrimitives.Description.displayName
 
-type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>;
+type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 
-type ToastActionElement = React.ReactElement<typeof ToastAction>;
+type ToastActionElement = React.ReactElement<typeof ToastAction>
 
 export {
-	type ToastProps,
-	type ToastActionElement,
-	ToastProvider,
-	ToastViewport,
-	Toast,
-	ToastTitle,
-	ToastDescription,
-	ToastClose,
-	ToastAction,
-};
+  type ToastProps,
+  type ToastActionElement,
+  ToastProvider,
+  ToastViewport,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+  ToastAction,
+}
 </file>
 
 <file path="src/components/ui/toaster.tsx">
+'use client'
+
+import { useToast } from '@/hooks/use-toast'
 import {
-	Toast,
-	ToastClose,
-	ToastDescription,
-	ToastProvider,
-	ToastTitle,
-	ToastViewport,
-} from '@/components/ui/toast';
-import { useToast } from '@/hooks/use-toast';
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from '@/components/ui/toast'
 
 export function Toaster() {
-	const { toasts } = useToast();
+  const { toasts } = useToast()
 
-	return (
-		<ToastProvider>
-			{toasts.map(function ({
-				id,
-				title,
-				description,
-				action,
-				...props
-			}) {
-				return (
-					<Toast key={id} {...props}>
-						<div className='grid gap-1'>
-							{title && <ToastTitle>{title}</ToastTitle>}
-							{description && (
-								<ToastDescription>
-									{description}
-								</ToastDescription>
-							)}
-						</div>
-						{action}
-						<ToastClose />
-					</Toast>
-				);
-			})}
-			<ToastViewport />
-		</ToastProvider>
-	);
+  return (
+    <ToastProvider>
+      {toasts.map(function ({ id, title, description, action, ...props }) {
+        return (
+          <Toast key={id} {...props}>
+            <div className="grid gap-1">
+              {title && <ToastTitle>{title}</ToastTitle>}
+              {description && (
+                <ToastDescription>{description}</ToastDescription>
+              )}
+            </div>
+            {action}
+            <ToastClose />
+          </Toast>
+        )
+      })}
+      <ToastViewport />
+    </ToastProvider>
+  )
 }
 </file>
 
@@ -702,548 +1859,6 @@ export default function AmbiguityPopover({
 }
 </file>
 
-<file path="src/components/ModelManager.css">
-.model-manager-backdrop {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 1000;
-}
-.model-manager {
-	background: #1f1f1f;
-	padding: 16px;
-	border-radius: 8px;
-	width: 420px;
-	color: #fff;
-}
-.model-manager label {
-	display: block;
-	margin: 8px 0;
-}
-.model-manager input {
-	width: 100%;
-	padding: 6px;
-	margin-top: 4px;
-	background: #111;
-	border: 1px solid #333;
-	color: #fff;
-}
-.model-manager .controls {
-	margin-top: 12px;
-	display: flex;
-	gap: 8px;
-}
-.model-manager .status {
-	margin-top: 12px;
-	font-size: 0.9rem;
-	opacity: 0.9;
-}
-</file>
-
-<file path="src/components/ModelManager.tsx">
-import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
-import { listen } from '@tauri-apps/api/event';
-import './ModelManager.css';
-
-export default function ModelManager({ onClose }: { onClose: () => void }) {
-	const [modelName, setModelName] = useState('distil-whisper-medium.en');
-	const [url, setUrl] = useState('');
-	const [progress, setProgress] = useState<number | null>(null);
-	const [status, setStatus] = useState<string>('idle');
-
-	useEffect(() => {
-		// Listen for download progress events emitted by backend
-		let unlisten: () => void;
-		listen('download-progress', (event: any) => {
-			try {
-				const payload = event.payload as {
-					downloaded: number;
-					total: number;
-					percentage: number;
-				};
-				setProgress(payload.percentage);
-				setStatus(`Downloading: ${Math.round(payload.percentage)}%`);
-			} catch (e) {
-				// ignore
-			}
-		}).then((l) => {
-			// adapter: `listen` returns an unlisten function (or event handler). Keep reference
-			// in case we need to cleanup; but tauri's listen returns a Promise<UnlistenFn>
-			(unlisten as any) = l;
-		});
-
-		return () => {
-			if (unlisten) unlisten();
-		};
-	}, []);
-
-	const startDownload = async () => {
-		try {
-			setStatus('starting');
-			setProgress(0);
-			// If URL is empty, try a sensible default location (user will replace)
-			const finalUrl =
-				url || `https://example.com/models/${modelName}.zip`;
-			const path = await invoke('download_model', {
-				model_name: modelName,
-				url: finalUrl,
-			});
-			setStatus(`Downloaded to ${path}`);
-			setProgress(100);
-		} catch (err) {
-			console.error('Download failed', err);
-			setStatus('failed');
-			setProgress(null);
-		}
-	};
-
-	return (
-		<div className='model-manager-backdrop'>
-			<div className='model-manager'>
-				<h3>Model Manager</h3>
-				<label>
-					Model name
-					<input
-						value={modelName}
-						onChange={(e) => setModelName(e.target.value)}
-					/>
-				</label>
-				<label>
-					URL (optional)
-					<input
-						value={url}
-						onChange={(e) => setUrl(e.target.value)}
-						placeholder='Model download URL'
-					/>
-				</label>
-				<div className='controls'>
-					<button onClick={startDownload}>Download</button>
-					<button onClick={onClose}>Close</button>
-				</div>
-				<div className='status'>
-					<div>Status: {status}</div>
-					<div>
-						Progress:{' '}
-						{progress !== null ? `${Math.round(progress)}%` : '—'}
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-}
-</file>
-
-<file path="src/components/SimpleModelDialog.css">
-.dialog-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 1000;
-	background: rgba(0, 0, 0, 0.8);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	animation: fadeIn 0.2s ease-out;
-}
-
-@keyframes fadeIn {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
-
-.dialog-content {
-	background: #252526;
-	border: 1px solid #3e3e42;
-	border-radius: 8px;
-	width: 90%;
-	max-width: 600px;
-	max-height: 80vh;
-	overflow-y: auto;
-	padding: 24px;
-	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-	animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-	from {
-		opacity: 0;
-		transform: translateY(-20px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.dialog-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 16px;
-}
-
-.dialog-header h2 {
-	font-size: 20px;
-	font-weight: 600;
-	color: #d4d4d4;
-	margin: 0;
-}
-
-.close-btn {
-	background: none;
-	border: none;
-	color: #d4d4d4;
-	font-size: 32px;
-	font-weight: 300;
-	cursor: pointer;
-	padding: 0;
-	width: 32px;
-	height: 32px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 4px;
-	transition: all 0.2s;
-}
-
-.close-btn:hover {
-	background: #3e3e42;
-	color: #fff;
-}
-
-.dialog-description {
-	color: #858585;
-	font-size: 14px;
-	margin-bottom: 20px;
-	line-height: 1.5;
-}
-
-.models-list {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	margin-bottom: 20px;
-}
-
-.model-card {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 16px;
-	background: #1e1e1e;
-	border: 2px solid #3e3e42;
-	border-radius: 8px;
-	cursor: pointer;
-	transition: all 0.2s;
-	text-align: left;
-}
-
-.model-card:hover:not(:disabled) {
-	background: #2d2d30;
-	border-color: #007acc;
-	transform: translateY(-2px);
-	box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3);
-}
-
-.model-card:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-}
-
-.model-card.downloaded {
-	border-color: #4ec9b0;
-	background: rgba(78, 201, 176, 0.1);
-}
-
-.model-info {
-	flex: 1;
-}
-
-.model-info h3 {
-	font-size: 16px;
-	font-weight: 600;
-	color: #d4d4d4;
-	margin: 0 0 8px 0;
-}
-
-.model-desc {
-	font-size: 14px;
-	color: #858585;
-	margin: 0 0 8px 0;
-}
-
-.model-size {
-	font-size: 12px;
-	color: #858585;
-}
-
-.model-status {
-	margin-left: 16px;
-}
-
-.status-icon {
-	font-size: 24px;
-	display: inline-block;
-}
-
-.status-icon.loading {
-	animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-.download-status {
-	margin-top: 20px;
-	padding: 16px;
-	background: #1e1e1e;
-	border-radius: 8px;
-	border: 1px solid #3e3e42;
-}
-
-.progress-bar {
-	height: 8px;
-	background: #3e3e42;
-	border-radius: 4px;
-	overflow: hidden;
-	margin-bottom: 12px;
-}
-
-.progress-fill {
-	height: 100%;
-	background: linear-gradient(90deg, #007acc, #4ec9b0);
-	transition: width 0.3s ease;
-}
-
-.status-text {
-	font-size: 14px;
-	color: #d4d4d4;
-	margin: 0;
-	text-align: center;
-}
-</file>
-
-<file path="src/components/SimpleModelDialog.tsx">
-import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import './SimpleModelDialog.css';
-
-interface WhisperModel {
-	id: string;
-	name: string;
-	size: string;
-	description: string;
-	huggingface_id: string;
-}
-
-const WHISPER_MODELS: WhisperModel[] = [
-	{
-		id: 'distil-medium-en',
-		name: 'Distil Whisper Medium (EN)',
-		size: '~400MB',
-		description: '⭐ Recommended - Balanced accuracy and speed for English',
-		huggingface_id: 'distil-whisper/distil-medium.en',
-	},
-	{
-		id: 'tiny-en',
-		name: 'Whisper Tiny (EN)',
-		size: '~75MB',
-		description: 'Fastest, lower accuracy',
-		huggingface_id: 'openai/whisper-tiny.en',
-	},
-	{
-		id: 'base-en',
-		name: 'Whisper Base (EN)',
-		size: '~145MB',
-		description: 'Fast with decent accuracy',
-		huggingface_id: 'openai/whisper-base.en',
-	},
-];
-
-interface SimpleModelDialogProps {
-	open: boolean;
-	onClose: () => void;
-}
-
-export function SimpleModelDialog({ open, onClose }: SimpleModelDialogProps) {
-	const [downloading, setDownloading] = useState(false);
-	const [downloadProgress, setDownloadProgress] = useState(0);
-	const [selectedModel, setSelectedModel] = useState<string | null>(null);
-	const [downloadedModels, setDownloadedModels] = useState<Set<string>>(
-		new Set()
-	);
-	const [statusMessage, setStatusMessage] = useState('');
-
-	useEffect(() => {
-		if (open) {
-			checkDownloadedModels();
-		}
-	}, [open]);
-
-	useEffect(() => {
-		const unlisten = listen<{
-			downloaded: number;
-			total: number;
-			percentage: number;
-		}>('download-progress', (event) => {
-			setDownloadProgress(event.payload.percentage);
-		});
-
-		return () => {
-			unlisten.then((fn) => fn());
-		};
-	}, []);
-
-	const checkDownloadedModels = async () => {
-		const downloaded = new Set<string>();
-		for (const model of WHISPER_MODELS) {
-			try {
-				const isDownloaded = await invoke<boolean>(
-					'is_model_downloaded',
-					{
-						modelName: model.id,
-					}
-				);
-				if (isDownloaded) {
-					downloaded.add(model.id);
-				}
-			} catch (err) {
-				console.error(`Failed to check model ${model.id}:`, err);
-			}
-		}
-		setDownloadedModels(downloaded);
-	};
-
-	const handleDownloadAndLoad = async (model: WhisperModel) => {
-		setDownloading(true);
-		setDownloadProgress(0);
-		setSelectedModel(model.id);
-		setStatusMessage(`Downloading ${model.name}...`);
-
-		try {
-			await invoke('download_model_from_hub', {
-				modelId: model.huggingface_id,
-				modelName: model.id,
-				revision: 'main',
-			});
-
-			setStatusMessage(`Loading ${model.name}...`);
-			await invoke('load_whisper_model', {
-				modelName: model.id,
-			});
-
-			setStatusMessage(`✓ ${model.name} is ready!`);
-			setDownloadedModels((prev) => new Set(prev).add(model.id));
-
-			setTimeout(() => {
-				onClose();
-			}, 1500);
-		} catch (err) {
-			console.error('Failed:', err);
-			setStatusMessage(`✗ Failed: ${err}`);
-		} finally {
-			setDownloading(false);
-			setSelectedModel(null);
-		}
-	};
-
-	if (!open) return null;
-
-	return (
-		<div className='dialog-overlay' onClick={onClose}>
-			<div
-				className='dialog-content'
-				onClick={(e) => e.stopPropagation()}
-			>
-				<div className='dialog-header'>
-					<h2>Select Whisper Model</h2>
-					<button className='close-btn' onClick={onClose}>
-						×
-					</button>
-				</div>
-
-				<p className='dialog-description'>
-					Choose a speech-to-text model. Smaller models are faster but
-					less accurate.
-				</p>
-
-				<div className='models-list'>
-					{WHISPER_MODELS.map((model) => {
-						const isDownloaded = downloadedModels.has(model.id);
-						const isDownloading =
-							downloading && selectedModel === model.id;
-
-						return (
-							<button
-								key={model.id}
-								className={`model-card ${
-									isDownloaded ? 'downloaded' : ''
-								}`}
-								onClick={() => handleDownloadAndLoad(model)}
-								disabled={downloading}
-							>
-								<div className='model-info'>
-									<h3>{model.name}</h3>
-									<p className='model-desc'>
-										{model.description}
-									</p>
-									<span className='model-size'>
-										{model.size}
-									</span>
-								</div>
-								<div className='model-status'>
-									{isDownloaded && (
-										<span className='status-icon'>✓</span>
-									)}
-									{isDownloading && (
-										<span className='status-icon loading'>
-											⟳
-										</span>
-									)}
-									{!isDownloaded && !isDownloading && (
-										<span className='status-icon'>↓</span>
-									)}
-								</div>
-							</button>
-						);
-					})}
-				</div>
-
-				{downloading && (
-					<div className='download-status'>
-						<div className='progress-bar'>
-							<div
-								className='progress-fill'
-								style={{ width: `${downloadProgress}%` }}
-							/>
-						</div>
-						<p className='status-text'>{statusMessage}</p>
-					</div>
-				)}
-
-				{statusMessage && !downloading && (
-					<p className='status-text'>{statusMessage}</p>
-				)}
-			</div>
-		</div>
-	);
-}
-</file>
-
 <file path="src/components/StreamingTranscription.css">
 .streaming-transcription {
 	position: fixed;
@@ -1347,7 +1962,7 @@ export function SimpleModelDialog({ open, onClose }: SimpleModelDialogProps) {
 </file>
 
 <file path="src/components/StreamingTranscription.tsx">
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import './StreamingTranscription.css';
 
@@ -1367,12 +1982,18 @@ export function StreamingTranscription({
 	const [partialText, setPartialText] = useState<string>('');
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [isVisible, setIsVisible] = useState(false);
+	const isRecordingRef = useRef(isRecording);
+
+	useEffect(() => {
+		isRecordingRef.current = isRecording;
+	}, [isRecording]);
 
 	useEffect(() => {
 		// Listen for partial transcription events
 		const unlisten = listen<PartialTranscription>(
 			'transcription-partial',
 			(event) => {
+				if (!isRecordingRef.current) return;
 				setPartialText(event.payload.text);
 				setIsProcessing(false);
 				setIsVisible(true);
@@ -1381,6 +2002,7 @@ export function StreamingTranscription({
 
 		// Listen for processing events
 		const unlistenProcessing = listen('transcription-processing', () => {
+			if (!isRecordingRef.current) return;
 			setIsProcessing(true);
 			setIsVisible(true);
 		});
@@ -1434,454 +2056,6 @@ export function StreamingTranscription({
 		</div>
 	);
 }
-</file>
-
-<file path="src/components/VoiceLogSidebar.css">
-.voice-log-sidebar {
-	width: 320px;
-	background: #1e1e1e;
-	border-left: 1px solid #3a3a3a;
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-	transition: width 0.3s ease;
-}
-
-.voice-log-sidebar.collapsed {
-	width: 48px;
-	min-width: 48px;
-}
-
-.voice-log-toggle {
-	width: 100%;
-	height: 48px;
-	background: none;
-	border: none;
-	color: #888;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 20px;
-	transition: all 0.2s ease;
-}
-
-.voice-log-toggle:hover {
-	background: #2d2d2d;
-	color: #d4d4d4;
-}
-
-.voice-log-header {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 16px;
-	border-bottom: 1px solid #3a3a3a;
-	background: #252525;
-}
-
-.voice-log-title {
-	flex: 1;
-	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: #d4d4d4;
-}
-
-.voice-log-count {
-	background: #3b82f6;
-	color: white;
-	padding: 2px 8px;
-	border-radius: 12px;
-	font-size: 11px;
-	font-weight: 600;
-}
-
-.voice-log-collapse {
-	background: none;
-	border: none;
-	color: #888;
-	cursor: pointer;
-	font-size: 18px;
-	padding: 4px;
-	transition: color 0.2s ease;
-}
-
-.voice-log-collapse:hover {
-	color: #d4d4d4;
-}
-
-.voice-log-entries {
-	flex: 1;
-	overflow-y: auto;
-	padding: 12px;
-}
-
-.voice-log-empty {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	height: 100%;
-	color: #888;
-	text-align: center;
-	padding: 32px 16px;
-}
-
-.empty-icon {
-	font-size: 48px;
-	margin-bottom: 16px;
-	opacity: 0.5;
-}
-
-.voice-log-empty p {
-	margin: 4px 0;
-	font-size: 14px;
-}
-
-.empty-hint {
-	font-size: 12px;
-	color: #666;
-}
-
-.voice-log-entry {
-	background: #252525;
-	border: 1px solid #3a3a3a;
-	border-radius: 8px;
-	padding: 12px;
-	margin-bottom: 8px;
-	cursor: pointer;
-	transition: all 0.2s ease;
-}
-
-.voice-log-entry:hover {
-	background: #2a2a2a;
-	border-color: #4a4a4a;
-	transform: translateX(-2px);
-}
-
-.voice-log-entry.expanded {
-	background: #2d2d2d;
-	border-color: #3b82f6;
-}
-
-.entry-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 8px;
-}
-
-.entry-icon {
-	font-size: 16px;
-}
-
-.entry-time {
-	flex: 1;
-	font-size: 11px;
-	color: #888;
-	font-family: monospace;
-}
-
-.entry-confidence {
-	padding: 2px 6px;
-	border-radius: 4px;
-	font-size: 10px;
-	font-weight: 600;
-	color: white;
-}
-
-.entry-content {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.entry-transcript {
-	font-size: 13px;
-	color: #d4d4d4;
-	line-height: 1.4;
-	font-style: italic;
-}
-
-.entry-interpretation {
-	font-size: 12px;
-	color: #888;
-	line-height: 1.4;
-}
-
-.entry-timings {
-	margin-top: 12px;
-	padding-top: 12px;
-	border-top: 1px solid #3a3a3a;
-}
-
-.timing-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 8px;
-}
-
-.timing-item {
-	background: #1e1e1e;
-	padding: 6px 8px;
-	border-radius: 4px;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-}
-
-.timing-item.total {
-	grid-column: 1 / -1;
-	background: #3b82f6;
-	color: white;
-}
-
-.timing-label {
-	font-size: 10px;
-	color: #888;
-	text-transform: uppercase;
-	font-weight: 600;
-}
-
-.timing-item.total .timing-label {
-	color: rgba(255, 255, 255, 0.8);
-}
-
-.timing-value {
-	font-size: 14px;
-	font-weight: 600;
-	color: #d4d4d4;
-	font-family: monospace;
-}
-
-.timing-item.total .timing-value {
-	color: white;
-}
-</file>
-
-<file path="src/components/VoiceLogSidebar.tsx">
-import { useState } from 'react';
-import './VoiceLogSidebar.css';
-
-interface VoiceLogEntry {
-	id: string;
-	timestamp: Date;
-	transcript: string;
-	interpretation: string;
-	confidence: number;
-	action: 'command' | 'text' | 'ambiguous';
-	timings?: {
-		stt_ms?: number;
-		embed_ms?: number;
-		search_ms?: number;
-		total_ms?: number;
-	};
-}
-
-interface VoiceLogSidebarProps {
-	entries: VoiceLogEntry[];
-	isCollapsed: boolean;
-	onToggle: () => void;
-}
-
-export default function VoiceLogSidebar({
-	entries,
-	isCollapsed,
-	onToggle,
-}: VoiceLogSidebarProps) {
-	const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
-
-	const formatTime = (date: Date) => {
-		return date.toLocaleTimeString('en-US', {
-			hour12: false,
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-		});
-	};
-
-	const getActionIcon = (action: string) => {
-		switch (action) {
-			case 'command':
-				return '⚡';
-			case 'text':
-				return '📝';
-			case 'ambiguous':
-				return '❓';
-			default:
-				return '•';
-		}
-	};
-
-	const getActionColor = (action: string) => {
-		switch (action) {
-			case 'command':
-				return '#10b981';
-			case 'text':
-				return '#3b82f6';
-			case 'ambiguous':
-				return '#f59e0b';
-			default:
-				return '#6b7280';
-		}
-	};
-
-	if (isCollapsed) {
-		return (
-			<div className='voice-log-sidebar collapsed'>
-				<button className='voice-log-toggle' onClick={onToggle}>
-					<span className='toggle-icon'>📋</span>
-				</button>
-			</div>
-		);
-	}
-
-	return (
-		<div className='voice-log-sidebar'>
-			<div className='voice-log-header'>
-				<h3 className='voice-log-title'>Voice Log</h3>
-				<span className='voice-log-count'>{entries.length}</span>
-				<button className='voice-log-collapse' onClick={onToggle}>
-					→
-				</button>
-			</div>
-
-			<div className='voice-log-entries'>
-				{entries.length === 0 ? (
-					<div className='voice-log-empty'>
-						<span className='empty-icon'>🎤</span>
-						<p>No voice commands yet</p>
-						<p className='empty-hint'>
-							Start speaking to see your commands here
-						</p>
-					</div>
-				) : (
-					entries
-						.slice()
-						.reverse()
-						.map((entry) => (
-							<div
-								key={entry.id}
-								className={`voice-log-entry ${
-									expandedEntry === entry.id ? 'expanded' : ''
-								}`}
-								onClick={() =>
-									setExpandedEntry(
-										expandedEntry === entry.id
-											? null
-											: entry.id
-									)
-								}
-							>
-								<div className='entry-header'>
-									<span
-										className='entry-icon'
-										style={{
-											color: getActionColor(entry.action),
-										}}
-									>
-										{getActionIcon(entry.action)}
-									</span>
-									<span className='entry-time'>
-										{formatTime(entry.timestamp)}
-									</span>
-									<span
-										className='entry-confidence'
-										style={{
-											background:
-												entry.confidence > 0.85
-													? '#10b981'
-													: entry.confidence > 0.65
-													? '#f59e0b'
-													: '#6b7280',
-										}}
-									>
-										{Math.round(entry.confidence * 100)}%
-									</span>
-								</div>
-
-								<div className='entry-content'>
-									<div className='entry-transcript'>
-										"{entry.transcript}"
-									</div>
-									<div className='entry-interpretation'>
-										→ {entry.interpretation}
-									</div>
-								</div>
-
-								{expandedEntry === entry.id &&
-									entry.timings && (
-										<div className='entry-timings'>
-											<div className='timing-grid'>
-												{entry.timings.stt_ms && (
-													<div className='timing-item'>
-														<span className='timing-label'>
-															STT
-														</span>
-														<span className='timing-value'>
-															{
-																entry.timings
-																	.stt_ms
-															}
-															ms
-														</span>
-													</div>
-												)}
-												{entry.timings.embed_ms && (
-													<div className='timing-item'>
-														<span className='timing-label'>
-															Embed
-														</span>
-														<span className='timing-value'>
-															{
-																entry.timings
-																	.embed_ms
-															}
-															ms
-														</span>
-													</div>
-												)}
-												{entry.timings.search_ms && (
-													<div className='timing-item'>
-														<span className='timing-label'>
-															Search
-														</span>
-														<span className='timing-value'>
-															{
-																entry.timings
-																	.search_ms
-															}
-															ms
-														</span>
-													</div>
-												)}
-												{entry.timings.total_ms && (
-													<div className='timing-item total'>
-														<span className='timing-label'>
-															Total
-														</span>
-														<span className='timing-value'>
-															{
-																entry.timings
-																	.total_ms
-															}
-															ms
-														</span>
-													</div>
-												)}
-											</div>
-										</div>
-									)}
-							</div>
-						))
-				)}
-			</div>
-		</div>
-	);
-}
-
-export type { VoiceLogEntry };
 </file>
 
 <file path="src/components/WaveformVisualizer.css">
@@ -2038,6 +2212,7 @@ import { cn } from '@/lib/utils';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useToast } from '@/hooks/use-toast';
+import { getStorageItem, setStorageItem } from '@/utils/storage';
 
 interface WhisperModel {
 	id: string;
@@ -2122,6 +2297,15 @@ export function WhisperModelSelector({
 		// Check which models are already downloaded
 		const checkDownloadedModels = async () => {
 			const downloaded = new Set<string>();
+
+			// Check saved model preference
+			const savedModelId = await getStorageItem<string>(
+				'selected_whisper_model'
+			);
+			if (savedModelId) {
+				setSelectedModel(savedModelId);
+			}
+
 			for (const model of WHISPER_MODELS) {
 				try {
 					const isDownloaded = await invoke<boolean>(
@@ -2132,6 +2316,21 @@ export function WhisperModelSelector({
 					);
 					if (isDownloaded) {
 						downloaded.add(model.id);
+
+						// If we have a saved model and it's this one, try to load it automatically
+						// But only if the dialog is NOT open (meaning app startup)
+						if (savedModelId === model.id && !open) {
+							try {
+								await invoke('load_whisper_model', {
+									modelName: model.id,
+								});
+								console.log(
+									`Auto-loaded saved model: ${model.id}`
+								);
+							} catch (e) {
+								console.error('Failed to auto-load model', e);
+							}
+						}
 					}
 				} catch (err) {
 					console.error(`Failed to check model ${model.id}:`, err);
@@ -2140,9 +2339,7 @@ export function WhisperModelSelector({
 			setDownloadedModels(downloaded);
 		};
 
-		if (open) {
-			checkDownloadedModels();
-		}
+		checkDownloadedModels();
 	}, [open]);
 
 	React.useEffect(() => {
@@ -2217,6 +2414,8 @@ export function WhisperModelSelector({
 				description: `${model.name} is now active.`,
 			});
 
+			setSelectedModel(model.id);
+			await setStorageItem('selected_whisper_model', model.id);
 			onOpenChange(false);
 		} catch (err) {
 			console.error('Failed to load model:', err);
@@ -2300,7 +2499,21 @@ export function WhisperModelSelector({
 
 								<div className='flex flex-col items-center gap-2 pt-1'>
 									{isDownloaded ? (
-										<Check className='h-5 w-5 text-green-500' />
+										selectedModel === model.id ? (
+											<div className='flex flex-col items-center text-green-500'>
+												<Check className='h-5 w-5' />
+												<span className='text-xs font-medium'>
+													Active
+												</span>
+											</div>
+										) : (
+											<Button
+												size='sm'
+												variant='secondary'
+											>
+												Select
+											</Button>
+										)
 									) : isDownloading ? (
 										<Loader2 className='h-5 w-5 animate-spin text-primary' />
 									) : (
@@ -2440,12 +2653,248 @@ export const markdownDeletePair = EditorView.inputHandler.of((view, from, to, te
 export const markdownAutoPairExtension = [markdownAutoClose, markdownDeletePair];
 </file>
 
+<file path="src/editor/commands.ts">
+import { EditorView } from '@codemirror/view';
+import { undo, redo } from '@codemirror/commands';
+
+export interface CommandAction {
+    Format?: FormatType;
+    Editor?: EditorAction;
+    System?: SystemAction;
+}
+
+export interface FormatType {
+    Bold?: boolean;
+    Italic?: boolean;
+    Strikethrough?: boolean;
+    Code?: boolean;
+    Heading?: { level: number };
+    Quote?: boolean;
+    BulletList?: boolean;
+    NumberedList?: boolean;
+    Checkbox?: boolean;
+    Link?: boolean;
+    Image?: boolean;
+    Table?: boolean;
+    CodeBlock?: boolean;
+    HorizontalRule?: boolean;
+}
+
+export interface EditorAction {
+    Undo?: boolean;
+    Redo?: boolean;
+    NewLine?: boolean;
+    Delete?: boolean;
+    SelectAll?: boolean;
+}
+
+export interface SystemAction {
+    CreateNote?: { name: string };
+    OpenNote?: { name: string };
+    Search?: { query: string };
+    SaveNote?: boolean;
+}
+
+export function executeCommand(view: EditorView, action: CommandAction): boolean {
+    if (action.Format) {
+        return executeFormatCommand(view, action.Format);
+    } else if (action.Editor) {
+        return executeEditorCommand(view, action.Editor);
+    } else if (action.System) {
+        // System commands need to be handled by the parent component
+        return false;
+    }
+    return false;
+}
+
+function executeFormatCommand(view: EditorView, format: FormatType): boolean {
+    const { state } = view;
+    const { from, to } = state.selection.main;
+
+    if (format.Bold !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `**${selectedText}**` },
+            selection: { anchor: from + 2, head: to + 2 }
+        });
+        return true;
+    }
+
+    if (format.Italic !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `*${selectedText}*` },
+            selection: { anchor: from + 1, head: to + 1 }
+        });
+        return true;
+    }
+
+    if (format.Heading) {
+        const level = format.Heading.level;
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        // Remove existing heading markers if any
+        const cleanText = lineText.replace(/^#{1,6}\s+/, '');
+        const headingPrefix = '#'.repeat(level) + ' ';
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: headingPrefix + cleanText },
+            selection: { anchor: from }
+        });
+        return true;
+    }
+
+    if (format.Quote !== undefined) {
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: `> ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.BulletList !== undefined) {
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: `- ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.NumberedList !== undefined) {
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: `1. ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.Checkbox !== undefined) {
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: `- [ ] ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.Link !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `[${selectedText}](url)` },
+            selection: { anchor: from + selectedText.length + 3, head: from + selectedText.length + 6 }
+        });
+        return true;
+    }
+
+    if (format.Image !== undefined) {
+        view.dispatch({
+            changes: { from, to, insert: `![alt text](url)` },
+            selection: { anchor: from + 12, head: from + 15 }
+        });
+        return true;
+    }
+
+    if (format.Table !== undefined) {
+        const tableTemplate = `
+| Header 1 | Header 2 |
+| -------- | -------- |
+| Cell 1   | Cell 2   |
+`;
+        view.dispatch({
+            changes: { from, to, insert: tableTemplate }
+        });
+        return true;
+    }
+
+    if (format.CodeBlock !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        const codeBlockTemplate = `\`\`\`
+${selectedText}
+\`\`\``;
+        view.dispatch({
+            changes: { from, to, insert: codeBlockTemplate },
+            selection: { anchor: from + 3 }
+        });
+        return true;
+    }
+
+    if (format.Code !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `\`${selectedText}\`` },
+            selection: { anchor: from + 1, head: to + 1 }
+        });
+        return true;
+    }
+
+    if (format.HorizontalRule !== undefined) {
+        view.dispatch({
+            changes: { from, to, insert: `\n---\n` }
+        });
+        return true;
+    }
+
+    return false;
+}
+
+function executeEditorCommand(view: EditorView, action: EditorAction): boolean {
+    if (action.Undo !== undefined) {
+        return undo(view);
+    }
+
+    if (action.Redo !== undefined) {
+        return redo(view);
+    }
+
+    if (action.NewLine !== undefined) {
+        const { from } = view.state.selection.main;
+        view.dispatch({
+            changes: { from, insert: '\n' },
+            selection: { anchor: from + 1 }
+        });
+        return true;
+    }
+
+    if (action.Delete !== undefined) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+            view.dispatch({
+                changes: { from, to }
+            });
+        }
+        return true;
+    }
+
+    if (action.SelectAll !== undefined) {
+        view.dispatch({
+            selection: { anchor: 0, head: view.state.doc.length }
+        });
+        return true;
+    }
+
+    return false;
+}
+</file>
+
 <file path="src/editor/flashEffect.ts">
 import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 
 // Define the types of flash effects
-export type FlashType = 'insert' | 'delete' | 'format';
+export type FlashType = 'insert' | 'delete' | 'format' | 'command';
 
 // StateEffect for adding a flash
 export const addFlash = StateEffect.define<{ from: number; to: number; type: FlashType }>();
@@ -2525,6 +2974,11 @@ const flashPlugin = ViewPlugin.fromClass(
                     case 'format':
                         className = 'cm-flash-format';
                         break;
+                    case 'command':
+                        className = 'cm-flash-command';
+                        break;
+                    default:
+                        className = 'cm-flash-insert';
                 }
 
                 return Decoration.mark({
@@ -2660,6 +3114,105 @@ class GhostTextWidget extends WidgetType {
 
 // Export the complete extension
 export const ghostTextExtension = [ghostTextField];
+</file>
+
+<file path="src/editor/theme.ts">
+import { EditorView } from '@codemirror/view';
+
+export const editorTheme = EditorView.theme({
+    '&': {
+        backgroundColor: 'var(--background)',
+        color: 'var(--foreground)',
+        height: '100%',
+        fontSize: '1.125rem', // text-lg
+    },
+    '.cm-content': {
+        caretColor: 'var(--primary)',
+        fontFamily: 'var(--font-mono)',
+        padding: '4rem', // p-16
+        maxWidth: '900px',
+        margin: '0 auto',
+    },
+    '.cm-cursor': {
+        borderLeftColor: 'var(--primary)',
+        borderLeftWidth: '2px',
+    },
+    '.cm-selectionBackground': {
+        backgroundColor: 'var(--muted) !important',
+    },
+    '&.cm-focused .cm-selectionBackground': {
+        backgroundColor: 'var(--muted) !important',
+    },
+    '.cm-activeLine': {
+        backgroundColor: 'transparent',
+    },
+    '.cm-gutters': {
+        backgroundColor: 'transparent',
+        color: 'var(--muted-foreground)',
+        border: 'none',
+    },
+    '.cm-activeLineGutter': {
+        backgroundColor: 'transparent',
+    },
+    // Live Preview Styles
+    '.cm-bold': {
+        fontWeight: 'bold',
+        color: 'var(--foreground)',
+    },
+    '.cm-italic': {
+        fontStyle: 'italic',
+        color: 'var(--foreground)',
+    },
+    '.cm-heading': {
+        fontWeight: 'bold',
+        lineHeight: '1.4',
+        color: 'var(--foreground)',
+    },
+    '.cm-heading-1': {
+        fontSize: '2em',
+    },
+    '.cm-heading-2': {
+        fontSize: '1.6em',
+    },
+    '.cm-heading-3': {
+        fontSize: '1.4em',
+    },
+    '.cm-link': {
+        color: 'var(--primary)',
+        textDecoration: 'underline',
+        cursor: 'pointer',
+    },
+    '.cm-list-marker': {
+        color: 'var(--muted-foreground)',
+    },
+    '.cm-list-item': {
+        paddingLeft: '4px',
+    },
+    '.cm-inline-code': {
+        fontFamily: 'var(--font-mono)',
+        backgroundColor: 'var(--muted)',
+        padding: '0.2em 0.4em',
+        borderRadius: '4px',
+        fontSize: '0.9em',
+    },
+    '.cm-image': {
+        maxWidth: '100%',
+        borderRadius: '8px',
+        marginTop: '1em',
+        marginBottom: '1em',
+    },
+    '.cm-checkbox': {
+        marginRight: '0.5em',
+        cursor: 'pointer',
+        verticalAlign: 'middle',
+        accentColor: 'var(--primary)',
+    },
+    '.cm-hr': {
+        border: 'none',
+        borderTop: '2px solid var(--muted)',
+        margin: '2em 0',
+    },
+});
 </file>
 
 <file path="src/hooks/use-toast.ts">
@@ -2855,6 +3408,63 @@ function useToast() {
 export { useToast, toast };
 </file>
 
+<file path="src/hooks/useModelDownload.ts">
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+interface DownloadProgress {
+    downloaded: number;
+    total: number;
+    percentage: number;
+}
+
+export function useModelDownload() {
+    const [progress, setProgress] = useState<DownloadProgress | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const unlisten = listen<DownloadProgress>('download-progress', (event) => {
+            setProgress(event.payload);
+        });
+
+        return () => {
+            unlisten.then((fn) => fn());
+        };
+    }, []);
+
+    const downloadModel = async (modelName: string, url: string) => {
+        setIsDownloading(true);
+        setError(null);
+        setProgress(null);
+
+        try {
+            const path = await invoke<string>('download_model', {
+                modelName,
+                url,
+            });
+            console.log('Model downloaded to:', path);
+            return path;
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            setError(errorMsg);
+            throw err;
+        } finally {
+            setIsDownloading(false);
+            setProgress(null);
+        }
+    };
+
+    return {
+        progress,
+        isDownloading,
+        error,
+        downloadModel,
+    };
+}
+</file>
+
 <file path="src/lib/utils.ts">
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -2991,6 +3601,46 @@ export const StorageKeys = {
 } as const;
 </file>
 
+<file path="src/main.tsx">
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './styles/globals.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+	<React.StrictMode>
+		<App />
+	</React.StrictMode>
+);
+</file>
+
+<file path="src-tauri/src/main.rs">
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+  app_lib::run();
+}
+</file>
+
+<file path="src-tauri/.gitignore">
+# Generated by Cargo
+# will have compiled files and executables
+/target/
+/gen/schemas
+</file>
+
+<file path="src-tauri/build.rs">
+fn main() {
+  tauri_build::build()
+}
+</file>
+
+<file path=".gitattributes">
+# Auto detect text files and perform LF normalization
+* text=auto
+</file>
+
 <file path="download-model.sh">
 #!/bin/bash
 # Model Download Helper for Mutter
@@ -3059,6 +3709,21 @@ echo ""
 echo "Note: First transcription may be slow (~30s) as the model loads into memory."
 </file>
 
+<file path="index.html">
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Mutter</title>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>
+</file>
+
 <file path="postcss.config.js">
 export default {
 	plugins: {
@@ -3067,867 +3732,16 @@ export default {
 };
 </file>
 
-<file path="src/components/AudioControl.css">
-.audio-control {
-	position: fixed;
-	bottom: 32px;
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 1000;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 16px;
-}
-
-.audio-control > div:last-child {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-}
-
-.audio-error {
-	background: #ff4444;
-	color: white;
-	padding: 12px 16px;
-	border-radius: 8px;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
-	animation: slideUp 0.3s ease-out;
-	max-width: 400px;
-}
-
-@keyframes slideUp {
-	from {
-		opacity: 0;
-		transform: translateY(10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.error-icon {
-	font-size: 20px;
-	flex-shrink: 0;
-}
-
-.error-message {
-	flex: 1;
-	font-size: 14px;
-	line-height: 1.4;
-}
-
-.error-action {
-	background: white;
-	color: #ff4444;
-	border: none;
-	padding: 6px 12px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.2s;
-	white-space: nowrap;
-}
-
-.error-action:hover {
-	background: #f0f0f0;
-	transform: scale(1.05);
-}
-
-.error-dismiss {
-	background: none;
-	border: none;
-	color: white;
-	font-size: 24px;
-	font-weight: bold;
-	cursor: pointer;
-	padding: 0;
-	width: 24px;
-	height: 24px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 4px;
-	transition: background 0.2s;
-	flex-shrink: 0;
-}
-
-.error-dismiss:hover {
-	background: rgba(255, 255, 255, 0.2);
-}
-
-.permission-prompt {
-	background: #3b82f6;
-	color: white;
-	padding: 12px 16px;
-	border-radius: 8px;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-	animation: slideUp 0.3s ease-out;
-	max-width: 400px;
-}
-
-.prompt-icon {
-	font-size: 24px;
-	flex-shrink: 0;
-}
-
-.prompt-message {
-	flex: 1;
-	font-size: 14px;
-	line-height: 1.4;
-}
-
-.prompt-action {
-	background: white;
-	color: #3b82f6;
-	border: none;
-	padding: 8px 16px;
-	border-radius: 6px;
-	font-size: 13px;
-	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.2s;
-	white-space: nowrap;
-}
-
-.prompt-action:hover {
-	background: #f0f0f0;
-	transform: scale(1.05);
-}
-
-.mic-button {
-	width: 64px;
-	height: 64px;
-	border-radius: 50%;
-	background: #0e639c;
-	border: 3px solid #1177bb;
-	color: white;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: all 0.3s;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.mic-button:hover {
-	background: #1177bb;
-	transform: scale(1.05);
-	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-}
-
-.mic-button:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-	background: #666;
-	border-color: #888;
-}
-
-.mic-button:disabled:hover {
-	transform: none;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.mic-button.listening {
-	background: #ff4444;
-	border-color: #ff6666;
-	animation: pulse-ring 1.5s infinite;
-}
-
-.mic-button.processing {
-	background: #ffa500;
-	border-color: #ffb732;
-	animation: spin 1s linear infinite;
-}
-
-.mic-button.executing {
-	background: #44ff44;
-	border-color: #66ff66;
-}
-
-@keyframes pulse-ring {
-	0% {
-		box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7);
-	}
-	50% {
-		box-shadow: 0 0 0 15px rgba(255, 68, 68, 0);
-	}
-	100% {
-		box-shadow: 0 0 0 0 rgba(255, 68, 68, 0);
-	}
-}
-
-@keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-.settings-button {
-	width: 40px;
-	height: 40px;
-	border-radius: 50%;
-	background: rgba(30, 30, 30, 0.9);
-	border: 2px solid #3e3e42;
-	color: #d4d4d4;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: all 0.3s;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.settings-button:hover {
-	background: #3e3e42;
-	border-color: #007acc;
-	color: #007acc;
-	transform: scale(1.05);
-	box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3);
-}
-
-.settings-button:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
-.settings-button:disabled:hover {
-	transform: none;
-	background: rgba(30, 30, 30, 0.9);
-	border-color: #3e3e42;
-	color: #d4d4d4;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-</file>
-
-<file path="src/components/AudioControl.tsx">
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import './AudioControl.css';
-
-interface AudioControlProps {
-	audioState: 'idle' | 'listening' | 'processing' | 'executing';
-	onStateChange: (
-		state: 'idle' | 'listening' | 'processing' | 'executing'
-	) => void;
-	onPerformanceUpdate?: (timings: PerformanceTimings) => void;
-	onOpenModelSelector?: () => void;
-}
-
-interface PerformanceTimings {
-	vad_ms?: number;
-	stt_ms?: number;
-	embed_ms?: number;
-	search_ms?: number;
-	total_ms?: number;
-}
-
-export default function AudioControl({
-	audioState,
-	onStateChange,
-	onPerformanceUpdate,
-	onOpenModelSelector,
-}: AudioControlProps) {
-	const [isRecording, setIsRecording] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [permissionStatus, setPermissionStatus] = useState<
-		'granted' | 'denied' | 'prompt' | 'unknown'
-	>('unknown');
-	const audioContextRef = useRef<AudioContext | null>(null);
-	const streamRef = useRef<MediaStream | null>(null);
-	const audioBufferRef = useRef<number[]>([]);
-	const silenceTimerRef = useRef<number | null>(null);
-	const streamingIntervalRef = useRef<number | null>(null);
-
-	// Check microphone permission status on mount
-	useEffect(() => {
-		const checkPermission = async () => {
-			try {
-				if (navigator.permissions && navigator.permissions.query) {
-					const result = await navigator.permissions.query({
-						name: 'microphone' as PermissionName,
-					});
-					setPermissionStatus(
-						result.state as 'granted' | 'denied' | 'prompt'
-					);
-
-					// Listen for permission changes
-					result.onchange = () => {
-						setPermissionStatus(
-							result.state as 'granted' | 'denied' | 'prompt'
-						);
-					};
-				}
-			} catch (err) {
-				console.log(
-					'Permissions API not supported, will request on first use'
-				);
-			}
-		};
-
-		checkPermission();
-	}, []);
-
-	const finalizeTranscription = useCallback(async () => {
-		if (audioBufferRef.current.length === 0) return;
-
-		onStateChange('processing');
-
-		try {
-			const audioData = audioBufferRef.current;
-			audioBufferRef.current = [];
-
-			const sttStart = performance.now();
-
-			// Invoke the transcription command directly without a timeout
-			// This allows the backend to take as long as needed (e.g. for large models or long audio)
-			const transcriptionResult = (await invoke('transcribe_audio', {
-				audioBuffer: audioData,
-			})) as { text: string; duration_ms: number };
-
-			const sttEnd = performance.now();
-
-			console.log('Transcription:', transcriptionResult.text);
-			console.log('STT took:', transcriptionResult.duration_ms, 'ms');
-
-			onStateChange('executing');
-
-			// Update performance stats
-			if (onPerformanceUpdate) {
-				onPerformanceUpdate({
-					stt_ms: transcriptionResult.duration_ms,
-					total_ms: Math.round(sttEnd - sttStart),
-				});
-			}
-
-			// Call the global handler exposed by Editor
-			if ((window as any).handleTranscription) {
-				await (window as any).handleTranscription(
-					transcriptionResult.text
-				);
-			}
-
-			setTimeout(() => {
-				// Check if we're still recording by checking if the stream is active
-				if (streamRef.current && streamRef.current.active) {
-					onStateChange('listening');
-				} else {
-					onStateChange('idle');
-				}
-			}, 500);
-		} catch (error) {
-			console.error('Error finalizing transcription:', error);
-			// Only return to listening if we're still recording
-			if (streamRef.current && streamRef.current.active) {
-				onStateChange('listening');
-			} else {
-				onStateChange('idle');
-			}
-		}
-	}, [onStateChange, onPerformanceUpdate]);
-
-	const startRecording = async () => {
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: true,
-			});
-			streamRef.current = stream;
-
-			const audioContext = new AudioContext({ sampleRate: 16000 });
-			audioContextRef.current = audioContext;
-
-			const source = audioContext.createMediaStreamSource(stream);
-
-			// TODO: Switch to AudioWorklet in production as ScriptProcessor is deprecated
-			// Increased buffer size to 8192 to reduce main thread blocking
-			const processor = audioContext.createScriptProcessor(8192, 1, 1);
-
-			processor.onaudioprocess = async (e) => {
-				const inputData = e.inputBuffer.getChannelData(0);
-				const pcmData = Array.from(inputData);
-
-				// Calculate RMS to check if we have audio
-				const rms = Math.sqrt(
-					pcmData.reduce((sum, x) => sum + x * x, 0) / pcmData.length
-				);
-				if (Math.random() < 0.05) {
-					// Log occasionally (approx every 2-3 seconds)
-					console.log(`Microphone input RMS: ${rms.toFixed(4)}`);
-				}
-
-				// Add to buffer
-				audioBufferRef.current.push(...pcmData);
-
-				// VAD is now handled in backend via process_audio_chunk
-				try {
-					await invoke('process_audio_chunk', { pcmData });
-				} catch (error) {
-					console.error('Error processing audio:', error);
-				}
-			};
-
-			source.connect(processor);
-			processor.connect(audioContext.destination);
-
-			// Start streaming transcription - call every 2 seconds while recording
-			streamingIntervalRef.current = window.setInterval(() => {
-				if (audioBufferRef.current.length >= 16000) {
-					// At least 1 second of audio
-					invoke('transcribe_streaming', {
-						audioBuffer: [...audioBufferRef.current],
-					}).catch((err) => {
-						console.error('Streaming transcription error:', err);
-					});
-				}
-			}, 2000);
-
-			setIsRecording(true);
-			onStateChange('listening');
-			setError(null); // Clear any previous errors
-		} catch (error: any) {
-			console.error('Error starting recording:', error);
-
-			// Set user-friendly error message
-			if (error.name === 'NotAllowedError') {
-				setError(
-					'Microphone access denied. Please allow microphone permissions in your browser/system settings. On Linux, you may need to grant permissions at the system level.'
-				);
-				setPermissionStatus('denied');
-			} else if (error.name === 'NotFoundError') {
-				setError(
-					'No microphone found. Please connect a microphone and try again.'
-				);
-			} else if (error.name === 'NotReadableError') {
-				setError(
-					'Microphone is already in use by another application.'
-				);
-			} else {
-				setError(
-					`Error accessing microphone: ${
-						error.message || 'Unknown error'
-					}`
-				);
-			}
-
-			onStateChange('idle');
-		}
-	};
-
-	// Request microphone permission explicitly
-	const requestPermission = async () => {
-		console.log('Requesting microphone permission...');
-		try {
-			setError(null);
-
-			// Check if getUserMedia is available
-			if (
-				!navigator.mediaDevices ||
-				!navigator.mediaDevices.getUserMedia
-			) {
-				throw new Error(
-					'getUserMedia is not supported in this browser/environment'
-				);
-			}
-
-			console.log('Calling getUserMedia...');
-			// This will trigger the browser's permission prompt
-			const stream = await navigator.mediaDevices.getUserMedia({
-				audio: {
-					echoCancellation: true,
-					noiseSuppression: true,
-					autoGainControl: true,
-				},
-			});
-
-			console.log('Permission granted! Stream:', stream);
-			// Immediately stop it, we just wanted the permission
-			stream.getTracks().forEach((track) => {
-				console.log('Stopping track:', track);
-				track.stop();
-			});
-
-			setPermissionStatus('granted');
-			setError(null);
-			console.log('Permission status set to granted');
-		} catch (err: any) {
-			console.error('Permission request failed:', err);
-			if (err.name === 'NotAllowedError') {
-				setPermissionStatus('denied');
-				setError(
-					'Microphone permission denied. On Linux, please check: 1) System Settings > Privacy > Microphone, 2) Run: pactl list sources, 3) Check browser console for details.'
-				);
-			} else if (err.name === 'NotFoundError') {
-				setError(
-					'No microphone found. Please connect a microphone and try again.'
-				);
-			} else {
-				setError(
-					`Could not access microphone: ${err.message}. Check the browser console for details.`
-				);
-			}
-		}
-	};
-
-	const stopRecording = async () => {
-		console.log('Stopping recording...');
-
-		// Clear any pending silence timer
-		if (silenceTimerRef.current) {
-			clearTimeout(silenceTimerRef.current);
-			silenceTimerRef.current = null;
-		}
-
-		// Clear streaming interval
-		if (streamingIntervalRef.current) {
-			clearInterval(streamingIntervalRef.current);
-			streamingIntervalRef.current = null;
-		}
-
-		// Stop the media stream first
-		if (streamRef.current) {
-			streamRef.current.getTracks().forEach((track) => {
-				console.log('Stopping track:', track.label);
-				track.stop();
-			});
-			streamRef.current = null;
-		}
-
-		// Close the audio context
-		if (audioContextRef.current) {
-			await audioContextRef.current.close();
-			audioContextRef.current = null;
-		}
-
-		// Update state before finalizing transcription
-		setIsRecording(false);
-
-		// Finalize any remaining audio (after state update)
-		if (audioBufferRef.current.length > 0) {
-			await finalizeTranscription();
-		} else {
-			// No audio to transcribe, just go to idle
-			onStateChange('idle');
-		}
-
-		console.log('Recording stopped');
-	};
-
-	const toggleRecording = () => {
-		if (isRecording) {
-			stopRecording();
-		} else {
-			startRecording();
-		}
-	};
-
-	// Listen for VAD silence detected event
-	useEffect(() => {
-		const unlistenPromise = listen('vad-silence-detected', () => {
-			console.log('VAD silence detected from backend');
-			finalizeTranscription();
-		});
-
-		return () => {
-			unlistenPromise.then((unlisten) => unlisten());
-		};
-	}, [finalizeTranscription]);
-
-	return (
-		<div className='audio-control'>
-			{error && (
-				<div className='audio-error'>
-					<span className='error-icon'>⚠️</span>
-					<span className='error-message'>{error}</span>
-					{permissionStatus === 'denied' && (
-						<button
-							className='error-action'
-							onClick={() => {
-								console.log(
-									'Request Permission button clicked'
-								);
-								requestPermission();
-							}}
-							title='Request Permission'
-						>
-							Request Permission
-						</button>
-					)}
-					<button
-						className='error-dismiss'
-						onClick={() => setError(null)}
-						title='Dismiss'
-					>
-						×
-					</button>
-				</div>
-			)}
-			{permissionStatus === 'prompt' && !error && (
-				<div className='permission-prompt'>
-					<span className='prompt-icon'>🎤</span>
-					<span className='prompt-message'>
-						Microphone access required for voice commands
-					</span>
-					<button
-						className='prompt-action'
-						onClick={() => {
-							console.log('Enable Microphone button clicked');
-							requestPermission();
-						}}
-					>
-						Enable Microphone
-					</button>
-				</div>
-			)}
-			<div>
-				<button
-					className={`mic-button ${audioState}`}
-					onClick={toggleRecording}
-					title={isRecording ? 'Stop Recording' : 'Start Recording'}
-					disabled={permissionStatus === 'denied'}
-				>
-					<svg
-						width='24'
-						height='24'
-						viewBox='0 0 24 24'
-						fill='none'
-						stroke='currentColor'
-						strokeWidth='2'
-						strokeLinecap='round'
-						strokeLinejoin='round'
-					>
-						<path d='M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z' />
-						<path d='M19 10v2a7 7 0 0 1-14 0v-2' />
-						<line x1='12' y1='19' x2='12' y2='23' />
-						<line x1='8' y1='23' x2='16' y2='23' />
-					</svg>
-				</button>
-				{audioState === 'processing' && (
-					<button
-						className='cancel-button'
-						onClick={() => {
-							// Force reset state
-							onStateChange('idle');
-							// Note: The backend process will continue but UI will reset
-						}}
-						title='Cancel Processing'
-						style={{
-							marginLeft: '8px',
-							background: 'none',
-							border: 'none',
-							color: '#ef4444',
-							cursor: 'pointer',
-						}}
-					>
-						<svg
-							width='20'
-							height='20'
-							viewBox='0 0 24 24'
-							fill='none'
-							stroke='currentColor'
-							strokeWidth='2'
-							strokeLinecap='round'
-							strokeLinejoin='round'
-						>
-							<line x1='18' y1='6' x2='6' y2='18' />
-							<line x1='6' y1='6' x2='18' y2='18' />
-						</svg>
-					</button>
-				)}
-				{onOpenModelSelector && (
-					<button
-						className='settings-button'
-						onClick={onOpenModelSelector}
-						title='Model Settings'
-						disabled={audioState !== 'idle'}
-					>
-						<svg
-							width='20'
-							height='20'
-							viewBox='0 0 24 24'
-							fill='none'
-							stroke='currentColor'
-							strokeWidth='2'
-							strokeLinecap='round'
-							strokeLinejoin='round'
-						>
-							<circle cx='12' cy='12' r='3' />
-							<path d='M12 1v6m0 6v6m5.196-15.196l-4.242 4.242m0 5.908l4.242 4.242m6-10.196h-6m-6 0H1m15.196 5.196l-4.242-4.242m-5.908 0l-4.242-4.242' />
-						</svg>
-					</button>
-				)}
-			</div>
-		</div>
-	);
-}
-</file>
-
-<file path="src/components/Editor.css">
-.editor-container {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-}
-
-.editor-wrapper {
-	flex: 1;
-	overflow: auto;
-	transition: opacity 0.2s;
-}
-
-.editor-wrapper.audio-processing {
-	opacity: 0.7;
-}
-
-.editor {
-	height: 100%;
-}
-
-.editor .cm-editor {
-	height: 100%;
-	background: #1e1e1e;
-	color: #d4d4d4;
-}
-
-.editor .cm-content {
-	font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-	font-size: 16px;
-	line-height: 1.6;
-	padding: 20px;
-}
-
-.editor .cm-line {
-	padding: 2px 0;
-}
-
-/* Live preview styles */
-.editor .cm-bold {
-	font-weight: bold;
-}
-
-.editor .cm-italic {
-	font-style: italic;
-}
-
-.editor .cm-heading {
-	font-weight: bold;
-	line-height: 1.3;
-}
-
-/* Flash effect animations */
-.cm-flash-insert {
-	background-color: rgba(34, 197, 94, 0.3);
-	border-radius: 2px;
-	transition: opacity 0.1s ease-out;
-}
-
-.cm-flash-delete {
-	background-color: rgba(239, 68, 68, 0.3);
-	border-radius: 2px;
-	transition: opacity 0.1s ease-out;
-}
-
-.cm-flash-format {
-	background-color: rgba(251, 191, 36, 0.3);
-	border-radius: 2px;
-	transition: opacity 0.1s ease-out;
-}
-
-/* Ghost text for real-time transcription */
-.cm-ghost-text {
-	color: #666;
-	font-style: italic;
-	opacity: 0.6;
-	pointer-events: none;
-}
-
-/* Links */
-.cm-link {
-	color: #3b82f6;
-	text-decoration: underline;
-	cursor: pointer;
-}
-
-.cm-link:hover {
-	color: #60a5fa;
-	text-decoration: underline;
-}
-
-.editor .cm-heading-1 {
-	font-size: 2em;
-	margin-top: 0.5em;
-}
-
-.editor .cm-heading-2 {
-	font-size: 1.5em;
-	margin-top: 0.5em;
-}
-
-.editor .cm-heading-3 {
-	font-size: 1.25em;
-	margin-top: 0.5em;
-}
-
-.editor .cm-link {
-	color: #4a9eff;
-	text-decoration: underline;
-	cursor: pointer;
-}
-
-.audio-status {
-	position: absolute;
-	bottom: 20px;
-	right: 20px;
-	background: rgba(0, 0, 0, 0.8);
-	padding: 10px 20px;
-	border-radius: 8px;
-	font-size: 14px;
-	backdrop-filter: blur(10px);
-}
-
-.status-pulse {
-	color: #ff4444;
-	animation: pulse 1.5s infinite;
-}
-
-.status-spinner {
-	color: #4a9eff;
-	animation: spin 1s linear infinite;
-}
-
-.status-success {
-	color: #44ff44;
-}
-
-@keyframes pulse {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.5;
-	}
-}
-
-@keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
-	}
+<file path="tsconfig.node.json">
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts"]
 }
 </file>
 
@@ -3952,7 +3766,6 @@ import {
 } from '../editor/ghostText';
 import { useToast } from '../hooks/use-toast';
 import AmbiguityPopover from './AmbiguityPopover';
-import './Editor.css';
 
 interface EditorProps {
 	filePath: string | null;
@@ -4225,6 +4038,7 @@ export default function Editor({
 			doc: content,
 			extensions: [
 				basicSetup,
+				EditorView.lineWrapping,
 				markdown(),
 				editorTheme,
 				cursorPosField,
@@ -4282,21 +4096,25 @@ export default function Editor({
 	}, [content, filePath]);
 
 	return (
-		<div className='editor-container'>
-			<div className={`editor-wrapper audio-${audioState}`}>
-				<div ref={editorRef} className='editor' />
-			</div>
+		<div className='flex-1 flex flex-col overflow-hidden bg-background'>
+			<div
+				ref={editorRef}
+				className={`flex-1 overflow-auto transition-opacity duration-200 ${
+					audioState === 'processing' ? 'opacity-70' : ''
+				}`}
+			/>
 			{ambiguityData && (
 				<AmbiguityPopover
 					text={ambiguityData.text}
 					possibleCommand={ambiguityData.command}
 					confidence={ambiguityData.confidence}
 					position={ambiguityData.position}
-					onChoose={(choice) => {
-						if (!viewRef.current) return;
-						const { from } = viewRef.current.state.selection.main;
+					onChoose={(resolution) => {
+						if (!viewRef.current || !ambiguityData) return;
 
-						if (choice === 'command') {
+						const from = viewRef.current.state.selection.main.head;
+
+						if (resolution === 'command') {
 							executeCommand(
 								viewRef.current,
 								ambiguityData.command
@@ -4304,14 +4122,9 @@ export default function Editor({
 							viewRef.current.dispatch({
 								effects: addFlash.of({
 									from,
-									to: viewRef.current.state.selection.main.to,
-									type: 'format',
+									to: from,
+									type: 'command',
 								}),
-							});
-							toast({
-								title: 'Command Executed',
-								description: `Executed: ${ambiguityData.command}`,
-								duration: 2000,
 							});
 						} else {
 							viewRef.current.dispatch({
@@ -4328,492 +4141,46 @@ export default function Editor({
 					onDismiss={() => setAmbiguityData(null)}
 				/>
 			)}
-			{audioState !== 'idle' && (
-				<div className='audio-status'>
-					{audioState === 'listening' && (
-						<span className='status-pulse'>● Listening...</span>
-					)}
-					{audioState === 'processing' && (
-						<span className='status-spinner'>⟳ Processing...</span>
-					)}
-					{audioState === 'executing' && (
-						<span className='status-success'>✓ Executing</span>
-					)}
-				</div>
-			)}
 		</div>
 	);
 }
 </file>
 
-<file path="src/components/Sidebar.css">
-.sidebar {
-	width: 250px;
-	background: #252526;
-	border-right: 1px solid #3e3e42;
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-}
-
-.sidebar-header {
-	padding: 16px;
-	border-bottom: 1px solid #3e3e42;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-}
-
-.sidebar-header h2 {
-	font-size: 18px;
-	font-weight: 600;
-	color: #d4d4d4;
-}
-
-.btn-new {
-	background: #0e639c;
-	color: white;
-	border: none;
-	border-radius: 4px;
-	width: 28px;
-	height: 28px;
-	font-size: 20px;
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: background 0.2s;
-}
-
-.btn-new:hover {
-	background: #1177bb;
-}
-
-.file-tree {
-	flex: 1;
-	overflow-y: auto;
-	padding: 8px 0;
-}
-
-.folder-item,
-.file-item {
-	padding: 6px 16px;
-	cursor: pointer;
-	font-size: 14px;
-	color: #cccccc;
-	transition: background 0.2s;
-	user-select: none;
-}
-
-.file-item:hover {
-	background: #2a2d2e;
-}
-
-.folder-item {
-	font-weight: 500;
-	color: #d4d4d4;
-}
-
-.empty-state {
-	padding: 32px 16px;
-	text-align: center;
-	color: #858585;
-}
-
-.empty-state p {
-	margin-bottom: 16px;
-	font-size: 14px;
-}
-
-.btn-primary {
-	background: #0e639c;
-	color: white;
-	border: none;
-	border-radius: 4px;
-	padding: 8px 16px;
-	font-size: 14px;
-	cursor: pointer;
-	transition: background 0.2s;
-}
-
-.btn-primary:hover {
-	background: #1177bb;
-}
-</file>
-
-<file path="src/components/Sidebar.tsx">
-import { useEffect, useState } from 'react';
-import { readDir, writeTextFile } from '@tauri-apps/plugin-fs';
-import { open } from '@tauri-apps/plugin-dialog';
-import { getStorageItem, setStorageItem, StorageKeys } from '../utils/storage';
-import './Sidebar.css';
-
-interface SidebarProps {
-	onFileSelect: (path: string) => void;
-}
-
-interface FileNode {
-	name: string;
-	path: string;
-	isDirectory: boolean;
-	children?: FileNode[];
-}
-
-export default function Sidebar({ onFileSelect }: SidebarProps) {
-	const [files, setFiles] = useState<FileNode[]>([]);
-	const [vaultPath, setVaultPath] = useState<string>('');
-
-	const handleOpenFolder = async () => {
-		try {
-			const selected = await open({
-				directory: true,
-				multiple: false,
-				title: 'Select Vault Folder',
-			});
-			console.log('Selected folder:', selected);
-			if (selected && typeof selected === 'string') {
-				setVaultPath(selected);
-				// Save to IndexedDB
-				await setStorageItem(StorageKeys.VAULT_PATH, selected);
-				const fileList = await loadFiles(selected);
-				console.log('Loaded files:', fileList);
-				setFiles(fileList);
-			}
-		} catch (error) {
-			console.error('Error opening folder:', error);
-		}
-	};
-
-	const handleNewNote = async () => {
-		if (!vaultPath) {
-			alert('Please select a vault folder first');
-			return;
-		}
-
-		try {
-			// Generate a unique filename
-			const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-			const fileName = `Note-${timestamp}.md`;
-			const separator = vaultPath.includes('\\') ? '\\' : '/';
-			const filePath = `${vaultPath}${separator}${fileName}`;
-
-			console.log('Creating new note at:', filePath);
-
-			// Create an empty markdown file
-			await writeTextFile(filePath, '# New Note\n\n');
-
-			console.log('Note created successfully');
-
-			// Reload the file list
-			const fileList = await loadFiles(vaultPath);
-			setFiles(fileList);
-
-			// Open the new file
-			onFileSelect(filePath);
-		} catch (error) {
-			console.error('Error creating new note:', error);
-			alert(`Failed to create new note: ${error}`);
-		}
-	};
-
-	useEffect(() => {
-		// Load vault path from IndexedDB on mount
-		const loadVaultPath = async () => {
-			try {
-				const savedPath = await getStorageItem<string>(
-					StorageKeys.VAULT_PATH
-				);
-				if (savedPath) {
-					console.log('Loaded vault path from storage:', savedPath);
-					setVaultPath(savedPath);
-					try {
-						const fileList = await loadFiles(savedPath);
-						setFiles(fileList);
-					} catch (loadError) {
-						console.warn(
-							'Failed to load files from saved vault path:',
-							loadError
-						);
-						console.log(
-							'The folder may have been moved or deleted. Please select a new vault folder.'
-						);
-						// Clear the invalid path
-						await setStorageItem(StorageKeys.VAULT_PATH, null);
-						setVaultPath('');
-					}
-				}
-			} catch (error) {
-				console.error('Error loading vault path from storage:', error);
-			}
-		};
-
-		loadVaultPath();
-	}, []);
-
-	const loadFiles = async (path: string) => {
-		try {
-			console.log('Loading files from:', path);
-			const entries = await readDir(path);
-			console.log('Raw entries:', entries);
-			const nodes: FileNode[] = await Promise.all(
-				entries
-					.filter(
-						(entry) =>
-							entry.name?.endsWith('.md') || entry.isDirectory
-					)
-					.map(async (entry) => {
-						// Use proper path separator for Windows/Unix
-						const separator = path.includes('\\') ? '\\' : '/';
-						const fullPath = `${path}${separator}${entry.name}`;
-						const node: FileNode = {
-							name: entry.name || '',
-							path: fullPath,
-							isDirectory: entry.isDirectory || false,
-						};
-
-						if (node.isDirectory) {
-							node.children = await loadFiles(fullPath);
-						}
-
-						return node;
-					})
-			);
-			return nodes;
-		} catch (error) {
-			console.error('Error loading files:', error);
-			return [];
-		}
-	};
-
-	const renderFileTree = (nodes: FileNode[], level = 0) => {
-		return nodes.map((node) => (
-			<div key={node.path} style={{ paddingLeft: `${level * 16}px` }}>
-				{node.isDirectory ? (
-					<>
-						<div className='folder-item'>📁 {node.name}</div>
-						{node.children &&
-							renderFileTree(node.children, level + 1)}
-					</>
-				) : (
-					<div
-						className='file-item'
-						onClick={() => onFileSelect(node.path)}
-					>
-						📄 {node.name}
-					</div>
-				)}
-			</div>
-		));
-	};
-
-	return (
-		<aside className='sidebar'>
-			<div className='sidebar-header'>
-				<h2>Mutter</h2>
-				<button
-					className='btn-new'
-					title='New Note'
-					onClick={handleNewNote}
-				>
-					+
-				</button>
-			</div>
-			<div className='file-tree'>
-				{vaultPath ? (
-					files.length > 0 ? (
-						renderFileTree(files)
-					) : (
-						<div className='empty-state'>
-							<p>No markdown files found</p>
-							<p style={{ fontSize: '0.85rem', opacity: 0.7 }}>
-								{vaultPath}
-							</p>
-						</div>
-					)
-				) : (
-					<div className='empty-state'>
-						<p>No vault selected</p>
-						<button
-							className='btn-primary'
-							onClick={handleOpenFolder}
-						>
-							Open Folder
-						</button>
-					</div>
-				)}
-			</div>
-		</aside>
-	);
-}
-</file>
-
-<file path="src/editor/commands.ts">
-import { EditorView } from '@codemirror/view';
-import { undo, redo } from '@codemirror/commands';
-
-export interface CommandAction {
-    Format?: FormatType;
-    Editor?: EditorAction;
-    System?: SystemAction;
-}
-
-export interface FormatType {
-    Bold?: boolean;
-    Italic?: boolean;
-    Strikethrough?: boolean;
-    Code?: boolean;
-    Heading?: { level: number };
-    Quote?: boolean;
-    BulletList?: boolean;
-    NumberedList?: boolean;
-    Checkbox?: boolean;
-    Link?: boolean;
-}
-
-export interface EditorAction {
-    Undo?: boolean;
-    Redo?: boolean;
-    NewLine?: boolean;
-    Delete?: boolean;
-    SelectAll?: boolean;
-}
-
-export interface SystemAction {
-    CreateNote?: { name: string };
-    OpenNote?: { name: string };
-    Search?: { query: string };
-    SaveNote?: boolean;
-}
-
-export function executeCommand(view: EditorView, action: CommandAction): boolean {
-    if (action.Format) {
-        return executeFormatCommand(view, action.Format);
-    } else if (action.Editor) {
-        return executeEditorCommand(view, action.Editor);
-    } else if (action.System) {
-        // System commands need to be handled by the parent component
-        return false;
-    }
-    return false;
-}
-
-function executeFormatCommand(view: EditorView, format: FormatType): boolean {
-    const { state } = view;
-    const { from, to } = state.selection.main;
-
-    if (format.Bold !== undefined) {
-        const selectedText = state.doc.sliceString(from, to);
-        view.dispatch({
-            changes: { from, to, insert: `**${selectedText}**` },
-            selection: { anchor: from + 2, head: to + 2 }
-        });
-        return true;
-    }
-
-    if (format.Italic !== undefined) {
-        const selectedText = state.doc.sliceString(from, to);
-        view.dispatch({
-            changes: { from, to, insert: `*${selectedText}*` },
-            selection: { anchor: from + 1, head: to + 1 }
-        });
-        return true;
-    }
-
-    if (format.Heading) {
-        const level = format.Heading.level;
-        const lineStart = state.doc.lineAt(from).from;
-        const lineEnd = state.doc.lineAt(from).to;
-        const lineText = state.doc.sliceString(lineStart, lineEnd);
-
-        // Remove existing heading markers if any
-        const cleanText = lineText.replace(/^#{1,6}\s+/, '');
-        const headingPrefix = '#'.repeat(level) + ' ';
-
-        view.dispatch({
-            changes: { from: lineStart, to: lineEnd, insert: headingPrefix + cleanText },
-            selection: { anchor: from }
-        });
-        return true;
-    }
-
-    if (format.Quote !== undefined) {
-        const lineStart = state.doc.lineAt(from).from;
-        const lineEnd = state.doc.lineAt(from).to;
-        const lineText = state.doc.sliceString(lineStart, lineEnd);
-
-        view.dispatch({
-            changes: { from: lineStart, to: lineEnd, insert: `> ${lineText}` }
-        });
-        return true;
-    }
-
-    if (format.BulletList !== undefined) {
-        const lineStart = state.doc.lineAt(from).from;
-        const lineEnd = state.doc.lineAt(from).to;
-        const lineText = state.doc.sliceString(lineStart, lineEnd);
-
-        view.dispatch({
-            changes: { from: lineStart, to: lineEnd, insert: `- ${lineText}` }
-        });
-        return true;
-    }
-
-    if (format.NumberedList !== undefined) {
-        const lineStart = state.doc.lineAt(from).from;
-        const lineEnd = state.doc.lineAt(from).to;
-        const lineText = state.doc.sliceString(lineStart, lineEnd);
-
-        view.dispatch({
-            changes: { from: lineStart, to: lineEnd, insert: `1. ${lineText}` }
-        });
-        return true;
-    }
-
-    return false;
-}
-
-function executeEditorCommand(view: EditorView, action: EditorAction): boolean {
-    if (action.Undo !== undefined) {
-        return undo(view);
-    }
-
-    if (action.Redo !== undefined) {
-        return redo(view);
-    }
-
-    if (action.NewLine !== undefined) {
-        const { from } = view.state.selection.main;
-        view.dispatch({
-            changes: { from, insert: '\n' },
-            selection: { anchor: from + 1 }
-        });
-        return true;
-    }
-
-    if (action.Delete !== undefined) {
-        const { from, to } = view.state.selection.main;
-        if (from !== to) {
-            view.dispatch({
-                changes: { from, to }
-            });
-        }
-        return true;
-    }
-
-    if (action.SelectAll !== undefined) {
-        view.dispatch({
-            selection: { anchor: 0, head: view.state.doc.length }
-        });
-        return true;
-    }
-
-    return false;
-}
-</file>
-
 <file path="src/editor/livePreview.ts">
-import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { StateField, Range } from '@codemirror/state';
+
+class ImageWidget extends WidgetType {
+    constructor(readonly url: string, readonly alt: string) { super() }
+
+    toDOM() {
+        const img = document.createElement("img");
+        img.src = this.url;
+        img.alt = this.alt;
+        img.className = "cm-image";
+        return img;
+    }
+}
+
+class CheckboxWidget extends WidgetType {
+    constructor(readonly checked: boolean) { super() }
+
+    toDOM() {
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = this.checked;
+        input.className = "cm-checkbox";
+        return input;
+    }
+}
+
+class HorizontalRuleWidget extends WidgetType {
+    toDOM() {
+        const hr = document.createElement("hr");
+        hr.className = "cm-hr";
+        return hr;
+    }
+}
 
 // Track cursor position
 export const cursorPosField = StateField.define<number>({
@@ -4832,8 +4199,10 @@ export const cursorPosField = StateField.define<number>({
 export const livePreviewPlugin = ViewPlugin.fromClass(
     class {
         decorations: DecorationSet;
+        view: EditorView;
 
         constructor(view: EditorView) {
+            this.view = view;
             this.decorations = this.buildDecorations(view);
 
             // Add click handler for links
@@ -4846,6 +4215,22 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
 
         handleClick(e: MouseEvent) {
             const target = e.target as HTMLElement;
+
+            // Check if we clicked on a checkbox
+            if (target.classList.contains('cm-checkbox')) {
+                const pos = this.view.posAtDOM(target);
+                const line = this.view.state.doc.lineAt(pos);
+                const match = line.text.match(/^(\s*)- \[(x| )\] /);
+                if (match) {
+                    const checked = match[2] === 'x';
+                    const charPos = line.from + match[1].length + 3;
+
+                    this.view.dispatch({
+                        changes: { from: charPos, to: charPos + 1, insert: checked ? ' ' : 'x' }
+                    });
+                    return;
+                }
+            }
 
             // Check if we clicked on a link
             if (target.classList.contains('cm-link')) {
@@ -4874,136 +4259,128 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
             const doc = view.state.doc;
 
             for (let { from, to } of view.visibleRanges) {
-                const text = doc.sliceString(from, to);
+                // Block Level Elements (Headers, Lists, HR)
                 let pos = from;
+                while (pos <= to) {
+                    const line = doc.lineAt(pos);
+                    const text = line.text;
 
-                // Bold: **text**
+                    // Headers
+                    const headerMatch = text.match(/^(#{1,6})\s+(.+)$/);
+                    if (headerMatch) {
+                        const start = line.from;
+                        const hashEnd = start + headerMatch[1].length + 1;
+                        const lineEnd = line.to;
+
+                        if (cursorPos < start || cursorPos > lineEnd) {
+                            decorations.push(Decoration.replace({}).range(start, hashEnd));
+                            const level = headerMatch[1].length;
+                            decorations.push(Decoration.mark({ class: `cm-heading cm-heading-${level}` }).range(hashEnd, lineEnd));
+                        }
+                    }
+
+                    // Horizontal Rule
+                    if (text === '---' || text === '***' || text === '___') {
+                        if (cursorPos < line.from || cursorPos > line.to) {
+                            decorations.push(Decoration.replace({ widget: new HorizontalRuleWidget() }).range(line.from, line.to));
+                        }
+                    }
+
+                    // Task Lists
+                    const taskMatch = text.match(/^(\s*)- \[(x| )\] /);
+                    if (taskMatch) {
+                        const start = line.from + taskMatch[1].length;
+                        const end = start + 6;
+                        const checked = taskMatch[2] === 'x';
+                        if (cursorPos < start || cursorPos > end) {
+                            decorations.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(start, end));
+                        }
+                    }
+                    // Bullet Lists (only if not a task list)
+                    else {
+                        const listMatch = text.match(/^(\s*)([-*])\s+(.+)$/);
+                        if (listMatch) {
+                            const start = line.from + listMatch[1].length;
+                            const bulletEnd = start + 2;
+                            const lineEnd = line.to;
+                            if (cursorPos < start || cursorPos > lineEnd) {
+                                decorations.push(Decoration.mark({ class: 'cm-list-marker' }).range(start, bulletEnd));
+                                decorations.push(Decoration.mark({ class: 'cm-list-item' }).range(bulletEnd, lineEnd));
+                            }
+                        }
+                    }
+
+                    pos = line.to + 1;
+                }
+
+                // Inline Elements
+                const text = doc.sliceString(from, to);
+                const chunkStart = from;
+
+                // Bold
                 const boldRegex = /\*\*([^*]+)\*\*/g;
                 let match;
                 while ((match = boldRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
+                    const start = chunkStart + match.index;
                     const end = start + match[0].length;
-
-                    // Only hide syntax if cursor is not in this range
                     if (cursorPos < start || cursorPos > end) {
-                        // Hide opening **
-                        decorations.push(
-                            Decoration.replace({}).range(start, start + 2)
-                        );
-                        // Style the content
-                        decorations.push(
-                            Decoration.mark({ class: 'cm-bold' }).range(start + 2, end - 2)
-                        );
-                        // Hide closing **
-                        decorations.push(
-                            Decoration.replace({}).range(end - 2, end)
-                        );
+                        decorations.push(Decoration.replace({}).range(start, start + 2));
+                        decorations.push(Decoration.mark({ class: 'cm-bold' }).range(start + 2, end - 2));
+                        decorations.push(Decoration.replace({}).range(end - 2, end));
                     }
                 }
 
-                // Italic: *text*
+                // Italic
                 const italicRegex = /(?<!\*)\*([^*]+)\*(?!\*)/g;
                 while ((match = italicRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
+                    const start = chunkStart + match.index;
                     const end = start + match[0].length;
-
                     if (cursorPos < start || cursorPos > end) {
-                        decorations.push(
-                            Decoration.replace({}).range(start, start + 1)
-                        );
-                        decorations.push(
-                            Decoration.mark({ class: 'cm-italic' }).range(start + 1, end - 1)
-                        );
-                        decorations.push(
-                            Decoration.replace({}).range(end - 1, end)
-                        );
+                        decorations.push(Decoration.replace({}).range(start, start + 1));
+                        decorations.push(Decoration.mark({ class: 'cm-italic' }).range(start + 1, end - 1));
+                        decorations.push(Decoration.replace({}).range(end - 1, end));
                     }
                 }
 
-                // Headers: # text
-                const lines = text.split('\n');
-                let linePos = pos;
-                for (const line of lines) {
-                    const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
-                    if (headerMatch) {
-                        const start = linePos;
-                        const hashEnd = start + headerMatch[1].length + 1;
-                        const lineEnd = start + line.length;
-
-                        if (cursorPos < start || cursorPos > lineEnd) {
-                            // Hide the # symbols and space
-                            decorations.push(
-                                Decoration.replace({}).range(start, hashEnd)
-                            );
-                            // Style the header text
-                            const level = headerMatch[1].length;
-                            decorations.push(
-                                Decoration.mark({
-                                    class: `cm-heading cm-heading-${level}`
-                                }).range(hashEnd, lineEnd)
-                            );
-                        }
-                    }
-                    linePos += line.length + 1; // +1 for newline
-                }
-
-                // Links: [text](url)
+                // Links
                 const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
                 while ((match = linkRegex.exec(text)) !== null) {
-                    const start = pos + match.index;
+                    const start = chunkStart + match.index;
                     const end = start + match[0].length;
                     const linkText = match[1];
                     const linkTextStart = start + 1;
                     const linkTextEnd = linkTextStart + linkText.length;
-
                     if (cursorPos < start || cursorPos > end) {
-                        // Hide opening [
-                        decorations.push(
-                            Decoration.replace({}).range(start, linkTextStart)
-                        );
-                        // Style the link text
-                        decorations.push(
-                            Decoration.mark({
-                                class: 'cm-link',
-                                attributes: { 'data-url': match[2] }
-                            }).range(linkTextStart, linkTextEnd)
-                        );
-                        // Hide ](url)
-                        decorations.push(
-                            Decoration.replace({}).range(linkTextEnd, end)
-                        );
+                        decorations.push(Decoration.replace({}).range(start, linkTextStart));
+                        decorations.push(Decoration.mark({ class: 'cm-link', attributes: { 'data-url': match[2] } }).range(linkTextStart, linkTextEnd));
+                        decorations.push(Decoration.replace({}).range(linkTextEnd, end));
                     }
                 }
 
-                // Bullet lists: - item or * item
-                pos = from;
-                for (const line of text.split('\n')) {
-                    const listMatch = line.match(/^(\s*)([-*])\s+(.+)$/);
-                    if (listMatch) {
-                        const start = pos + listMatch[1].length;
-                        const bulletEnd = start + 2; // bullet + space
-                        const lineEnd = pos + line.length;
-
-                        if (cursorPos < start || cursorPos > lineEnd) {
-                            // Style bullet with marker
-                            decorations.push(
-                                Decoration.mark({
-                                    class: 'cm-list-marker'
-                                }).range(start, bulletEnd)
-                            );
-                            // Style list item
-                            decorations.push(
-                                Decoration.mark({
-                                    class: 'cm-list-item'
-                                }).range(bulletEnd, lineEnd)
-                            );
-                        }
+                // Images
+                const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+                while ((match = imageRegex.exec(text)) !== null) {
+                    const start = chunkStart + match.index;
+                    const end = start + match[0].length;
+                    if (cursorPos < start || cursorPos > end) {
+                        decorations.push(Decoration.replace({ widget: new ImageWidget(match[2], match[1]) }).range(start, end));
                     }
-                    pos += line.length + 1;
+                }
+
+                // Inline Code
+                const inlineCodeRegex = /`([^`]+)`/g;
+                while ((match = inlineCodeRegex.exec(text)) !== null) {
+                    const start = chunkStart + match.index;
+                    const end = start + match[0].length;
+                    if (cursorPos < start || cursorPos > end) {
+                        decorations.push(Decoration.replace({}).range(start, start + 1));
+                        decorations.push(Decoration.mark({ class: 'cm-inline-code' }).range(start + 1, end - 1));
+                        decorations.push(Decoration.replace({}).range(end - 1, end));
+                    }
                 }
             }
 
-            return Decoration.set(decorations, true);
+            return Decoration.set(decorations.sort((a, b) => a.from - b.from), true);
         }
     },
     {
@@ -5013,149 +4390,6 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
 
 // Ensure cursor tracking field is included
 export const livePreviewExtension = [cursorPosField, livePreviewPlugin];
-</file>
-
-<file path="src/editor/theme.ts">
-import { EditorView } from '@codemirror/view';
-
-export const editorTheme = EditorView.theme({
-    '&': {
-        backgroundColor: '#1e1e1e',
-        color: '#d4d4d4',
-    },
-    '.cm-content': {
-        caretColor: '#ffffff',
-        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-    },
-    '.cm-cursor': {
-        borderLeftColor: '#ffffff',
-        borderLeftWidth: '2px',
-    },
-    '.cm-selectionBackground': {
-        backgroundColor: '#264f78 !important',
-    },
-    '&.cm-focused .cm-selectionBackground': {
-        backgroundColor: '#264f78 !important',
-    },
-    '.cm-activeLine': {
-        backgroundColor: '#2a2a2a',
-    },
-    '.cm-gutters': {
-        backgroundColor: '#1e1e1e',
-        color: '#858585',
-        border: 'none',
-    },
-    '.cm-activeLineGutter': {
-        backgroundColor: '#2a2a2a',
-    },
-    // Live Preview Styles
-    '.cm-bold': {
-        fontWeight: 'bold',
-    },
-    '.cm-italic': {
-        fontStyle: 'italic',
-    },
-    '.cm-heading': {
-        fontWeight: 'bold',
-        lineHeight: '1.4',
-    },
-    '.cm-heading-1': {
-        fontSize: '2em',
-        color: '#4ec9b0',
-    },
-    '.cm-heading-2': {
-        fontSize: '1.6em',
-        color: '#4ec9b0',
-    },
-    '.cm-heading-3': {
-        fontSize: '1.4em',
-        color: '#4ec9b0',
-    },
-    '.cm-link': {
-        color: '#3794ff',
-        textDecoration: 'underline',
-        cursor: 'pointer',
-    },
-    '.cm-list-marker': {
-        color: '#808080',
-    },
-    '.cm-list-item': {
-        paddingLeft: '4px',
-    },
-});
-</file>
-
-<file path="src/hooks/useModelDownload.ts">
-import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-
-interface DownloadProgress {
-    downloaded: number;
-    total: number;
-    percentage: number;
-}
-
-export function useModelDownload() {
-    const [progress, setProgress] = useState<DownloadProgress | null>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const unlisten = listen<DownloadProgress>('download-progress', (event) => {
-            setProgress(event.payload);
-        });
-
-        return () => {
-            unlisten.then((fn) => fn());
-        };
-    }, []);
-
-    const downloadModel = async (modelName: string, url: string) => {
-        setIsDownloading(true);
-        setError(null);
-        setProgress(null);
-
-        try {
-            const path = await invoke<string>('download_model', {
-                modelName,
-                url,
-            });
-            console.log('Model downloaded to:', path);
-            return path;
-        } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            setError(errorMsg);
-            throw err;
-        } finally {
-            setIsDownloading(false);
-            setProgress(null);
-        }
-    };
-
-    return {
-        progress,
-        isDownloading,
-        error,
-        downloadModel,
-    };
-}
-</file>
-
-<file path="src/styles/App.css">
-.app {
-	display: flex;
-	width: 100vw;
-	height: 100vh;
-	overflow: hidden;
-}
-
-.main-content {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	position: relative;
-}
 </file>
 
 <file path="src/styles/index.css">
@@ -5211,14 +4445,20 @@ body {
 <file path="src/App.tsx">
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useAudioRecorder } from './hooks/useAudioRecorder';
 import Editor from './components/Editor';
-import Sidebar from './components/Sidebar';
-import AudioControl from './components/AudioControl';
-import VoiceLogSidebar, { VoiceLogEntry } from './components/VoiceLogSidebar';
+import { Omnibox } from './components/Omnibox';
+import { VoiceIndicator } from './components/VoiceIndicator';
+import { FileNavigatorDialog } from './components/dialogs/file-navigator-dialog';
+import { VoiceLogDialog } from './components/dialogs/voice-log-dialog';
+import { SettingsDialog } from './components/dialogs/settings-dialog';
 import { WhisperModelSelector } from './components/WhisperModelSelector';
 import { StreamingTranscription } from './components/StreamingTranscription';
 import { Toaster } from './components/ui/toaster';
-import './styles/App.css';
+import { getStorageItem, setStorageItem } from './utils/storage';
+import { VoiceLogEntry } from './types';
+
+type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
 function App() {
 	const [currentFile, setCurrentFile] = useState<string | null>(null);
@@ -5227,8 +4467,12 @@ function App() {
 	>('idle');
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
-	const [isVoiceLogCollapsed, setIsVoiceLogCollapsed] = useState(false);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+	const [openDialog, setOpenDialog] = useState<DialogType>(null);
+
+	const { startRecording, stopRecording } = useAudioRecorder(() => {
+		console.log('Silence detected');
+	});
 
 	const addVoiceLogEntry = (
 		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>
@@ -5250,6 +4494,14 @@ function App() {
 				await invoke('load_embedding_model');
 				await invoke('initialize_embeddings');
 				setIsInitialized(true);
+
+				// Restore last opened file
+				const lastFile = await getStorageItem<string>(
+					'last_opened_file'
+				);
+				if (lastFile) {
+					setCurrentFile(lastFile);
+				}
 			} catch (error) {
 				console.error('Failed to initialize embeddings:', error);
 				// Still allow the app to run
@@ -5260,10 +4512,28 @@ function App() {
 		initialize();
 	}, []);
 
+	// Save current file to storage when it changes
+	useEffect(() => {
+		if (currentFile) {
+			setStorageItem('last_opened_file', currentFile);
+		}
+	}, [currentFile]);
+
 	// Open model selector on first launch if no model is loaded
 	useEffect(() => {
 		const checkModel = async () => {
 			try {
+				// Check if we have a saved model preference first
+				const savedModelId = await getStorageItem<string>(
+					'selected_whisper_model'
+				);
+
+				// If we have a saved model, we don't need to open the selector
+				// The selector component itself handles auto-loading the saved model
+				if (savedModelId) {
+					return;
+				}
+
 				const hasModel = await invoke<boolean>('has_loaded_model');
 				if (!hasModel) {
 					setModelSelectorOpen(true);
@@ -5280,39 +4550,103 @@ function App() {
 		}
 	}, [isInitialized]);
 
-	const isReady = isInitialized;
+	// Handle keyboard shortcuts for dialogs
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Ctrl/Cmd + O for file navigation
+			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+				e.preventDefault();
+				setOpenDialog('files');
+			}
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, []);
+
+	const handleVoiceCommand = async (
+		command: string,
+		transcription: string
+	) => {
+		console.log('Voice command:', command, transcription);
+		// Execute the command via Editor's handler
+		if ((window as any).handleTranscription) {
+			setAudioState('executing');
+			await (window as any).handleTranscription(transcription || command);
+			setAudioState('idle');
+		}
+	};
+
+	const toggleListening = async () => {
+		if (audioState === 'listening') {
+			setAudioState('processing');
+			const result = await stopRecording();
+			if (result) {
+				if ((window as any).handleTranscription) {
+					setAudioState('executing');
+					await (window as any).handleTranscription(result.text);
+				}
+			}
+			setAudioState('idle');
+		} else {
+			await startRecording();
+			setAudioState('listening');
+		}
+	};
 
 	return (
-		<div className='app'>
+		<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
 			<StreamingTranscription isRecording={audioState === 'listening'} />
-			<Sidebar onFileSelect={setCurrentFile} />
-			<main className='main-content'>
+
+			<main className='flex-1 flex flex-col overflow-hidden relative'>
 				<Editor
 					filePath={currentFile}
 					audioState={audioState}
 					onVoiceLogEntry={addVoiceLogEntry}
 				/>
-				{isReady && (
-					<AudioControl
-						audioState={audioState}
-						onStateChange={setAudioState}
-						onOpenModelSelector={() => setModelSelectorOpen(true)}
-					/>
-				)}
+
+				<Omnibox
+					onCommand={handleVoiceCommand}
+					onDialogOpen={setOpenDialog}
+					isListening={audioState === 'listening'}
+					onToggleListening={toggleListening}
+				/>
+
+				<VoiceIndicator
+					state={audioState}
+					onLogClick={() => setOpenDialog('voice-log')}
+					onToggleListening={toggleListening}
+				/>
 			</main>
-			<VoiceLogSidebar
-				entries={voiceLogEntries}
-				isCollapsed={isVoiceLogCollapsed}
-				onToggle={() => setIsVoiceLogCollapsed(!isVoiceLogCollapsed)}
+
+			{/* Dialogs */}
+			<FileNavigatorDialog
+				open={openDialog === 'files'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
 			/>
+			<VoiceLogDialog
+				open={openDialog === 'voice-log'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
+				entries={voiceLogEntries.map((e) => ({
+					transcription: e.transcript,
+					command: e.interpretation,
+					confidence: e.confidence,
+				}))}
+			/>
+			<SettingsDialog
+				open={openDialog === 'settings'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
+			/>
+
 			<WhisperModelSelector
 				open={modelSelectorOpen}
 				onOpenChange={setModelSelectorOpen}
 			/>
 			<Toaster />
+
 			{!isInitialized && (
-				<div className='loading-overlay'>
-					<div className='loading-spinner'>
+				<div className='fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm'>
+					<div className='text-lg font-medium animate-pulse'>
 						Initializing AI Brain...
 					</div>
 				</div>
@@ -5322,19 +4656,6 @@ function App() {
 }
 
 export default App;
-</file>
-
-<file path="src/main.tsx">
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './styles/index.css';
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-	<React.StrictMode>
-		<App />
-	</React.StrictMode>
-);
 </file>
 
 <file path="src-tauri/capabilities/default.json">
@@ -5396,23 +4717,6 @@ impl AudioBuffer {
             buffer.push_overwrite(sample);
         }
     }
-
-    pub fn get_last(&self, duration_secs: f32) -> Vec<f32> {
-        let buffer = self.buffer.lock().unwrap();
-        let sample_count = (16000.0 * duration_secs) as usize;
-        let available = buffer.len().min(sample_count);
-
-        let mut result = Vec::with_capacity(available);
-        let slice = buffer.as_slices();
-
-        // Copy from ring buffer slices
-        for &sample in slice.0.iter().rev().take(available) {
-            result.push(sample);
-        }
-
-        result.reverse();
-        result
-    }
 }
 
 /// Voice Activity Detection state
@@ -5461,15 +4765,6 @@ impl VadState {
         false
     }
 }
-
-/// Simple energy-based VAD (will be replaced with Silero VAD)
-pub fn detect_voice_activity(samples: &[f32]) -> bool {
-    let energy: f32 = samples.iter().map(|&s| s * s).sum();
-    let avg_energy = energy / samples.len() as f32;
-
-    // Simple threshold - tune this or replace with ML model
-    avg_energy > 0.001
-}
 </file>
 
 <file path="src-tauri/src/commands.rs">
@@ -5498,40 +4793,6 @@ impl Default for AppState {
             vad_state: Mutex::new(VadState::new()),
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CommandType {
-    InsertText(String),
-    Format(FormatType),
-    Editor(EditorAction),
-    System(SystemAction),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum FormatType {
-    Bold,
-    Italic,
-    Heading(u8),
-    Quote,
-    BulletList,
-    NumberedList,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum EditorAction {
-    Undo,
-    Redo,
-    NewLine,
-    Delete,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SystemAction {
-    CreateNote(String),
-    OpenNote(String),
-    Search(String),
-    SaveNote,
 }
 
 /// Process incoming audio chunk from frontend
@@ -5568,11 +4829,37 @@ pub async fn process_audio_chunk(
 pub async fn transcribe_audio(
     audio_buffer: Vec<f32>,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<TranscriptionResult, String> {
     log::info!("Transcribing audio buffer: {} samples", audio_buffer.len());
 
+    // --- START DEBUG BLOCK ---
+    // Save to "debug_audio.wav" in the app data folder to verify quality
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let debug_path = app_dir.join("debug_recording.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 16000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        if let Ok(mut writer) = hound::WavWriter::create(&debug_path, spec) {
+            for &sample in &audio_buffer {
+                let amplitude = (sample * i16::MAX as f32) as i16;
+                writer.write_sample(amplitude).ok();
+            }
+            writer.finalize().ok();
+            log::info!("Saved debug audio to: {:?}", debug_path);
+        }
+    }
+    // --- END DEBUG BLOCK ---
+
     let start = std::time::Instant::now();
-    let mut engine = state.whisper_engine.lock().unwrap();
+    let mut engine = state
+        .whisper_engine
+        .lock()
+        .map_err(|_| "Whisper engine lock poisoned".to_string())?;
 
     let text = engine
         .transcribe(&audio_buffer)
@@ -5600,7 +4887,10 @@ pub async fn transcribe_streaming(
         return Ok(());
     }
 
-    let mut engine = state.whisper_engine.lock().unwrap();
+    let mut engine = state
+        .whisper_engine
+        .lock()
+        .map_err(|_| "Whisper engine lock poisoned".to_string())?;
 
     // Emit a "processing" event
     let _ = app.emit("transcription-processing", ());
@@ -6005,10 +5295,26 @@ pub async fn load_whisper_model(
     let tokenizer_path = models_dir.join("tokenizer.json");
     let weights_path = models_dir.join("model.safetensors");
 
-    let mut engine = state.whisper_engine.lock().unwrap();
+    // Ensure mel filters are available
+    let manager = ModelManager::new(models_dir.parent().unwrap().to_path_buf());
+    let mel_filters_path = manager
+        .download_mel_filters()
+        .await
+        .map_err(|e| format!("Failed to download mel filters: {}", e))?;
+
+    let mut engine = state
+        .whisper_engine
+        .lock()
+        .map_err(|_| "Whisper engine lock poisoned".to_string())?;
 
     engine
-        .load_model(&config_path, &tokenizer_path, &weights_path, false)
+        .load_model(
+            &config_path,
+            &tokenizer_path,
+            &weights_path,
+            &mel_filters_path,
+            false,
+        )
         .map_err(|e| format!("Failed to load model: {}", e))?;
 
     log::info!("Model loaded successfully");
@@ -6018,7 +5324,10 @@ pub async fn load_whisper_model(
 /// Check if a Whisper model is loaded
 #[tauri::command]
 pub async fn has_loaded_model(state: State<'_, AppState>) -> Result<bool, String> {
-    let engine = state.whisper_engine.lock().unwrap();
+    let engine = state
+        .whisper_engine
+        .lock()
+        .map_err(|_| "Whisper engine lock poisoned".to_string())?;
     Ok(engine.is_loaded())
 }
 </file>
@@ -6028,7 +5337,6 @@ mod audio;
 mod commands;
 mod ml;
 mod registry;
-mod vault;
 
 use commands::*;
 
@@ -6103,26 +5411,15 @@ pub fn run() {
 }
 </file>
 
-<file path="src-tauri/src/main.rs">
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-fn main() {
-  app_lib::run();
-}
-</file>
-
 <file path="src-tauri/src/ml.rs">
 use anyhow::Result;
 use candle_core::{Device, IndexOp, Tensor};
 use candle_nn::{ops::softmax, VarBuilder};
 use candle_transformers::models::bert::{BertModel, Config as BertConfig};
 use candle_transformers::models::whisper::{self as m, audio, Config};
-use hound;
 use rand::distributions::Distribution;
 use rand::SeedableRng;
 use std::path::PathBuf;
-use tauri::Manager;
 use tokenizers::Tokenizer;
 
 /// Model manager for downloading and loading ML models
@@ -6271,6 +5568,46 @@ impl ModelManager {
         );
         Ok(output_path)
     }
+
+    pub async fn download_mel_filters(&self) -> Result<PathBuf> {
+        let cache_dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+            .join(".cache")
+            .join("huggingface")
+            .join("hub")
+            .join("models--candle--whisper");
+
+        std::fs::create_dir_all(&cache_dir)?;
+        let output_path = cache_dir.join("melfilters.bytes");
+
+        if output_path.exists() {
+            let metadata = std::fs::metadata(&output_path)?;
+            if metadata.len() > 100 {
+                return Ok(output_path);
+            }
+            log::warn!(
+                "Existing melfilters.bytes is too small ({} bytes), deleting",
+                metadata.len()
+            );
+            std::fs::remove_file(&output_path)?;
+        }
+
+        log::info!("Downloading melfilters.bytes");
+        let url = "https://raw.githubusercontent.com/huggingface/candle/main/candle-examples/examples/whisper/melfilters.bytes";
+        let response = reqwest::get(url).await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Failed to download melfilters.bytes: HTTP {}",
+                response.status()
+            ));
+        }
+
+        let bytes = response.bytes().await?;
+        std::fs::write(&output_path, bytes)?;
+
+        Ok(output_path)
+    }
 }
 
 /// Enum to handle both normal and quantized Whisper models
@@ -6320,13 +5657,10 @@ struct DecodingResult {
     text: String,
     avg_logprob: f64,
     no_speech_prob: f64,
-    temperature: f64,
 }
 
 #[derive(Debug, Clone)]
 struct Segment {
-    start: f64,
-    duration: f64,
     text: String,
 }
 
@@ -6336,6 +5670,7 @@ pub struct WhisperEngine {
     model: Option<WhisperModel>,
     tokenizer: Option<Tokenizer>,
     config: Option<Config>,
+    mel_filters: Vec<f32>,
     // Special tokens
     sot_token: u32,
     transcribe_token: u32,
@@ -6352,6 +5687,7 @@ impl WhisperEngine {
             model: None,
             tokenizer: None,
             config: None,
+            mel_filters: vec![],
             sot_token: 50258,
             transcribe_token: 50359,
             eot_token: 50257,
@@ -6366,9 +5702,25 @@ impl WhisperEngine {
         config_path: &PathBuf,
         tokenizer_path: &PathBuf,
         weights_path: &PathBuf,
+        mel_filters_path: &PathBuf,
         quantized: bool,
     ) -> Result<()> {
         log::info!("Loading Whisper model from {:?}", weights_path);
+
+        // Load mel filters
+        let mel_bytes = std::fs::read(mel_filters_path)?;
+        if mel_bytes.len() % 4 != 0 {
+            return Err(anyhow::anyhow!(
+                "Invalid melfilters.bytes file size: {} (must be multiple of 4)",
+                mel_bytes.len()
+            ));
+        }
+        let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+        <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(
+            &mel_bytes,
+            &mut mel_filters,
+        );
+        self.mel_filters = mel_filters;
 
         // Load config
         let config_str = std::fs::read_to_string(config_path)?;
@@ -6443,11 +5795,8 @@ impl WhisperEngine {
 
         // Quick energy check to skip silence
         let energy: f32 = audio.iter().map(|&x| x.abs()).sum::<f32>() / audio.len() as f32;
-        if energy < 0.01 {
-            log::info!(
-                "Audio energy too low ({:.4}), skipping transcription",
-                energy
-            );
+        if energy < 0.001 {
+            log::info!("Audio energy extremely low ({:.4}), likely silence", energy);
             return Ok(String::new());
         }
 
@@ -6460,11 +5809,18 @@ impl WhisperEngine {
         let mel = self.audio_to_mel(audio, &config)?;
         log::info!("Generated mel spectrogram: {:?}", mel.dims());
 
-        // Take model out temporarily to avoid borrowing issues
-        let mut model = self.model.take().unwrap();
+        let ctx = DecodingContext {
+            sot_token: self.sot_token,
+            transcribe_token: self.transcribe_token,
+            eot_token: self.eot_token,
+            no_timestamps_token: self.no_timestamps_token,
+            no_speech_token: self.no_speech_token,
+        };
+
+        let model = self.model.as_mut().unwrap();
 
         // Run inference - inline the decode logic
-        let result = (|| -> Result<Vec<Segment>> {
+        let segments = {
             let (_, _, content_frames) = mel.dims3()?;
             let mut seek = 0;
             let mut segments = vec![];
@@ -6476,7 +5832,7 @@ impl WhisperEngine {
                 let segment_duration =
                     (segment_size * m::HOP_LENGTH) as f64 / m::SAMPLE_RATE as f64;
 
-                let dr = self.decode_segment(&mut model, &tokenizer, &mel_segment)?;
+                let dr = Self::decode_segment(model, &tokenizer, &mel_segment, &ctx)?;
 
                 seek += segment_size;
 
@@ -6496,23 +5852,16 @@ impl WhisperEngine {
                 );
 
                 segments.push(Segment {
-                    start: time_offset,
-                    duration: segment_duration,
                     text: dr.text.clone(),
                 });
 
                 // Break if we hit end-of-transcript
-                if dr.tokens.last() == Some(&self.eot_token) {
+                if dr.tokens.last() == Some(&ctx.eot_token) {
                     break;
                 }
             }
-            Ok(segments)
-        })();
-
-        // Put model back regardless of result
-        self.model = Some(model);
-
-        let segments = result?;
+            segments
+        };
 
         // Combine segments into final text
         let text: String = segments
@@ -6545,59 +5894,11 @@ impl WhisperEngine {
         Ok(text)
     }
 
-    fn decode_with_model(
-        &mut self,
-        model: &mut WhisperModel,
-        tokenizer: &Tokenizer,
-        mel: &Tensor,
-    ) -> Result<Vec<Segment>> {
-        let (_, _, content_frames) = mel.dims3()?;
-        let mut seek = 0;
-        let mut segments = vec![];
-
-        while seek < content_frames {
-            let time_offset = (seek * m::HOP_LENGTH) as f64 / m::SAMPLE_RATE as f64;
-            let segment_size = usize::min(content_frames - seek, m::N_FRAMES);
-            let mel_segment = mel.narrow(2, seek, segment_size)?;
-            let segment_duration = (segment_size * m::HOP_LENGTH) as f64 / m::SAMPLE_RATE as f64;
-
-            let dr = self.decode_segment(model, tokenizer, &mel_segment)?;
-
-            seek += segment_size;
-
-            // Skip segments with no speech
-            if dr.no_speech_prob > m::NO_SPEECH_THRESHOLD && dr.avg_logprob < m::LOGPROB_THRESHOLD {
-                log::debug!("No speech detected, skipping segment");
-                continue;
-            }
-
-            log::info!(
-                "Segment: {:.1}s-{:.1}s: {}",
-                time_offset,
-                time_offset + segment_duration,
-                dr.text
-            );
-
-            segments.push(Segment {
-                start: time_offset,
-                duration: segment_duration,
-                text: dr.text,
-            });
-
-            // Break if we hit end-of-transcript
-            if dr.tokens.last() == Some(&self.eot_token) {
-                break;
-            }
-        }
-
-        Ok(segments)
-    }
-
     fn decode_segment(
-        &mut self,
         model: &mut WhisperModel,
         tokenizer: &Tokenizer,
         mel: &Tensor,
+        ctx: &DecodingContext,
     ) -> Result<DecodingResult> {
         let audio_features = model.encoder_forward(mel, true)?;
         log::debug!("Audio features: {:?}", audio_features.dims());
@@ -6607,11 +5908,7 @@ impl WhisperEngine {
         let mut no_speech_prob = f64::NAN;
 
         // Initialize tokens with special tokens
-        let mut tokens = vec![
-            self.sot_token,
-            self.transcribe_token,
-            self.no_timestamps_token,
-        ];
+        let mut tokens = vec![ctx.sot_token, ctx.transcribe_token, ctx.no_timestamps_token];
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(0);
 
@@ -6633,7 +5930,7 @@ impl WhisperEngine {
             // Extract no speech probability on first iteration
             if i == 0 {
                 let probs = softmax(&logits, 0)?;
-                let no_speech_val: f32 = probs.i(self.no_speech_token as usize)?.to_scalar()?;
+                let no_speech_val: f32 = probs.i(ctx.no_speech_token as usize)?.to_scalar()?;
                 no_speech_prob = no_speech_val as f64;
             }
 
@@ -6649,7 +5946,7 @@ impl WhisperEngine {
             let prob = probs_vec[next_token as usize];
             sum_logprob += (prob as f64).ln();
 
-            if next_token == self.eot_token || tokens.len() > model.config().max_target_positions {
+            if next_token == ctx.eot_token || tokens.len() > model.config().max_target_positions {
                 break;
             }
         }
@@ -6664,7 +5961,6 @@ impl WhisperEngine {
             text,
             avg_logprob,
             no_speech_prob,
-            temperature: 0.6,
         })
     }
 
@@ -6680,10 +5976,11 @@ impl WhisperEngine {
             audio.resize(max_samples, 0.0);
         }
 
-        // Load mel filters (these need to be downloaded separately or embedded)
-        // For now, create dummy filters - in production, load from melfilters.bytes
-        let n_fft = 1 + m::N_FFT / 2;
-        let filters = vec![1.0f32 / (n_fft as f32); config.num_mel_bins * n_fft];
+        // Use loaded mel filters
+        let filters = self.mel_filters.clone();
+        if filters.is_empty() {
+            return Err(anyhow::anyhow!("Mel filters not loaded"));
+        }
 
         // Use Candle's built-in audio processing
         let mel = audio::pcm_to_mel(config, &audio, &filters);
@@ -6696,6 +5993,14 @@ impl WhisperEngine {
 
         Ok(tensor)
     }
+}
+
+struct DecodingContext {
+    sot_token: u32,
+    transcribe_token: u32,
+    eot_token: u32,
+    no_timestamps_token: u32,
+    no_speech_token: u32,
 }
 
 /// Embedding engine for semantic similarity using sentence transformers
@@ -6721,14 +6026,6 @@ impl EmbeddingEngine {
 
     pub fn get_model_config(&self) -> (String, String) {
         (self.model_id.clone(), self.revision.clone())
-    }
-
-    pub async fn download(&self, app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf)> {
-        let manager = ModelManager::new(app.path().app_data_dir().unwrap().join("models"));
-
-        manager
-            .download_from_hub(&self.model_id, &self.revision)
-            .await
     }
 
     pub fn load_from_files(
@@ -6806,26 +6103,6 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
     dot / (norm_a * norm_b)
 }
-
-/// Helper function to convert PCM samples to WAV format
-pub fn pcm_to_wav(samples: &[f32], sample_rate: u32, output_path: &PathBuf) -> Result<()> {
-    let spec = hound::WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-
-    let mut writer = hound::WavWriter::create(output_path, spec)?;
-
-    for &sample in samples {
-        let amplitude = (sample * i16::MAX as f32) as i16;
-        writer.write_sample(amplitude)?;
-    }
-
-    writer.finalize()?;
-    Ok(())
-}
 </file>
 
 <file path="src-tauri/src/registry.rs">
@@ -6860,6 +6137,10 @@ pub enum FormatType {
     NumberedList,
     Checkbox,
     Link,
+    Image,
+    Table,
+    CodeBlock,
+    HorizontalRule,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -6985,6 +6266,85 @@ impl CommandRegistry {
                 action: CommandAction::Editor(EditorAction::Redo),
                 selection_required: false,
             },
+            CommandIntent {
+                id: "insert_link".to_string(),
+                phrases: vec![
+                    "add link".to_string(),
+                    "insert link".to_string(),
+                    "create link".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Link),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_image".to_string(),
+                phrases: vec![
+                    "add image".to_string(),
+                    "insert image".to_string(),
+                    "add picture".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Image),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_table".to_string(),
+                phrases: vec![
+                    "add table".to_string(),
+                    "insert table".to_string(),
+                    "create table".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Table),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_code_block".to_string(),
+                phrases: vec![
+                    "add code block".to_string(),
+                    "insert code block".to_string(),
+                    "code block".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::CodeBlock),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_task_list".to_string(),
+                phrases: vec![
+                    "add task list".to_string(),
+                    "insert task list".to_string(),
+                    "add checkbox".to_string(),
+                    "checklist".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Checkbox),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_horizontal_rule".to_string(),
+                phrases: vec![
+                    "add horizontal rule".to_string(),
+                    "insert horizontal rule".to_string(),
+                    "add divider".to_string(),
+                    "horizontal line".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::HorizontalRule),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "format_inline_code".to_string(),
+                phrases: vec![
+                    "format as code".to_string(),
+                    "make this code".to_string(),
+                    "inline code".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Code),
+                selection_required: true,
+            },
         ]
     }
 
@@ -7014,14 +6374,6 @@ impl CommandRegistry {
 
         best_match
     }
-
-    pub fn update_embeddings(&mut self, embeddings: Vec<(String, Vec<f32>)>) {
-        for (id, embedding) in embeddings {
-            if let Some(command) = self.commands.iter_mut().find(|c| c.id == id) {
-                command.embedding = embedding;
-            }
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -7039,111 +6391,6 @@ pub enum ClassificationAction {
         text: String,
         possible_command: CommandAction,
     },
-}
-</file>
-
-<file path="src-tauri/src/vault.rs">
-use notify::{RecursiveMode, Result as NotifyResult, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult};
-use std::path::PathBuf;
-use std::time::Duration;
-
-/// File system watcher for vault changes
-pub struct VaultWatcher {
-    vault_path: PathBuf,
-}
-
-impl VaultWatcher {
-    pub fn new(vault_path: PathBuf) -> Self {
-        Self { vault_path }
-    }
-
-    pub fn start_watching(&self) -> NotifyResult<()> {
-        let (_tx, _rx) = std::sync::mpsc::channel::<()>();
-
-        let mut debouncer = new_debouncer(
-            Duration::from_millis(250),
-            None,
-            move |result: DebounceEventResult| {
-                match result {
-                    Ok(events) => {
-                        for event in events {
-                            log::info!("File event: {:?}", event);
-                            // TODO: Update file index
-                        }
-                    }
-                    Err(errors) => {
-                        for error in errors {
-                            log::error!("Watch error: {:?}", error);
-                        }
-                    }
-                }
-            },
-        )?;
-
-        debouncer
-            .watcher()
-            .watch(&self.vault_path, RecursiveMode::Recursive)?;
-
-        log::info!("Started watching vault at {:?}", self.vault_path);
-
-        Ok(())
-    }
-}
-
-/// Vault file index for quick search
-pub struct VaultIndex {
-    files: Vec<FileMetadata>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FileMetadata {
-    pub path: PathBuf,
-    pub name: String,
-    pub tags: Vec<String>,
-    pub headers: Vec<String>,
-}
-
-impl VaultIndex {
-    pub fn new() -> Self {
-        Self { files: Vec::new() }
-    }
-
-    pub fn add_file(&mut self, metadata: FileMetadata) {
-        self.files.push(metadata);
-    }
-
-    pub fn search(&self, query: &str) -> Vec<&FileMetadata> {
-        let query_lower = query.to_lowercase();
-
-        self.files
-            .iter()
-            .filter(|file| {
-                file.name.to_lowercase().contains(&query_lower)
-                    || file
-                        .tags
-                        .iter()
-                        .any(|t| t.to_lowercase().contains(&query_lower))
-                    || file
-                        .headers
-                        .iter()
-                        .any(|h| h.to_lowercase().contains(&query_lower))
-            })
-            .collect()
-    }
-}
-</file>
-
-<file path="src-tauri/.gitignore">
-# Generated by Cargo
-# will have compiled files and executables
-/target/
-/gen/schemas
-</file>
-
-<file path="src-tauri/build.rs">
-fn main() {
-  tauri_build::build()
 }
 </file>
 
@@ -7175,6 +6422,7 @@ tauri = { version = "2.9.4", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
+byteorder = "1.5.0"
 
 # WebView dependencies for Linux
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -7255,24 +6503,25 @@ opt-level = 3
 }
 </file>
 
-<file path=".gitattributes">
-# Auto detect text files and perform LF normalization
-* text=auto
-</file>
+<file path=".gitignore">
+# Generated by Cargo
+# will have compiled files and executables
+debug/
+target/
 
-<file path="index.html">
-<!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Mutter</title>
-	</head>
-	<body>
-		<div id="root"></div>
-		<script type="module" src="/src/main.tsx"></script>
-	</body>
-</html>
+# These are backup files generated by rustfmt
+**/*.rs.bk
+
+# MSVC Windows builds of rustc generate these, which store debugging information
+*.pdb
+
+# RustRover
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+node_modules
 </file>
 
 <file path="package.json">
@@ -7318,17 +6567,28 @@ opt-level = 3
     "@codemirror/view": "^6.38.8",
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.4.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "codemirror": "^6.0.2",
     "lucide-react": "^0.556.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "tailwind-merge": "^3.4.0"
+    "react-resizable-panels": "^3.0.6",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tw-animate-css": "^1.4.0"
   }
 }
 </file>
@@ -7361,19 +6621,6 @@ opt-level = 3
 }
 </file>
 
-<file path="tsconfig.node.json">
-{
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
-  },
-  "include": ["vite.config.ts"]
-}
-</file>
-
 <file path="vite.config.ts">
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -7403,27 +6650,6 @@ export default defineConfig({
 });
 </file>
 
-<file path=".gitignore">
-# Generated by Cargo
-# will have compiled files and executables
-debug/
-target/
-
-# These are backup files generated by rustfmt
-**/*.rs.bk
-
-# MSVC Windows builds of rustc generate these, which store debugging information
-*.pdb
-
-# RustRover
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-node_modules
-</file>
-
 <file path="README.md">
 # Mutter - Voice-First Markdown Editor
 
@@ -7440,11 +6666,19 @@ A voice-controlled markdown editor with semantic command recognition, built with
   - Audio capture with Web Audio API
   - VAD (Voice Activity Detection) with ring buffer
   - Rust backend with Candle ML framework integration
+  - **Streaming Transcription**: Real-time visual feedback of speech-to-text
   
 - **Semantic Command Router**:
   - Command registry with confidence-based matching
   - Disambiguation UI for ambiguous commands
   - Context-aware command execution (selection required/optional)
+  - **Voice Log**: Detailed history of voice interactions, including confidence scores, execution times, and interpretation debugging
+
+- **User Interface**:
+  - **Flexible Layout**: Resizable panels for file navigation, editor, and voice log
+  - **Collapsible Sidebars**: Maximize writing space by collapsing navigation and logs
+  - **Layout Persistence**: Remembers your panel sizes and preferences
+  - **Dark Mode**: Optimized for focus
 
 - **File System**:
   - Sidebar with file navigation
@@ -7455,6 +6689,7 @@ A voice-controlled markdown editor with semantic command recognition, built with
   - Integrated Whisper model downloader and selector
   - Support for Distil-Whisper and standard Whisper models (Tiny, Base, Small, Medium, Large v3)
   - Real-time download progress tracking
+  - **Local Embeddings**: Uses BERT for semantic understanding of commands
 
 ## Quick Start
 
@@ -7505,7 +6740,7 @@ pnpm tauri:build
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui
+- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui, react-resizable-panels
 - **Backend**: Rust, Tauri v2, Candle 0.8 (ML), Tokio (async)
 </file>
 

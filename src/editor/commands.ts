@@ -18,6 +18,10 @@ export interface FormatType {
     NumberedList?: boolean;
     Checkbox?: boolean;
     Link?: boolean;
+    Image?: boolean;
+    Table?: boolean;
+    CodeBlock?: boolean;
+    HorizontalRule?: boolean;
 }
 
 export interface EditorAction {
@@ -115,6 +119,74 @@ function executeFormatCommand(view: EditorView, format: FormatType): boolean {
 
         view.dispatch({
             changes: { from: lineStart, to: lineEnd, insert: `1. ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.Checkbox !== undefined) {
+        const lineStart = state.doc.lineAt(from).from;
+        const lineEnd = state.doc.lineAt(from).to;
+        const lineText = state.doc.sliceString(lineStart, lineEnd);
+
+        view.dispatch({
+            changes: { from: lineStart, to: lineEnd, insert: `- [ ] ${lineText}` }
+        });
+        return true;
+    }
+
+    if (format.Link !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `[${selectedText}](url)` },
+            selection: { anchor: from + selectedText.length + 3, head: from + selectedText.length + 6 }
+        });
+        return true;
+    }
+
+    if (format.Image !== undefined) {
+        view.dispatch({
+            changes: { from, to, insert: `![alt text](url)` },
+            selection: { anchor: from + 12, head: from + 15 }
+        });
+        return true;
+    }
+
+    if (format.Table !== undefined) {
+        const tableTemplate = `
+| Header 1 | Header 2 |
+| -------- | -------- |
+| Cell 1   | Cell 2   |
+`;
+        view.dispatch({
+            changes: { from, to, insert: tableTemplate }
+        });
+        return true;
+    }
+
+    if (format.CodeBlock !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        const codeBlockTemplate = `\`\`\`
+${selectedText}
+\`\`\``;
+        view.dispatch({
+            changes: { from, to, insert: codeBlockTemplate },
+            selection: { anchor: from + 3 }
+        });
+        return true;
+    }
+
+    if (format.Code !== undefined) {
+        const selectedText = state.doc.sliceString(from, to);
+        view.dispatch({
+            changes: { from, to, insert: `\`${selectedText}\`` },
+            selection: { anchor: from + 1, head: to + 1 }
+        });
+        return true;
+    }
+
+    if (format.HorizontalRule !== undefined) {
+        view.dispatch({
+            changes: { from, to, insert: `\n---\n` }
         });
         return true;
     }

@@ -18,7 +18,6 @@ import {
 } from '../editor/ghostText';
 import { useToast } from '../hooks/use-toast';
 import AmbiguityPopover from './AmbiguityPopover';
-import './Editor.css';
 
 interface EditorProps {
 	filePath: string | null;
@@ -291,6 +290,7 @@ export default function Editor({
 			doc: content,
 			extensions: [
 				basicSetup,
+				EditorView.lineWrapping,
 				markdown(),
 				editorTheme,
 				cursorPosField,
@@ -348,21 +348,25 @@ export default function Editor({
 	}, [content, filePath]);
 
 	return (
-		<div className='editor-container'>
-			<div className={`editor-wrapper audio-${audioState}`}>
-				<div ref={editorRef} className='editor' />
-			</div>
+		<div className='flex-1 flex flex-col overflow-hidden bg-background'>
+			<div
+				ref={editorRef}
+				className={`flex-1 overflow-auto transition-opacity duration-200 ${
+					audioState === 'processing' ? 'opacity-70' : ''
+				}`}
+			/>
 			{ambiguityData && (
 				<AmbiguityPopover
 					text={ambiguityData.text}
 					possibleCommand={ambiguityData.command}
 					confidence={ambiguityData.confidence}
 					position={ambiguityData.position}
-					onChoose={(choice) => {
-						if (!viewRef.current) return;
-						const { from } = viewRef.current.state.selection.main;
+					onChoose={(resolution) => {
+						if (!viewRef.current || !ambiguityData) return;
 
-						if (choice === 'command') {
+						const from = viewRef.current.state.selection.main.head;
+
+						if (resolution === 'command') {
 							executeCommand(
 								viewRef.current,
 								ambiguityData.command
@@ -370,14 +374,9 @@ export default function Editor({
 							viewRef.current.dispatch({
 								effects: addFlash.of({
 									from,
-									to: viewRef.current.state.selection.main.to,
-									type: 'format',
+									to: from,
+									type: 'command',
 								}),
-							});
-							toast({
-								title: 'Command Executed',
-								description: `Executed: ${ambiguityData.command}`,
-								duration: 2000,
 							});
 						} else {
 							viewRef.current.dispatch({
@@ -393,19 +392,6 @@ export default function Editor({
 					}}
 					onDismiss={() => setAmbiguityData(null)}
 				/>
-			)}
-			{audioState !== 'idle' && (
-				<div className='audio-status'>
-					{audioState === 'listening' && (
-						<span className='status-pulse'>● Listening...</span>
-					)}
-					{audioState === 'processing' && (
-						<span className='status-spinner'>⟳ Processing...</span>
-					)}
-					{audioState === 'executing' && (
-						<span className='status-success'>✓ Executing</span>
-					)}
-				</div>
 			)}
 		</div>
 	);

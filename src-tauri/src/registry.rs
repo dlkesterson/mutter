@@ -29,6 +29,10 @@ pub enum FormatType {
     NumberedList,
     Checkbox,
     Link,
+    Image,
+    Table,
+    CodeBlock,
+    HorizontalRule,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +157,85 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Redo),
                 selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_link".to_string(),
+                phrases: vec![
+                    "add link".to_string(),
+                    "insert link".to_string(),
+                    "create link".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Link),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_image".to_string(),
+                phrases: vec![
+                    "add image".to_string(),
+                    "insert image".to_string(),
+                    "add picture".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Image),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_table".to_string(),
+                phrases: vec![
+                    "add table".to_string(),
+                    "insert table".to_string(),
+                    "create table".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Table),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_code_block".to_string(),
+                phrases: vec![
+                    "add code block".to_string(),
+                    "insert code block".to_string(),
+                    "code block".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::CodeBlock),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_task_list".to_string(),
+                phrases: vec![
+                    "add task list".to_string(),
+                    "insert task list".to_string(),
+                    "add checkbox".to_string(),
+                    "checklist".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Checkbox),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "insert_horizontal_rule".to_string(),
+                phrases: vec![
+                    "add horizontal rule".to_string(),
+                    "insert horizontal rule".to_string(),
+                    "add divider".to_string(),
+                    "horizontal line".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::HorizontalRule),
+                selection_required: false,
+            },
+            CommandIntent {
+                id: "format_inline_code".to_string(),
+                phrases: vec![
+                    "format as code".to_string(),
+                    "make this code".to_string(),
+                    "inline code".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Format(FormatType::Code),
+                selection_required: true,
             },
         ]
     }

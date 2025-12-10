@@ -2,7 +2,7 @@ import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 
 // Define the types of flash effects
-export type FlashType = 'insert' | 'delete' | 'format';
+export type FlashType = 'insert' | 'delete' | 'format' | 'command';
 
 // StateEffect for adding a flash
 export const addFlash = StateEffect.define<{ from: number; to: number; type: FlashType }>();
@@ -82,6 +82,11 @@ const flashPlugin = ViewPlugin.fromClass(
                     case 'format':
                         className = 'cm-flash-format';
                         break;
+                    case 'command':
+                        className = 'cm-flash-command';
+                        break;
+                    default:
+                        className = 'cm-flash-insert';
                 }
 
                 return Decoration.mark({
