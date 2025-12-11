@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "quick-capture"
   ],
   "permissions": [
     "core:default",
@@ -26,7 +27,10 @@
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-maximize",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-unregister"
   ],
   "platforms": ["linux", "macOS", "windows"]
 }

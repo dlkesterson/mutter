@@ -5,6 +5,7 @@ export interface CommandAction {
     Format?: FormatType;
     Editor?: EditorAction;
     System?: SystemAction;
+    AppSpecific?: string;
 }
 
 export interface FormatType {
@@ -27,6 +28,7 @@ export interface FormatType {
 export interface EditorAction {
     Undo?: boolean;
     Redo?: boolean;
+    UndoVoiceCommand?: boolean;
     NewLine?: boolean;
     Delete?: boolean;
     SelectAll?: boolean;
@@ -44,8 +46,8 @@ export function executeCommand(view: EditorView, action: CommandAction): boolean
         return executeFormatCommand(view, action.Format);
     } else if (action.Editor) {
         return executeEditorCommand(view, action.Editor);
-    } else if (action.System) {
-        // System commands need to be handled by the parent component
+    } else if (action.System || action.AppSpecific) {
+        // System and AppSpecific commands need to be handled by the parent component
         return false;
     }
     return false;

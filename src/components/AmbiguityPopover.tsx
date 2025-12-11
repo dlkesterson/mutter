@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import './AmbiguityPopover.css';
 
 interface AmbiguityPopoverProps {
 	text: string;
@@ -52,48 +51,63 @@ export default function AmbiguityPopover({
 
 	return (
 		<div
-			className='ambiguity-popover'
+			className='fixed z-50 w-80 bg-popover text-popover-foreground border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-200 outline-none'
 			style={{ top: position.top, left: position.left }}
 			onKeyDown={handleKeyPress}
 			tabIndex={0}
 			autoFocus
 		>
-			<div className='ambiguity-header'>
-				<span className='ambiguity-icon'>?</span>
-				<span className='ambiguity-title'>Did you mean:</span>
-				<span className='ambiguity-confidence'>
+			<div className='flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50 rounded-t-lg'>
+				<div className='flex items-center gap-2'>
+					<div className='flex items-center justify-center w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-600 text-xs font-bold'>
+						?
+					</div>
+					<span className='text-sm font-medium'>Did you mean:</span>
+				</div>
+				<span className='text-xs text-muted-foreground font-mono'>
 					{Math.round(confidence * 100)}%
 				</span>
 			</div>
-			<div className='ambiguity-options'>
+			<div className='p-1'>
 				<button
-					className={`ambiguity-option ${
-						selectedIndex === 0 ? 'selected' : ''
+					className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left text-sm transition-colors ${
+						selectedIndex === 0
+							? 'bg-accent text-accent-foreground'
+							: 'hover:bg-muted'
 					}`}
 					onClick={() => onChoose('command')}
 					onMouseEnter={() => setSelectedIndex(0)}
 					onMouseLeave={() => setSelectedIndex(null)}
 				>
-					<span className='option-number'>1</span>
-					<span className='option-text'>
+					<kbd className='flex items-center justify-center w-5 h-5 text-xs bg-background border border-border rounded text-muted-foreground font-mono'>
+						1
+					</kbd>
+					<span className='flex-1 truncate'>
 						{getCommandDescription(possibleCommand)}
 					</span>
 				</button>
 				<button
-					className={`ambiguity-option ${
-						selectedIndex === 1 ? 'selected' : ''
+					className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left text-sm transition-colors ${
+						selectedIndex === 1
+							? 'bg-accent text-accent-foreground'
+							: 'hover:bg-muted'
 					}`}
 					onClick={() => onChoose('text')}
 					onMouseEnter={() => setSelectedIndex(1)}
 					onMouseLeave={() => setSelectedIndex(null)}
 				>
-					<span className='option-number'>2</span>
-					<span className='option-text'>Insert text "{text}"</span>
+					<kbd className='flex items-center justify-center w-5 h-5 text-xs bg-background border border-border rounded text-muted-foreground font-mono'>
+						2
+					</kbd>
+					<span className='flex-1 truncate'>
+						Insert text "{text}"
+					</span>
 				</button>
 			</div>
-			<div className='ambiguity-hint'>
-				Press <kbd>1</kbd> or <kbd>2</kbd> to choose, <kbd>Esc</kbd> to
-				dismiss
+			<div className='px-3 py-1.5 border-t border-border bg-muted/30 text-[10px] text-muted-foreground text-center rounded-b-lg'>
+				Press <kbd className='font-mono'>1</kbd> or{' '}
+				<kbd className='font-mono'>2</kbd> to choose,{' '}
+				<kbd className='font-mono'>Esc</kbd> to dismiss
 			</div>
 		</div>
 	);

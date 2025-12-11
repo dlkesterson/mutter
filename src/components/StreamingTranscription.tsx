@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import './StreamingTranscription.css';
 
 interface PartialTranscription {
 	text: string;
@@ -64,28 +63,27 @@ export function StreamingTranscription({
 
 	return (
 		<div
-			className={`streaming-transcription ${isVisible ? 'visible' : ''}`}
+			className={`fixed top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 ${
+				isVisible
+					? 'opacity-100 translate-y-0'
+					: 'opacity-0 -translate-y-4'
+			}`}
 		>
-			<div className='transcription-container'>
-				<div className='transcription-header'>
-					<div className='live-indicator'>
-						<span className='live-dot' />
-						<span className='live-text'>
-							{isProcessing
-								? 'Processing...'
-								: 'Live Transcription'}
-						</span>
-					</div>
+			<div className='bg-background/90 backdrop-blur-md border border-border rounded-full shadow-xl px-6 py-3 min-w-[300px] max-w-[600px] flex items-center gap-4'>
+				<div className='flex items-center gap-2 shrink-0'>
+					<div className='w-2 h-2 bg-red-500 rounded-full animate-pulse' />
+					<span className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+						{isProcessing ? 'Processing' : 'Live'}
+					</span>
 				</div>
-				<div className='transcription-content'>
+				<div className='h-4 w-px bg-border' />
+				<div className='flex-1 truncate text-sm font-medium text-foreground'>
 					{isProcessing && !partialText ? (
-						<span className='processing-text'>
+						<span className='text-muted-foreground italic'>
 							Analyzing audio...
 						</span>
 					) : (
-						<span className='partial-text'>
-							{partialText || 'Listening...'}
-						</span>
+						<span>{partialText || 'Listening...'}</span>
 					)}
 				</div>
 			</div>

@@ -26,6 +26,9 @@ tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 byteorder = "1.5.0"
+tauri-plugin-global-shortcut = "2.3.1"
+walkdir = "2.5.0"
+active-win-pos-rs = "0.9.1"
 
 # WebView dependencies for Linux
 [target.'cfg(target_os = "linux")'.dependencies]

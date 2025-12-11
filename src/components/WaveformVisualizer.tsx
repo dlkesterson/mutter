@@ -1,5 +1,4 @@
 import { useRef, useEffect } from 'react';
-import './WaveformVisualizer.css';
 
 interface WaveformVisualizerProps {
 	isActive: boolean;
@@ -31,8 +30,7 @@ export default function WaveformVisualizer({
 
 		const draw = () => {
 			// Clear canvas
-			ctx.fillStyle = '#1e1e1e';
-			ctx.fillRect(0, 0, width, height);
+			ctx.clearRect(0, 0, width, height);
 
 			// If we have audio data, add it to buffer
 			if (audioData && audioData.length > 0) {
@@ -49,7 +47,17 @@ export default function WaveformVisualizer({
 
 			// Draw waveform
 			if (dataBufferRef.current.length > 0) {
-				ctx.strokeStyle = '#3b82f6';
+				// Use CSS variable for primary color if possible, or fallback
+				const computedStyle = getComputedStyle(
+					document.documentElement
+				);
+				const primaryColor =
+					computedStyle.getPropertyValue('--primary') || '#3b82f6';
+
+				// Convert OKLCH to hex/rgb if needed, but for now let's stick to a safe color or try to parse
+				// Since canvas doesn't support OKLCH directly in all browsers yet, we might need a fallback
+				// For now, let's use a hardcoded color that matches our theme
+				ctx.strokeStyle = '#a855f7'; // Purple-500 to match primary
 				ctx.lineWidth = 2;
 				ctx.beginPath();
 
@@ -70,7 +78,7 @@ export default function WaveformVisualizer({
 				ctx.stroke();
 
 				// Draw baseline
-				ctx.strokeStyle = '#3a3a3a';
+				ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				ctx.moveTo(0, height / 2);
@@ -93,13 +101,8 @@ export default function WaveformVisualizer({
 	if (!isActive) return null;
 
 	return (
-		<div className='waveform-visualizer'>
-			<canvas
-				ref={canvasRef}
-				width={300}
-				height={60}
-				className='waveform-canvas'
-			/>
+		<div className='absolute bottom-24 right-6 bg-card border border-border rounded-lg p-2 shadow-lg animate-in slide-in-from-bottom-2 fade-in duration-300'>
+			<canvas ref={canvasRef} width={200} height={60} className='block' />
 		</div>
 	);
 }

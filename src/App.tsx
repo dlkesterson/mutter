@@ -12,6 +12,8 @@ import { StreamingTranscription } from './components/StreamingTranscription';
 import { Toaster } from './components/ui/toaster';
 import { getStorageItem, setStorageItem } from './utils/storage';
 import { VoiceLogEntry } from './types';
+import { QuickCapture } from './components/QuickCapture';
+import { Sidebar } from './components/Sidebar';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
@@ -24,10 +26,23 @@ function App() {
 	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 	const [openDialog, setOpenDialog] = useState<DialogType>(null);
+	const [fileDialogQuery, setFileDialogQuery] = useState<string>('');
+	const [isQuickCapture, setIsQuickCapture] = useState(false);
+
+	useEffect(() => {
+		// Check if we are in quick capture mode
+		if (window.location.hash === '#/quick-capture') {
+			setIsQuickCapture(true);
+		}
+	}, []);
 
 	const { startRecording, stopRecording } = useAudioRecorder(() => {
 		console.log('Silence detected');
 	});
+
+	if (isQuickCapture) {
+		return <QuickCapture />;
+	}
 
 	const addVoiceLogEntry = (
 		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>
@@ -48,6 +63,16 @@ function App() {
 			try {
 				await invoke('load_embedding_model');
 				await invoke('initialize_embeddings');
+
+				// Register global hotkey
+				try {
+					await invoke('register_global_hotkey', {
+						shortcut: 'CommandOrControl+Shift+Space',
+					});
+				} catch (e) {
+					console.error('Failed to register hotkey', e);
+				}
+
 				setIsInitialized(true);
 
 				// Restore last opened file
@@ -149,35 +174,98 @@ function App() {
 		}
 	};
 
+	const handleSystemCommand = async (action: any) => {
+		console.log('System command:', action);
+
+		if (action.OpenNote) {
+			const query = action.OpenNote.name;
+			if (!query) {
+				setOpenDialog('files');
+				return;
+			}
+
+			// Try to find the note directly
+			try {
+				const vaultPath = await getStorageItem<string>('vault_path');
+				if (vaultPath) {
+					const results = await invoke<any[]>('search_notes', {
+						query,
+						vaultPath,
+					});
+					if (results.length > 0) {
+						// If we have a good match, open it
+						// For now, just open the first one if it's a very strong match or unique
+						// But to be safe, let's open the dialog with the search query
+						setFileDialogQuery(query);
+						setOpenDialog('files');
+					} else {
+						setFileDialogQuery(query);
+						setOpenDialog('files');
+					}
+				} else {
+					setOpenDialog('files');
+				}
+			} catch (e) {
+				console.error('Failed to search notes:', e);
+				setOpenDialog('files');
+			}
+		} else if (action.Search) {
+			setFileDialogQuery(action.Search.query);
+			setOpenDialog('files');
+		}
+	};
+
 	return (
-		<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
-			<StreamingTranscription isRecording={audioState === 'listening'} />
+		<div className='flex h-screen w-screen overflow-hidden bg-background text-foreground'>
+			<Sidebar
+				activePath={currentFile}
+				onFileSelect={setCurrentFile}
+				onSettingsClick={() => setOpenDialog('settings')}
+			/>
 
-			<main className='flex-1 flex flex-col overflow-hidden relative'>
-				<Editor
-					filePath={currentFile}
-					audioState={audioState}
-					onVoiceLogEntry={addVoiceLogEntry}
+			<div className='flex-1 flex flex-col overflow-hidden relative'>
+				<StreamingTranscription
+					isRecording={audioState === 'listening'}
 				/>
 
-				<Omnibox
-					onCommand={handleVoiceCommand}
-					onDialogOpen={setOpenDialog}
-					isListening={audioState === 'listening'}
-					onToggleListening={toggleListening}
-				/>
+				<main className='flex-1 flex flex-col overflow-hidden relative'>
+					<Editor
+						filePath={currentFile}
+						audioState={audioState}
+						onVoiceLogEntry={addVoiceLogEntry}
+						onSystemCommand={handleSystemCommand}
+					/>
 
-				<VoiceIndicator
-					state={audioState}
-					onLogClick={() => setOpenDialog('voice-log')}
-					onToggleListening={toggleListening}
-				/>
-			</main>
+					<Omnibox
+						onCommand={handleVoiceCommand}
+						onDialogOpen={setOpenDialog}
+						isListening={audioState === 'listening'}
+						onToggleListening={toggleListening}
+					/>
+
+					<VoiceIndicator
+						state={audioState}
+						onLogClick={() => setOpenDialog('voice-log')}
+						onToggleListening={toggleListening}
+					/>
+				</main>
+			</div>
 
 			{/* Dialogs */}
 			<FileNavigatorDialog
 				open={openDialog === 'files'}
-				onOpenChange={(open) => !open && setOpenDialog(null)}
+				onOpenChange={(open) => {
+					if (!open) {
+						setOpenDialog(null);
+						setFileDialogQuery('');
+					}
+				}}
+				onFileSelect={(path) => {
+					setCurrentFile(path);
+					setOpenDialog(null);
+					setFileDialogQuery('');
+				}}
+				initialQuery={fileDialogQuery}
 			/>
 			<VoiceLogDialog
 				open={openDialog === 'voice-log'}

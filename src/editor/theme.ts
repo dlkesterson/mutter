@@ -1,19 +1,56 @@
 import { EditorView } from '@codemirror/view';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+
+// Define syntax highlighting using a One Dark-inspired palette
+export const syntaxHighlightingTheme = HighlightStyle.define([
+    { tag: t.heading, fontWeight: 'bold', color: 'hsl(var(--foreground))' },
+    { tag: t.heading1, fontSize: '2em' },
+    { tag: t.heading2, fontSize: '1.6em' },
+    { tag: t.heading3, fontSize: '1.4em' },
+    { tag: t.link, color: 'hsl(var(--primary))', textDecoration: 'underline' },
+    { tag: t.strong, fontWeight: 'bold' },
+    { tag: t.emphasis, fontStyle: 'italic' },
+    
+    // Code syntax highlighting
+    { tag: t.keyword, color: '#c678dd' }, // Purple
+    { tag: t.operator, color: '#56b6c2' }, // Cyan
+    { tag: t.special(t.variableName), color: '#e06c75' }, // Red
+    { tag: t.typeName, color: '#e5c07b' }, // Yellow
+    { tag: t.atom, color: '#d19a66' }, // Orange
+    { tag: t.bool, color: '#d19a66' }, // Orange
+    { tag: t.url, color: '#56b6c2' }, // Cyan
+    { tag: t.labelName, color: '#e06c75' }, // Red
+    { tag: t.inserted, color: '#98c379' }, // Green
+    { tag: t.deleted, color: '#e06c75' }, // Red
+    { tag: t.literal, color: '#56b6c2' }, // Cyan
+    { tag: t.string, color: '#98c379' }, // Green
+    { tag: t.number, color: '#d19a66' }, // Orange
+    { tag: t.variableName, color: '#e06c75' }, // Red
+    { tag: t.function(t.variableName), color: '#61afef' }, // Blue
+    { tag: t.function(t.propertyName), color: '#61afef' }, // Blue
+    { tag: t.comment, color: '#7f848e', fontStyle: 'italic' }, // Grey
+    { tag: t.meta, color: '#7f848e' },
+    { tag: t.processingInstruction, color: '#7f848e' },
+    { tag: t.punctuation, color: '#abb2bf' }, // Light Grey
+    { tag: t.bracket, color: '#abb2bf' },
+]);
 
 export const editorTheme = EditorView.theme({
     '&': {
-        backgroundColor: 'var(--background)',
-        color: 'var(--foreground)',
+        backgroundColor: 'hsl(var(--background))',
+        color: 'hsl(var(--foreground))',
         height: '100%',
         fontSize: '1.125rem', // text-lg
     },
     '.cm-content': {
-        caretColor: 'var(--primary)',
+        caretColor: 'hsl(var(--primary))',
         fontFamily: 'var(--font-mono)',
-        padding: '4rem', // p-16
-        maxWidth: '900px',
+        padding: '4rem 2rem', // More vertical padding, less horizontal
+        maxWidth: '800px', // Slightly narrower for better readability
         margin: '0 auto',
         textDecoration: 'none !important',
+        lineHeight: '1.75', // Improved line height
     },
     // Global reset for CodeMirror content to prevent unwanted underlines
     '.cm-content *': {
@@ -21,26 +58,26 @@ export const editorTheme = EditorView.theme({
         borderBottom: 'none',
     },
     '.cm-cursor': {
-        borderLeftColor: 'var(--primary)',
+        borderLeftColor: 'hsl(var(--primary))',
         borderLeftWidth: '2px',
     },
     '.cm-selectionBackground': {
-        backgroundColor: 'var(--muted) !important',
+        backgroundColor: 'hsl(var(--muted)) !important',
     },
     '&.cm-focused .cm-selectionBackground': {
-        backgroundColor: 'var(--muted) !important',
+        backgroundColor: 'hsl(var(--muted)) !important',
     },
     '.cm-activeLine': {
         backgroundColor: 'transparent',
     },
     '.cm-gutters': {
         backgroundColor: 'transparent',
-        color: 'var(--muted-foreground)',
+        color: 'hsl(var(--muted-foreground))',
         border: 'none',
     },
     '.cm-activeLineGutter': {
         backgroundColor: 'transparent',
-        color: 'var(--primary)',
+        color: 'hsl(var(--primary))',
         fontWeight: 'bold',
     },
     // Force no text decoration by default to prevent glitches
@@ -51,16 +88,16 @@ export const editorTheme = EditorView.theme({
     // Live Preview Styles
     '.cm-bold': {
         fontWeight: 'bold',
-        color: 'var(--foreground)',
+        color: 'hsl(var(--foreground))',
     },
     '.cm-italic': {
         fontStyle: 'italic',
-        color: 'var(--foreground)',
+        color: 'hsl(var(--foreground))',
     },
     '.cm-heading, .cm-header': {
         fontWeight: 'bold',
         lineHeight: '1.4',
-        color: 'var(--foreground)',
+        color: 'hsl(var(--foreground))',
         textDecoration: 'none !important',
         borderBottom: 'none !important',
         backgroundImage: 'none !important',
@@ -76,7 +113,7 @@ export const editorTheme = EditorView.theme({
         fontSize: '1.4em',
     },
     '.cm-link': {
-        color: 'var(--primary)',
+        color: 'hsl(var(--primary))',
         textDecoration: 'underline !important',
         cursor: 'pointer',
     },
@@ -84,14 +121,14 @@ export const editorTheme = EditorView.theme({
         textDecoration: 'none !important',
     },
     '.cm-list-marker': {
-        color: 'var(--muted-foreground)',
+        color: 'hsl(var(--muted-foreground))',
     },
     '.cm-list-item': {
         paddingLeft: '4px',
     },
     '.cm-inline-code': {
         fontFamily: 'var(--font-mono)',
-        backgroundColor: 'var(--muted)',
+        backgroundColor: 'hsl(var(--muted))',
         padding: '0.2em 0.4em',
         borderRadius: '4px',
         fontSize: '0.9em',
@@ -106,11 +143,16 @@ export const editorTheme = EditorView.theme({
         marginRight: '0.5em',
         cursor: 'pointer',
         verticalAlign: 'middle',
-        accentColor: 'var(--primary)',
+        accentColor: 'hsl(var(--primary))',
     },
     '.cm-hr': {
         border: 'none',
-        borderTop: '2px solid var(--muted)',
+        borderTop: '2px solid hsl(var(--muted))',
         margin: '2em 0',
     },
 });
+
+export const editorThemeExtension = [
+    editorTheme,
+    syntaxHighlighting(syntaxHighlightingTheme)
+];

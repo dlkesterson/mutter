@@ -1,9 +1,15 @@
-use crate::audio::{AudioBuffer, VadState};
+use crate::audio::{AudioBuffer, VadEvent, VadState};
 use crate::ml::{EmbeddingEngine, ModelManager, WhisperEngine};
-use crate::registry::{ClassificationAction, ClassificationResult, CommandRegistry};
+use crate::registry::{
+    ClassificationAction, ClassificationResult, CommandAction, CommandRegistry, CursorContext,
+    EditorAction, FormatType,
+};
+use crate::system::SystemContext;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub registry: Mutex<CommandRegistry>,
@@ -23,6 +29,185 @@ impl Default for AppState {
             vad_state: Mutex::new(VadState::new()),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileNode {
+    pub path: String,
+    pub name: String,
+    pub is_dir: bool,
+    pub children: Option<Vec<FileNode>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub path: String,
+    pub title: String,
+    pub excerpt: String,
+}
+
+#[tauri::command]
+pub async fn get_file_tree(vault_path: String) -> Result<Vec<FileNode>, String> {
+    let root = std::path::Path::new(&vault_path);
+    if !root.exists() {
+        return Err("Vault path does not exist".to_string());
+    }
+
+    fn read_dir_recursive(path: &std::path::Path) -> Result<Vec<FileNode>, String> {
+        let mut nodes = Vec::new();
+        let entries = std::fs::read_dir(path).map_err(|e| e.to_string())?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = path.is_dir();
+
+            // Skip hidden files
+            if name.starts_with('.') {
+                continue;
+            }
+
+            let children = if is_dir {
+                Some(read_dir_recursive(&path)?)
+            } else {
+                None
+            };
+
+            nodes.push(FileNode {
+                path: path.to_string_lossy().to_string(),
+                name,
+                is_dir,
+                children,
+            });
+        }
+
+        // Sort: folders first, then files
+        nodes.sort_by(|a, b| {
+            if a.is_dir == b.is_dir {
+                a.name.cmp(&b.name)
+            } else {
+                b.is_dir.cmp(&a.is_dir)
+            }
+        });
+
+        Ok(nodes)
+    }
+
+    read_dir_recursive(root)
+}
+
+#[tauri::command]
+pub async fn search_notes(query: String, vault_path: String) -> Result<Vec<SearchResult>, String> {
+    let mut results = vec![];
+    let query_lower = query.to_lowercase();
+
+    // Walk all .md files
+    for entry in walkdir::WalkDir::new(&vault_path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.path().extension().and_then(|s| s.to_str()) != Some("md") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(entry.path()) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Simple text search (can enhance with fuzzy matching later)
+        if content.to_lowercase().contains(&query_lower) {
+            let title = entry
+                .path()
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Untitled")
+                .to_string();
+
+            // Extract excerpt
+            let excerpt = extract_excerpt(&content, &query_lower);
+
+            results.push(SearchResult {
+                path: entry.path().to_string_lossy().to_string(),
+                title,
+                excerpt,
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+fn extract_excerpt(content: &str, query_lower: &str) -> String {
+    let content_lower = content.to_lowercase();
+    if let Some(idx) = content_lower.find(query_lower) {
+        let start = idx.saturating_sub(20);
+        let end = (idx + query_lower.len() + 40).min(content.len());
+        let text = &content[start..end];
+        format!("...{}...", text.replace('\n', " "))
+    } else {
+        content.chars().take(60).collect::<String>()
+    }
+}
+
+#[tauri::command]
+pub async fn register_global_hotkey(app: tauri::AppHandle, shortcut: String) -> Result<(), String> {
+    log::info!("Registering global hotkey: {}", shortcut);
+
+    // Plugin is already initialized in lib.rs with the handler
+    app.global_shortcut()
+        .register(shortcut.as_str())
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn append_to_inbox(
+    text: String,
+    timestamp: String,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // Get documents directory as vault root for now, or app data dir
+    let vault_path = app
+        .path()
+        .document_dir()
+        .map_err(|e| e.to_string())?
+        .join("MutterVault");
+
+    if !vault_path.exists() {
+        std::fs::create_dir_all(&vault_path).map_err(|e| e.to_string())?;
+    }
+
+    let inbox_path = vault_path.join("Inbox.md");
+
+    // Create inbox file if doesn't exist
+    if !inbox_path.exists() {
+        std::fs::write(&inbox_path, "# Inbox\n\n").map_err(|e| e.to_string())?;
+    }
+
+    // Append entry
+    let entry = format!("\n## {}\n\n{}\n", timestamp, text);
+
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&inbox_path)
+        .map_err(|e| e.to_string())?;
+
+    file.write_all(entry.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_quick_capture(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("quick-capture") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Process incoming audio chunk from frontend
@@ -45,12 +230,30 @@ pub async fn process_audio_chunk(
 
     // Check VAD
     let mut vad = state.vad_state.lock().unwrap();
-    if vad.process(&pcm_data, 16000.0) {
-        // Silence detected after speech - trigger transcription
-        log::info!("VAD detected end of speech - triggering transcription");
-        let _ = app.emit("vad-silence-detected", ());
+    match vad.process(&pcm_data, 16000.0) {
+        VadEvent::SpeechEnd => {
+            // Silence detected after speech - trigger transcription
+            log::info!("VAD detected end of speech - triggering transcription");
+            let _ = app.emit("vad-silence-detected", ());
+        }
+        VadEvent::SpeechStart => {
+            let _ = app.emit("vad-speech-start", ());
+        }
+        _ => {}
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_vad_settings(
+    silence_ms: f32,
+    min_speech_ms: f32,
+    sensitivity: f32,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut vad = state.vad_state.lock().unwrap();
+    vad.update_settings(silence_ms, min_speech_ms, sensitivity);
     Ok(())
 }
 
@@ -168,12 +371,15 @@ pub struct TranscriptionResult {
 pub async fn classify_text(
     text: String,
     has_selection: bool,
+    cursor_context: CursorContext,
+    system_context: Option<SystemContext>,
     state: State<'_, AppState>,
 ) -> Result<ClassificationResultWithTiming, String> {
     log::info!(
-        "Classifying text: '{}' (selection: {})",
+        "Classifying text: '{}' (selection: {}, context: {:?})",
         text,
-        has_selection
+        has_selection,
+        system_context
     );
 
     if text.trim().is_empty() {
@@ -194,33 +400,18 @@ pub async fn classify_text(
 
     let total_start = std::time::Instant::now();
 
-    // Heuristic: If text is longer than typical commands, it's likely dictation
-    // Typical commands: "make this bold", "undo", "new paragraph" (2-4 words)
-    // Dictation: "testing testing 1 2 3", "this is a longer sentence" (5+ words)
-    let word_count = text.split_whitespace().count();
-
-    // If it's a long phrase (5+ words) or contains numbers/punctuation typical of dictation
-    let looks_like_dictation = word_count >= 5
-        || text.contains(char::is_numeric)
-        || text.ends_with('.')
-        || text.ends_with('?')
-        || text.ends_with('!');
-
-    if looks_like_dictation {
-        log::info!(
-            "Text appears to be dictation (word_count: {}), treating as plain text",
-            word_count
-        );
+    // 1. Quick pattern matching for high-confidence commands
+    if let Some(action) = match_command_patterns(&text) {
         return Ok(ClassificationResultWithTiming {
             result: ClassificationResult {
-                action: ClassificationAction::InsertText(text),
-                confidence: 0.0,
+                action: ClassificationAction::ExecuteCommand(action),
+                confidence: 1.0,
                 requires_disambiguation: false,
             },
             timings: PerformanceTimings {
                 embed_ms: 0,
                 search_ms: 0,
-                total_ms: 0,
+                total_ms: total_start.elapsed().as_millis() as u64,
             },
         });
     }
@@ -238,62 +429,221 @@ pub async fn classify_text(
     let search_start = std::time::Instant::now();
     let registry = state.registry.lock().unwrap();
 
-    let result = if let Some((command, similarity)) =
-        registry.find_best_match(&input_embedding, has_selection)
-    {
+    let best_match = registry.find_best_match(
+        &input_embedding,
+        has_selection,
+        &cursor_context,
+        system_context.as_ref(),
+    );
+    let search_duration_ms = search_start.elapsed().as_millis() as u64;
+
+    if let Some((command, similarity)) = best_match {
         log::info!(
             "Best match: {:?} with similarity {:.2}",
             command.id,
             similarity
         );
 
+        // Check if it looks like dictation despite having a match
+        if looks_like_dictation(&text, similarity) {
+            log::info!(
+                "Text appears to be dictation (similarity {:.2}), treating as plain text",
+                similarity
+            );
+            return Ok(ClassificationResultWithTiming {
+                result: ClassificationResult {
+                    action: ClassificationAction::InsertText(text),
+                    confidence: 0.0,
+                    requires_disambiguation: false,
+                },
+                timings: PerformanceTimings {
+                    embed_ms: embed_duration_ms,
+                    search_ms: search_duration_ms,
+                    total_ms: total_start.elapsed().as_millis() as u64,
+                },
+            });
+        }
+
         // High confidence - execute command
-        if similarity > 0.85 {
-            ClassificationResult {
-                action: ClassificationAction::ExecuteCommand(command.action),
-                confidence: similarity,
-                requires_disambiguation: false,
+        if similarity > 0.80 {
+            let mut action = command.action.clone();
+
+            // Extract parameters for System commands
+            if let crate::registry::CommandAction::System(ref mut sys_action) = action {
+                match sys_action {
+                    crate::registry::SystemAction::OpenNote { name } => {
+                        // Simple extraction: remove the trigger phrase if possible, or just use the whole text
+                        // Ideally we'd know WHICH phrase matched, but for now we'll just try to strip common prefixes
+                        let lower_text = text.to_lowercase();
+                        let prefixes = [
+                            "open note",
+                            "open file",
+                            "go to note",
+                            "switch to note",
+                            "open",
+                        ];
+                        let mut extracted = text.clone();
+                        for prefix in prefixes {
+                            if lower_text.starts_with(prefix) {
+                                extracted = text[prefix.len()..].trim().to_string();
+                                break;
+                            }
+                        }
+                        *name = extracted;
+                    }
+                    crate::registry::SystemAction::Search { query } => {
+                        let lower_text = text.to_lowercase();
+                        let prefixes = ["search for", "find note", "search notes", "search"];
+                        let mut extracted = text.clone();
+                        for prefix in prefixes {
+                            if lower_text.starts_with(prefix) {
+                                extracted = text[prefix.len()..].trim().to_string();
+                                break;
+                            }
+                        }
+                        *query = extracted;
+                    }
+                    _ => {}
+                }
             }
+
+            return Ok(ClassificationResultWithTiming {
+                result: ClassificationResult {
+                    action: ClassificationAction::ExecuteCommand(action),
+                    confidence: similarity,
+                    requires_disambiguation: false,
+                },
+                timings: PerformanceTimings {
+                    embed_ms: embed_duration_ms,
+                    search_ms: search_duration_ms,
+                    total_ms: total_start.elapsed().as_millis() as u64,
+                },
+            });
         }
         // Medium confidence - require disambiguation
         else if similarity > 0.65 {
-            ClassificationResult {
-                action: ClassificationAction::Ambiguous {
-                    text: text.clone(),
-                    possible_command: command.action,
+            return Ok(ClassificationResultWithTiming {
+                result: ClassificationResult {
+                    action: ClassificationAction::Ambiguous {
+                        text: text.clone(),
+                        possible_command: command.action,
+                    },
+                    confidence: similarity,
+                    requires_disambiguation: true,
                 },
-                confidence: similarity,
-                requires_disambiguation: true,
-            }
+                timings: PerformanceTimings {
+                    embed_ms: embed_duration_ms,
+                    search_ms: search_duration_ms,
+                    total_ms: total_start.elapsed().as_millis() as u64,
+                },
+            });
         }
-        // Low confidence - insert as text
-        else {
-            ClassificationResult {
-                action: ClassificationAction::InsertText(text),
-                confidence: 0.0,
-                requires_disambiguation: false,
-            }
-        }
-    } else {
-        // No match - insert as text
-        ClassificationResult {
+    }
+
+    // Default to inserting text
+    Ok(ClassificationResultWithTiming {
+        result: ClassificationResult {
             action: ClassificationAction::InsertText(text),
             confidence: 0.0,
             requires_disambiguation: false,
-        }
-    };
-
-    let search_duration_ms = search_start.elapsed().as_millis() as u64;
-    let total_duration_ms = total_start.elapsed().as_millis() as u64;
-
-    Ok(ClassificationResultWithTiming {
-        result,
+        },
         timings: PerformanceTimings {
             embed_ms: embed_duration_ms,
             search_ms: search_duration_ms,
-            total_ms: total_duration_ms,
+            total_ms: total_start.elapsed().as_millis() as u64,
         },
     })
+}
+
+fn match_command_patterns(text: &str) -> Option<CommandAction> {
+    let text_lower = text.to_lowercase();
+    let text_lower = text_lower.trim_end_matches(|c| c == '.' || c == '!' || c == '?');
+
+    // Exact matches (100% confidence)
+    match text_lower {
+        "undo" | "undo that" | "undo last command" => {
+            return Some(CommandAction::Editor(EditorAction::UndoVoiceCommand))
+        }
+        "redo" => return Some(CommandAction::Editor(EditorAction::Redo)),
+        "new line" | "next line" => return Some(CommandAction::Editor(EditorAction::NewLine)),
+        "delete" | "delete that" => return Some(CommandAction::Editor(EditorAction::Delete)),
+        "select all" => return Some(CommandAction::Editor(EditorAction::SelectAll)),
+        _ => {}
+    }
+
+    // Pattern matches
+    if text_lower.starts_with("heading") {
+        if text_lower.contains("one") || text_lower.contains("1") {
+            return Some(CommandAction::Format(FormatType::Heading { level: 1 }));
+        }
+        if text_lower.contains("two") || text_lower.contains("2") {
+            return Some(CommandAction::Format(FormatType::Heading { level: 2 }));
+        }
+        if text_lower.contains("three") || text_lower.contains("3") {
+            return Some(CommandAction::Format(FormatType::Heading { level: 3 }));
+        }
+    }
+
+    // "make this [format]"
+    if text_lower.starts_with("make this") || text_lower.starts_with("make it") {
+        if text_lower.contains("bold") {
+            return Some(CommandAction::Format(FormatType::Bold));
+        }
+        if text_lower.contains("italic") {
+            return Some(CommandAction::Format(FormatType::Italic));
+        }
+        if text_lower.contains("heading") {
+            if text_lower.contains("one") || text_lower.contains("1") {
+                return Some(CommandAction::Format(FormatType::Heading { level: 1 }));
+            }
+            // Default to H1 if just "make this heading"
+            return Some(CommandAction::Format(FormatType::Heading { level: 1 }));
+        }
+    }
+
+    None
+}
+
+fn looks_like_dictation(text: &str, command_similarity: f32) -> bool {
+    // Only treat as dictation if:
+    // 1. Command similarity is very low (<0.5)
+    // 2. AND it looks like natural speech
+
+    if command_similarity > 0.5 {
+        return false; // Probably a command
+    }
+
+    let word_count = text.split_whitespace().count();
+
+    // Long sentences are likely dictation
+    if word_count > 8 {
+        return true;
+    }
+
+    // Ends with punctuation = dictation
+    if text.trim_end().ends_with(&['.', '!', '?', ','][..]) {
+        return true;
+    }
+
+    // Contains common dictation phrases
+    let dictation_markers = [
+        "i think",
+        "i was",
+        "i am",
+        "we should",
+        "let's",
+        "yesterday",
+        "today",
+        "tomorrow",
+        "meeting with",
+    ];
+
+    let text_lower = text.to_lowercase();
+    if dictation_markers.iter().any(|m| text_lower.contains(m)) {
+        return true;
+    }
+
+    false
 }
 
 #[derive(Debug, Serialize, Deserialize)]

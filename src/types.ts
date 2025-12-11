@@ -12,3 +12,16 @@ export interface VoiceLogEntry {
         total_ms?: number;
     };
 }
+
+export interface FileNode {
+    path: string;
+    name: string;
+    is_dir: boolean;
+    children?: FileNode[];
+}
+
+export interface SearchResult {
+    path: string;
+    title: string;
+    excerpt: string;
+}

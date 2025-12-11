@@ -42,33 +42,37 @@ export function VoiceIndicator({
 	};
 
 	return (
-		<div className='fixed bottom-6 right-6 flex items-center gap-2'>
+		<div className='fixed bottom-8 right-8 flex items-center gap-1 p-1.5 bg-background/80 backdrop-blur-md border border-border rounded-full shadow-2xl transition-all hover:scale-105 z-40'>
 			<button
 				onClick={onLogClick}
-				className='p-3 bg-card border border-border rounded-full hover:border-primary transition-colors cursor-pointer shadow-lg text-muted-foreground hover:text-foreground'
+				className='p-2.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors'
 				title='View Voice Log'
 			>
 				<FileText className='w-4 h-4' />
 			</button>
 
+			<div className='w-px h-4 bg-border mx-1' />
+
 			<button
 				onClick={onToggleListening}
-				className={`flex items-center gap-2 px-4 py-3 bg-card border border-border rounded-full hover:border-primary transition-colors cursor-pointer shadow-lg ${
-					state === 'listening' ? 'border-red-500' : ''
+				className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 ${
+					state === 'listening'
+						? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
+						: state === 'processing'
+						? 'bg-yellow-500 text-white'
+						: state === 'executing'
+						? 'bg-blue-500 text-white'
+						: 'hover:bg-muted text-foreground'
 				}`}
-				title='Toggle microphone'
 			>
-				<div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
-				<span className='text-sm font-medium text-foreground'>
-					{getStatusLabel()}
-				</span>
 				<Mic
 					className={`w-4 h-4 ${
-						state === 'listening'
-							? 'text-red-500'
-							: 'text-muted-foreground'
+						state === 'listening' ? 'animate-pulse' : ''
 					}`}
 				/>
+				<span className={`text-sm font-medium`}>
+					{getStatusLabel()}
+				</span>
 			</button>
 		</div>
 	);

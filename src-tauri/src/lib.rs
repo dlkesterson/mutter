@@ -2,14 +2,47 @@ mod audio;
 mod commands;
 mod ml;
 mod registry;
+mod system;
 
 use commands::*;
+use system::*;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_global_shortcut::ShortcutState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        if let Some(window) = app.get_webview_window("quick-capture") {
+                            if window.is_visible().unwrap_or(false) {
+                                window.hide().ok();
+                            } else {
+                                window.show().ok();
+                                window.set_focus().ok();
+                            }
+                        } else {
+                            let _ = WebviewWindowBuilder::new(
+                                app,
+                                "quick-capture",
+                                WebviewUrl::App("/#/quick-capture".into()),
+                            )
+                            .title("Quick Capture")
+                            .inner_size(400.0, 300.0)
+                            .always_on_top(true)
+                            .decorations(false)
+                            .resizable(false)
+                            .center()
+                            .build();
+                        }
+                    }
+                })
+                .build(),
+        )
         .manage(commands::AppState::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -59,10 +92,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             process_audio_chunk,
+            update_vad_settings,
+            register_global_hotkey,
+            append_to_inbox,
+            close_quick_capture,
             transcribe_audio,
             transcribe_streaming,
             classify_text,
             get_embedding,
+            get_file_tree,
+            search_notes,
+            get_current_context,
             download_model,
             download_model_from_hub,
             is_model_downloaded,

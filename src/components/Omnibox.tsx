@@ -98,61 +98,66 @@ export function Omnibox({
 		return null;
 	}
 
+	if (!open) return null;
+
 	return (
 		<div
-			className='fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/50'
+			className='fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-background/80 backdrop-blur-sm transition-all duration-200'
 			onClick={() => setOpen(false)}
 		>
 			<div
-				className='w-full max-w-2xl'
+				className='w-full max-w-2xl animate-in fade-in zoom-in-95 duration-200'
 				onClick={(e) => e.stopPropagation()}
 			>
-				<div className='bg-card border border-border rounded-lg shadow-lg'>
-					<div className='flex items-center gap-3 px-4 py-3 border-b border-border'>
+				<div className='bg-background border border-border rounded-xl shadow-2xl overflow-hidden'>
+					<div className='flex items-center gap-3 px-4 py-4 border-b border-border bg-muted/30'>
 						<Search className='w-5 h-5 text-muted-foreground' />
 						<input
 							type='text'
-							placeholder='Search commands...'
+							placeholder='Type a command or search...'
 							value={searchValue}
 							onChange={(e) => setSearchValue(e.target.value)}
-							className='flex-1 bg-transparent text-foreground outline-none'
+							className='flex-1 bg-transparent text-lg text-foreground outline-none placeholder:text-muted-foreground/50'
 							autoFocus
 						/>
 						<button
 							onClick={startVoiceInput}
 							disabled={isListening}
-							className='p-2 hover:bg-muted rounded transition-colors'
+							className={`p-2 rounded-full transition-all duration-200 ${
+								isListening
+									? 'bg-red-500/10 text-red-500 animate-pulse'
+									: 'hover:bg-muted text-muted-foreground hover:text-foreground'
+							}`}
 							title='Voice input'
 						>
-							<Mic
-								className={`w-5 h-5 ${
-									isListening
-										? 'text-blue-500'
-										: 'text-muted-foreground'
-								}`}
-							/>
+							<Mic className='w-5 h-5' />
 						</button>
 					</div>
 
-					<div className='max-h-96 overflow-y-auto'>
+					<div className='max-h-[60vh] overflow-y-auto p-2'>
 						{filteredCommands.length === 0 ? (
-							<div className='px-4 py-8 text-center text-muted-foreground'>
+							<div className='px-4 py-12 text-center text-muted-foreground'>
 								No commands found
 							</div>
 						) : (
-							<div className='p-2'>
+							<div className='space-y-1'>
 								{filteredCommands.map((cmd) => (
 									<button
 										key={cmd.command}
 										onClick={() =>
 											handleSelect(cmd.command)
 										}
-										className='w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors mb-1 last:mb-0'
+										className='w-full text-left px-4 py-3 rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors group'
 									>
-										<div className='font-medium text-foreground'>
-											{cmd.label}
+										<div className='flex items-center justify-between'>
+											<div className='font-medium text-foreground group-hover:text-accent-foreground'>
+												{cmd.label}
+											</div>
+											<span className='text-xs text-muted-foreground/50 font-mono opacity-0 group-hover:opacity-100 transition-opacity'>
+												{cmd.command}
+											</span>
 										</div>
-										<div className='text-sm text-muted-foreground'>
+										<div className='text-sm text-muted-foreground group-hover:text-accent-foreground/80'>
 											{cmd.description}
 										</div>
 									</button>
@@ -161,12 +166,15 @@ export function Omnibox({
 						)}
 					</div>
 
-					<div className='px-4 py-2 border-t border-border text-xs text-muted-foreground'>
-						Press{' '}
-						<kbd className='px-1.5 py-0.5 bg-muted rounded text-foreground'>
-							ESC
-						</kbd>{' '}
-						to close
+					<div className='px-4 py-3 border-t border-border bg-muted/30 text-xs text-muted-foreground flex justify-between items-center'>
+						<span>
+							Press{' '}
+							<kbd className='px-1.5 py-0.5 bg-background border border-border rounded text-foreground font-mono'>
+								ESC
+							</kbd>{' '}
+							to close
+						</span>
+						<span>Mutter Command Palette</span>
 					</div>
 				</div>
 			</div>

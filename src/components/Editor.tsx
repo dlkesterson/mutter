@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
 import { EditorState } from '@codemirror/state';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { livePreviewPlugin, cursorPosField } from '../editor/livePreview';
-import { editorTheme } from '../editor/theme';
+import { editorThemeExtension } from '../editor/theme';
 import { executeCommand, CommandAction } from '../editor/commands';
 import { flashEffect, addFlash } from '../editor/flashEffect';
 import { markdownAutoPairExtension } from '../editor/autoPairs';
@@ -34,6 +35,7 @@ interface EditorProps {
 			total_ms?: number;
 		};
 	}) => void;
+	onSystemCommand?: (action: any) => void;
 }
 
 interface ClassificationResult {
@@ -59,6 +61,7 @@ export default function Editor({
 	filePath,
 	audioState,
 	onVoiceLogEntry,
+	onSystemCommand,
 }: EditorProps) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
@@ -70,6 +73,82 @@ export default function Editor({
 		confidence: number;
 		position: { top: number; left: number };
 	} | null>(null);
+
+	// Command History for Undo
+	interface CommandHistoryEntry {
+		id: string;
+		timestamp: Date;
+		command: CommandAction;
+		beforeState: string;
+		beforeSelection: { from: number; to: number };
+		afterState: string;
+	}
+	const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>(
+		[]
+	);
+
+	const executeVoiceCommand = (command: CommandAction) => {
+		if (!viewRef.current) return;
+
+		// Capture state before
+		const beforeState = viewRef.current.state.doc.toString();
+		const beforeSelection = {
+			from: viewRef.current.state.selection.main.from,
+			to: viewRef.current.state.selection.main.to,
+		};
+
+		// Execute
+		executeCommand(viewRef.current, command);
+
+		// Capture state after
+		const afterState = viewRef.current.state.doc.toString();
+
+		// Add to history
+		setCommandHistory((prev) => [
+			...prev,
+			{
+				id: Math.random().toString(36).substring(7),
+				timestamp: new Date(),
+				command,
+				beforeState,
+				beforeSelection,
+				afterState,
+			},
+		]);
+	};
+
+	const undoLastVoiceCommand = () => {
+		if (!viewRef.current || commandHistory.length === 0) {
+			toast({
+				title: 'Nothing to undo',
+				description: 'No voice commands in history',
+				variant: 'destructive',
+			});
+			return;
+		}
+
+		const lastCommand = commandHistory[commandHistory.length - 1];
+
+		// Restore state
+		viewRef.current.dispatch({
+			changes: {
+				from: 0,
+				to: viewRef.current.state.doc.length,
+				insert: lastCommand.beforeState,
+			},
+			selection: {
+				anchor: lastCommand.beforeSelection.from,
+				head: lastCommand.beforeSelection.to,
+			},
+		});
+
+		setCommandHistory((prev) => prev.slice(0, -1));
+
+		toast({
+			title: 'Undid command',
+			description: 'Restored previous state',
+		});
+	};
 
 	// Listen for partial transcription events (Ghost Text)
 	useEffect(() => {
@@ -119,6 +198,30 @@ export default function Editor({
 					viewRef.current.state.selection.main.from !==
 					viewRef.current.state.selection.main.to;
 
+				// Get cursor context
+				const pos = viewRef.current.state.selection.main.head;
+				const line = viewRef.current.state.doc.lineAt(pos);
+				const cursorContext = {
+					line_text: line.text,
+					line_number: line.number,
+					is_start_of_line: pos === line.from,
+					is_end_of_line: pos === line.to,
+					previous_char:
+						pos > 0
+							? viewRef.current.state.doc.sliceString(
+									pos - 1,
+									pos
+							  )
+							: '',
+					next_char:
+						pos < viewRef.current.state.doc.length
+							? viewRef.current.state.doc.sliceString(
+									pos,
+									pos + 1
+							  )
+							: '',
+				};
+
 				const classifyResult: {
 					result: ClassificationResult;
 					timings: {
@@ -129,6 +232,8 @@ export default function Editor({
 				} = await invoke('classify_text', {
 					text,
 					hasSelection,
+					cursorContext,
+					systemContext: await invoke('get_current_context'),
 				});
 
 				console.log('Classification timings:', classifyResult.timings);
@@ -151,6 +256,8 @@ export default function Editor({
 						interpretation = `System: ${JSON.stringify(
 							cmd.System
 						)}`;
+					} else if (cmd.AppSpecific) {
+						interpretation = `App: ${cmd.AppSpecific}`;
 					}
 				} else if (result.action.Ambiguous) {
 					actionType = 'ambiguous';
@@ -168,15 +275,32 @@ export default function Editor({
 				}
 
 				if (result.action.ExecuteCommand) {
-					const { from, to } = viewRef.current.state.selection.main;
-					executeCommand(
-						viewRef.current,
-						result.action.ExecuteCommand
-					);
-					// Add flash effect for formatting commands
-					viewRef.current.dispatch({
-						effects: addFlash.of({ from, to, type: 'format' }),
-					});
+					const cmd = result.action.ExecuteCommand;
+
+					// Handle Undo Voice Command specifically
+					if (cmd.Editor && 'UndoVoiceCommand' in cmd.Editor) {
+						undoLastVoiceCommand();
+					} else if (cmd.AppSpecific) {
+						// Handle App Specific commands
+						console.log('App Specific Command:', cmd.AppSpecific);
+						toast({
+							title: 'App Command',
+							description: `Action: ${cmd.AppSpecific}`,
+						});
+					} else if (cmd.System) {
+						// Handle System commands
+						if (onSystemCommand) {
+							onSystemCommand(cmd.System);
+						}
+					} else {
+						const { from, to } =
+							viewRef.current.state.selection.main;
+						executeVoiceCommand(cmd);
+						// Add flash effect for formatting commands
+						viewRef.current.dispatch({
+							effects: addFlash.of({ from, to, type: 'format' }),
+						});
+					}
 					toast({
 						title: 'Command Executed',
 						description: `Executed: ${JSON.stringify(
@@ -291,8 +415,8 @@ export default function Editor({
 			extensions: [
 				basicSetup,
 				EditorView.lineWrapping,
-				markdown(),
-				editorTheme,
+				markdown({ codeLanguages: languages }),
+				editorThemeExtension,
 				cursorPosField,
 				livePreviewPlugin,
 				flashEffect,

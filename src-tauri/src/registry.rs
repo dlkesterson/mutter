@@ -8,6 +8,7 @@ pub struct CommandIntent {
     pub embedding: Vec<f32>,
     pub action: CommandAction,
     pub selection_required: bool,
+    pub context_filter: Option<String>, // e.g., "code", "browser"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +16,7 @@ pub enum CommandAction {
     Format(FormatType),
     Editor(EditorAction),
     System(SystemAction),
+    AppSpecific(String), // New action type for app-specific commands
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +41,7 @@ pub enum FormatType {
 pub enum EditorAction {
     Undo,
     Redo,
+    UndoVoiceCommand,
     NewLine,
     Delete,
     SelectAll,
@@ -50,6 +53,16 @@ pub enum SystemAction {
     OpenNote { name: String },
     Search { query: String },
     SaveNote,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorContext {
+    pub line_text: String,
+    pub line_number: usize,
+    pub is_start_of_line: bool,
+    pub is_end_of_line: bool,
+    pub previous_char: String,
+    pub next_char: String,
 }
 
 pub struct CommandRegistry {
@@ -76,6 +89,7 @@ impl CommandRegistry {
                 embedding: vec![], // Will be computed on first run
                 action: CommandAction::Format(FormatType::Bold),
                 selection_required: true,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_italic".to_string(),
@@ -87,6 +101,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Italic),
                 selection_required: true,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_heading1".to_string(),
@@ -100,6 +115,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 1 }),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_heading2".to_string(),
@@ -111,6 +127,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 2 }),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_bullet_list".to_string(),
@@ -123,6 +140,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::BulletList),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_quote".to_string(),
@@ -134,18 +152,19 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Quote),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "editor_undo".to_string(),
                 phrases: vec![
                     "undo".to_string(),
-                    "undo that".to_string(),
                     "go back".to_string(),
                     "revert".to_string(),
                 ],
                 embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Undo),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "editor_redo".to_string(),
@@ -157,6 +176,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Redo),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_link".to_string(),
@@ -168,6 +188,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Link),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_image".to_string(),
@@ -179,6 +200,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Image),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_table".to_string(),
@@ -190,6 +212,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Table),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_code_block".to_string(),
@@ -201,6 +224,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::CodeBlock),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_task_list".to_string(),
@@ -213,6 +237,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Checkbox),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "insert_horizontal_rule".to_string(),
@@ -225,6 +250,7 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::HorizontalRule),
                 selection_required: false,
+                context_filter: None,
             },
             CommandIntent {
                 id: "format_inline_code".to_string(),
@@ -236,6 +262,57 @@ impl CommandRegistry {
                 embedding: vec![],
                 action: CommandAction::Format(FormatType::Code),
                 selection_required: true,
+                context_filter: None,
+            },
+            CommandIntent {
+                id: "editor_undo_voice_command".to_string(),
+                phrases: vec![
+                    "undo that".to_string(),
+                    "undo last command".to_string(),
+                    "revert that".to_string(),
+                    "go back".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::Editor(EditorAction::UndoVoiceCommand),
+                selection_required: false,
+                context_filter: None,
+            },
+            CommandIntent {
+                id: "vscode_commit".to_string(),
+                phrases: vec!["commit changes".to_string(), "git commit".to_string()],
+                embedding: vec![],
+                action: CommandAction::AppSpecific("git_commit".to_string()),
+                selection_required: false,
+                context_filter: Some("code".to_string()),
+            },
+            CommandIntent {
+                id: "system_open_note".to_string(),
+                phrases: vec![
+                    "open note".to_string(),
+                    "open file".to_string(),
+                    "go to note".to_string(),
+                    "switch to note".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::System(SystemAction::OpenNote {
+                    name: "".to_string(),
+                }),
+                selection_required: false,
+                context_filter: None,
+            },
+            CommandIntent {
+                id: "system_search".to_string(),
+                phrases: vec![
+                    "search for".to_string(),
+                    "find note".to_string(),
+                    "search notes".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::System(SystemAction::Search {
+                    query: "".to_string(),
+                }),
+                selection_required: false,
+                context_filter: None,
             },
         ]
     }
@@ -244,6 +321,8 @@ impl CommandRegistry {
         &self,
         input_embedding: &[f32],
         has_selection: bool,
+        _cursor_context: &CursorContext,
+        system_context: Option<&crate::system::SystemContext>,
     ) -> Option<(CommandIntent, f32)> {
         let mut best_match: Option<(CommandIntent, f32)> = None;
 
@@ -251,6 +330,18 @@ impl CommandRegistry {
             // Skip commands that require selection if user has none
             if command.selection_required && !has_selection {
                 continue;
+            }
+
+            // Check context filter
+            if let Some(filter) = &command.context_filter {
+                if let Some(ctx) = system_context {
+                    if !ctx.app_name.to_lowercase().contains(&filter.to_lowercase()) {
+                        continue;
+                    }
+                } else {
+                    // If command requires context but none provided, skip
+                    continue;
+                }
             }
 
             let similarity = cosine_similarity(input_embedding, &command.embedding);
