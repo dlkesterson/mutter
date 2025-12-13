@@ -230,7 +230,7 @@ export function WhisperModelSelector({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className='sm:max-w-[600px]'>
+			<DialogContent className='sm:max-w-[600px] max-h-[85vh] flex flex-col'>
 				<DialogHeader>
 					<DialogTitle>Select Whisper Model</DialogTitle>
 					<DialogDescription>
@@ -239,7 +239,7 @@ export function WhisperModelSelector({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className='grid gap-3 py-4'>
+				<div className='grid gap-3 py-4 overflow-y-auto px-1'>
 					{WHISPER_MODELS.map((model) => {
 						const isDownloaded = downloadedModels.has(model.id);
 						const isDownloading =
@@ -254,16 +254,17 @@ export function WhisperModelSelector({
 								}}
 								disabled={downloading}
 								className={cn(
-									'flex items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors',
-									'hover:bg-accent hover:border-primary',
+									'flex items-start gap-3 rounded-lg border p-4 text-left transition-colors',
+									'hover:bg-accent hover:text-accent-foreground',
 									'disabled:opacity-50 disabled:cursor-not-allowed',
-									isDownloaded &&
-										'border-green-500/50 bg-green-500/10'
+									isDownloaded
+										? 'border-green-500/50 bg-green-500/10'
+										: 'border-input bg-transparent'
 								)}
 							>
 								<div className='flex-1'>
 									<div className='flex items-center gap-2'>
-										<h4 className='font-semibold'>
+										<h4 className='font-semibold text-foreground'>
 											{model.name}
 										</h4>
 										{model.recommended && (

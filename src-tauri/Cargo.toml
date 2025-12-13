@@ -30,11 +30,6 @@ tauri-plugin-global-shortcut = "2.3.1"
 walkdir = "2.5.0"
 active-win-pos-rs = "0.9.1"
 
-# WebView dependencies for Linux
-[target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = "2.0"
-gtk = "0.18"
-
 # Audio processing
 hound = "3.5"
 ringbuf = "0.3"
@@ -58,6 +53,11 @@ reqwest = { version = "0.12", features = ["stream"] }
 futures-util = "0.3"
 rand = "0.8"
 dirs = "5.0"
+
+# WebView dependencies for Linux
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
 
 # Optimize dependencies even in debug mode for ML performance
 [profile.dev.package."*"]
