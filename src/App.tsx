@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import Editor from './components/Editor';
@@ -14,11 +14,16 @@ import { getStorageItem, setStorageItem } from './utils/storage';
 import { VoiceLogEntry } from './types';
 import { QuickCapture } from './components/QuickCapture';
 import { Sidebar } from './components/Sidebar';
+import { CrdtSpike } from './components/CrdtSpike';
+import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
+const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
+
 function App() {
 	const [currentFile, setCurrentFile] = useState<string | null>(null);
+	const [vaultPath, setVaultPath] = useState<string | null>(null);
 	const [audioState, setAudioState] = useState<
 		'idle' | 'listening' | 'processing' | 'executing'
 	>('idle');
@@ -28,12 +33,19 @@ function App() {
 	const [openDialog, setOpenDialog] = useState<DialogType>(null);
 	const [fileDialogQuery, setFileDialogQuery] = useState<string>('');
 	const [isQuickCapture, setIsQuickCapture] = useState(false);
+	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	useEffect(() => {
-		// Check if we are in quick capture mode
-		if (window.location.hash === '#/quick-capture') {
-			setIsQuickCapture(true);
-		}
+		const syncModeFromHash = () => {
+			const hash = window.location.hash;
+			setIsQuickCapture(hash.startsWith('#/quick-capture'));
+			setIsCrdtSpike(hash.startsWith('#/crdt'));
+		};
+
+		syncModeFromHash();
+		window.addEventListener('hashchange', syncModeFromHash);
+		return () =>
+			window.removeEventListener('hashchange', syncModeFromHash);
 	}, []);
 
 	const { startRecording, stopRecording } = useAudioRecorder(() => {
@@ -42,6 +54,10 @@ function App() {
 
 	if (isQuickCapture) {
 		return <QuickCapture />;
+	}
+
+	if (isCrdtSpike) {
+		return <CrdtSpike />;
 	}
 
 	const addVoiceLogEntry = (
@@ -98,6 +114,58 @@ function App() {
 			setStorageItem('last_opened_file', currentFile);
 		}
 	}, [currentFile]);
+
+	const vaultMeta = useVaultMetadataCrdt({ vaultPath, activeFilePath: currentFile });
+
+	const onOpenNoteById = useCallback(() => {
+		const id = window.prompt('Note ID (uuid)', '')?.trim() ?? '';
+		if (!id) return;
+		const path = vaultMeta.openNoteById(id);
+		if (!path) {
+			window.alert('Note not found in vault metadata.');
+			return;
+		}
+		setCurrentFile(path);
+	}, [vaultMeta]);
+
+	const onSetActiveNoteTags = useCallback(() => {
+		if (!vaultMeta.activeNoteId) {
+			window.alert('No active note.');
+			return;
+		}
+		const raw = window.prompt('Tags (comma-separated)', '') ?? '';
+		const tags = raw
+			.split(',')
+			.map((t) => t.trim())
+			.filter(Boolean);
+		vaultMeta.setActiveNoteTags(tags);
+	}, [vaultMeta]);
+
+	const onConfigureCrdtWebSocket = useCallback(() => {
+		const current = window.localStorage.getItem(CRDT_WS_URL_KEY) ?? '';
+		const raw = window.prompt(
+			'CRDT WebSocket URL (e.g. ws://127.0.0.1:3030)',
+			current || 'ws://127.0.0.1:3030'
+		);
+		if (raw === null) return;
+
+		const trimmed = raw.trim();
+		if (!trimmed) {
+			window.localStorage.removeItem(CRDT_WS_URL_KEY);
+		} else {
+			window.localStorage.setItem(CRDT_WS_URL_KEY, trimmed);
+		}
+		window.location.reload();
+	}, []);
+
+	const onClearCrdtWebSocket = useCallback(() => {
+		const ok = window.confirm(
+			'Clear CRDT WebSocket URL for this install? (requires reload)'
+		);
+		if (!ok) return;
+		window.localStorage.removeItem(CRDT_WS_URL_KEY);
+		window.location.reload();
+	}, []);
 
 	// Open model selector on first launch if no model is loaded
 	useEffect(() => {
@@ -221,6 +289,10 @@ function App() {
 				activePath={currentFile}
 				onFileSelect={setCurrentFile}
 				onSettingsClick={() => setOpenDialog('settings')}
+				onVaultPathChange={setVaultPath}
+				onNoteRenamed={(oldPath, newPath) => vaultMeta.recordRename(oldPath, newPath)}
+				vaultId={vaultMeta.vaultId}
+				activeNoteId={vaultMeta.activeNoteId}
 			/>
 
 			<div className='flex-1 flex flex-col overflow-hidden relative'>
@@ -234,6 +306,7 @@ function App() {
 						audioState={audioState}
 						onVoiceLogEntry={addVoiceLogEntry}
 						onSystemCommand={handleSystemCommand}
+						onContentSaved={(content) => vaultMeta.recordContent(content)}
 					/>
 
 					<Omnibox
@@ -241,6 +314,10 @@ function App() {
 						onDialogOpen={setOpenDialog}
 						isListening={audioState === 'listening'}
 						onToggleListening={toggleListening}
+						onOpenNoteById={onOpenNoteById}
+						onSetActiveNoteTags={onSetActiveNoteTags}
+						onConfigureCrdtWebSocket={onConfigureCrdtWebSocket}
+						onClearCrdtWebSocket={onClearCrdtWebSocket}
 					/>
 
 					<VoiceIndicator

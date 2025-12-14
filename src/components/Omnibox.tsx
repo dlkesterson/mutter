@@ -8,6 +8,10 @@ interface OmniboxProps {
 	onDialogOpen: (type: 'files' | 'voice-log' | 'settings') => void;
 	isListening: boolean;
 	onToggleListening: () => void;
+	onOpenNoteById?: () => void;
+	onSetActiveNoteTags?: () => void;
+	onConfigureCrdtWebSocket?: () => void;
+	onClearCrdtWebSocket?: () => void;
 }
 
 const commands = [
@@ -34,6 +38,26 @@ const commands = [
 		command: 'open file',
 	},
 	{
+		label: 'Open note by ID',
+		description: 'Open a note using its stable note_id',
+		command: 'open note by id',
+	},
+	{
+		label: 'Set note tags',
+		description: 'Edit tags for the current note (vault metadata CRDT)',
+		command: 'set note tags',
+	},
+	{
+		label: 'Configure CRDT WebSocket',
+		description: 'Connect CRDT sync via a WebSocket relay URL',
+		command: 'configure crdt websocket',
+	},
+	{
+		label: 'Clear CRDT WebSocket',
+		description: 'Disable WebSocket relay (requires reload)',
+		command: 'clear crdt websocket',
+	},
+	{
 		label: 'Settings',
 		description: 'Open app settings',
 		command: 'settings',
@@ -45,6 +69,10 @@ export function Omnibox({
 	onDialogOpen,
 	isListening,
 	onToggleListening,
+	onOpenNoteById,
+	onSetActiveNoteTags,
+	onConfigureCrdtWebSocket,
+	onClearCrdtWebSocket,
 }: OmniboxProps) {
 	const [open, setOpen] = useState(false);
 	const [searchValue, setSearchValue] = useState('');
@@ -70,6 +98,14 @@ export function Omnibox({
 			onDialogOpen('settings');
 		} else if (command === 'open file') {
 			onDialogOpen('files');
+		} else if (command === 'open note by id') {
+			onOpenNoteById?.();
+		} else if (command === 'set note tags') {
+			onSetActiveNoteTags?.();
+		} else if (command === 'configure crdt websocket') {
+			onConfigureCrdtWebSocket?.();
+		} else if (command === 'clear crdt websocket') {
+			onClearCrdtWebSocket?.();
 		} else {
 			onCommand(command, `Voice command: ${command}`);
 		}

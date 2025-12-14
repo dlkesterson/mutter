@@ -19,3 +19,6 @@ node_modules
 dist/
 
 repomix-output.xml
+
+# Agent Tracker test directory
+.agent-tracker-test/

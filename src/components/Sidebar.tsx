@@ -11,6 +11,7 @@ import {
 	PanelLeftClose,
 	PanelLeftOpen,
 	Settings,
+	Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,12 +19,20 @@ interface SidebarProps {
 	activePath: string | null;
 	onFileSelect: (path: string) => void;
 	onSettingsClick: () => void;
+	onVaultPathChange?: (vaultPath: string | null) => void;
+	onNoteRenamed?: (oldPath: string, newPath: string) => void;
+	vaultId?: string | null;
+	activeNoteId?: string | null;
 }
 
 export function Sidebar({
 	activePath,
 	onFileSelect,
 	onSettingsClick,
+	onVaultPathChange,
+	onNoteRenamed,
+	vaultId,
+	activeNoteId,
 }: SidebarProps) {
 	const [width, setWidth] = useState(250);
 	const [isCollapsed, setIsCollapsed] = useState(false);
@@ -58,6 +67,9 @@ export function Sidebar({
 		const path = await getStorageItem<string>('vault_path');
 		if (path) {
 			setVaultPath(path);
+			onVaultPathChange?.(path);
+		} else {
+			onVaultPathChange?.(null);
 		}
 	};
 
@@ -97,6 +109,38 @@ export function Sidebar({
 		if (selected) {
 			await setStorageItem('vault_path', selected);
 			setVaultPath(selected as string);
+			onVaultPathChange?.(selected as string);
+		}
+	};
+
+	const handleCreateNote = async () => {
+		if (!vaultPath) return;
+		try {
+			const newPath = await invoke<string>('create_note', {
+				vaultPath,
+				filename: 'Untitled.md',
+			});
+			await loadFileTree(vaultPath);
+			onFileSelect(newPath);
+		} catch (error) {
+			console.error('Failed to create note:', error);
+		}
+	};
+
+	const handleRename = async (oldPath: string, newName: string) => {
+		if (!vaultPath) return;
+		try {
+			const newPath = await invoke<string>('rename_note', {
+				oldPath,
+				newName,
+			});
+			await loadFileTree(vaultPath);
+			if (activePath === oldPath) {
+				onFileSelect(newPath);
+			}
+			onNoteRenamed?.(oldPath, newPath);
+		} catch (error) {
+			console.error('Failed to rename note:', error);
 		}
 	};
 
@@ -176,6 +220,16 @@ export function Sidebar({
 							variant='ghost'
 							size='icon'
 							className='h-8 w-8'
+							onClick={handleCreateNote}
+							title='New Note'
+							disabled={!vaultPath}
+						>
+							<Plus size={16} />
+						</Button>
+						<Button
+							variant='ghost'
+							size='icon'
+							className='h-8 w-8'
 							onClick={handleSelectVault}
 							title='Open Vault'
 						>
@@ -192,6 +246,12 @@ export function Sidebar({
 						</Button>
 					</div>
 				</div>
+				{vaultPath && (vaultId || activeNoteId) ? (
+					<div className='px-4 py-2 border-b border-border text-xs text-muted-foreground flex flex-col gap-1'>
+						{vaultId ? <div>vault_id={vaultId.slice(0, 8)}</div> : null}
+						{activeNoteId ? <div>note_id={activeNoteId.slice(0, 8)}</div> : null}
+					</div>
+				) : null}
 
 				{/* Search */}
 				<div className='p-3 border-b border-border shrink-0'>
@@ -251,6 +311,7 @@ export function Sidebar({
 						<FileTree
 							nodes={fileTree}
 							onSelect={onFileSelect}
+							onRename={handleRename}
 							className='h-full p-2'
 							activePath={activePath}
 						/>

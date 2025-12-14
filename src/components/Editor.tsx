@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { indentWithTab } from '@codemirror/commands';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
@@ -36,6 +37,7 @@ interface EditorProps {
 		};
 	}) => void;
 	onSystemCommand?: (action: any) => void;
+	onContentSaved?: (content: string) => void;
 }
 
 interface ClassificationResult {
@@ -62,6 +64,7 @@ export default function Editor({
 	audioState,
 	onVoiceLogEntry,
 	onSystemCommand,
+	onContentSaved,
 }: EditorProps) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
@@ -414,6 +417,7 @@ export default function Editor({
 			doc: content,
 			extensions: [
 				basicSetup,
+				keymap.of([indentWithTab]),
 				EditorView.lineWrapping,
 				markdown({ codeLanguages: languages }),
 				editorThemeExtension,
@@ -465,11 +469,13 @@ export default function Editor({
 		if (!filePath || !content) return;
 
 		const timer = setTimeout(() => {
-			writeTextFile(filePath, content).catch(console.error);
+			writeTextFile(filePath, content)
+				.then(() => onContentSaved?.(content))
+				.catch(console.error);
 		}, 500);
 
 		return () => clearTimeout(timer);
-	}, [content, filePath]);
+	}, [content, filePath, onContentSaved]);
 
 	return (
 		<div className='flex-1 flex flex-col overflow-hidden bg-background'>

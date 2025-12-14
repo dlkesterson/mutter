@@ -3032,10 +3032,12 @@ version = "0.1.0"
 dependencies = [
  "active-win-pos-rs",
  "anyhow",
+ "base64 0.22.1",
  "byteorder",
  "candle-core",
  "candle-nn",
  "candle-transformers",
+ "chrono",
  "dirs 5.0.1",
  "futures-util",
  "gtk",
@@ -3058,6 +3060,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokenizers",
  "tokio",
+ "uuid",
  "walkdir",
  "webkit2gtk",
 ]

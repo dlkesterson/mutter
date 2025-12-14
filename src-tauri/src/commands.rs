@@ -139,6 +139,60 @@ pub async fn search_notes(query: String, vault_path: String) -> Result<Vec<Searc
     Ok(results)
 }
 
+#[tauri::command]
+pub async fn create_note(vault_path: String, filename: Option<String>) -> Result<String, String> {
+    let root = std::path::Path::new(&vault_path);
+    if !root.exists() {
+        return Err("Vault path does not exist".to_string());
+    }
+
+    let mut name = filename.unwrap_or_else(|| "Untitled.md".to_string());
+    if !name.ends_with(".md") {
+        name.push_str(".md");
+    }
+
+    let base_name = name.trim_end_matches(".md").to_string();
+    let mut final_name = name.clone();
+    let mut final_path = root.join(&final_name);
+    let mut i = 1;
+
+    while final_path.exists() {
+        final_name = format!("{} {}.md", base_name, i);
+        final_path = root.join(&final_name);
+        i += 1;
+    }
+
+    std::fs::write(&final_path, "").map_err(|e| e.to_string())?;
+
+    Ok(final_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn rename_note(old_path: String, new_name: String) -> Result<String, String> {
+    let old_path_buf = std::path::Path::new(&old_path);
+    if !old_path_buf.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let parent = old_path_buf.parent().ok_or("Invalid path")?;
+    let mut new_path_buf = parent.join(&new_name);
+
+    // If original was .md and new name doesn't have it, append it
+    if old_path_buf.extension().and_then(|s| s.to_str()) == Some("md") {
+        if !new_name.ends_with(".md") {
+            new_path_buf = parent.join(format!("{}.md", new_name));
+        }
+    }
+
+    if new_path_buf.exists() {
+        return Err("A file with that name already exists".to_string());
+    }
+
+    std::fs::rename(old_path_buf, &new_path_buf).map_err(|e| e.to_string())?;
+
+    Ok(new_path_buf.to_string_lossy().to_string())
+}
+
 fn extract_excerpt(content: &str, query_lower: &str) -> String {
     let content_lower = content.to_lowercase();
     if let Some(idx) = content_lower.find(query_lower) {
