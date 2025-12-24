@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v0.1.0, v1.2.3, etc.
+  workflow_dispatch:  # Allow manual trigger from Actions UI
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Mutter ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Mutter v${{ steps.get_version.outputs.version }}
+
+            Voice-first markdown editor with local ML capabilities.
+
+            ### Downloads
+            - **Linux**: Download the AppImage or .deb package
+            - **Windows**: Download the .msi installer
+            - **macOS**: Download the .dmg (Intel) or .app (Apple Silicon)
+
+            ### Installation
+            - **Linux AppImage**: Make executable and run
+            - **Windows/macOS**: Run the installer
+
+            ### First Run
+            - Open a vault folder
+            - Download a Whisper model (Distil Medium recommended)
+            - Start voice commands with the microphone button
+
+            ---
+            🤖 Generated with Forgejo Actions
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - name: Upload AppImage
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./src-tauri/target/release/bundle/appimage/mutter_${{ needs.create-release.outputs.version }}_amd64.AppImage
+          asset_name: mutter-${{ needs.create-release.outputs.version }}-linux-x86_64.AppImage
+          asset_content_type: application/vnd.appimage
+
+      - name: Upload deb package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./src-tauri/target/release/bundle/deb/mutter_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: mutter-${{ needs.create-release.outputs.version }}-linux-x86_64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - name: Upload MSI installer
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./src-tauri/target/release/bundle/msi/mutter_${{ needs.create-release.outputs.version }}_x64_en-US.msi
+          asset_name: mutter-${{ needs.create-release.outputs.version }}-windows-x86_64.msi
+          asset_content_type: application/x-msi
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build Tauri app (Universal binary)
+        run: pnpm tauri build --target universal-apple-darwin
+
+      - name: Upload DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./src-tauri/target/universal-apple-darwin/release/bundle/dmg/mutter_${{ needs.create-release.outputs.version }}_universal.dmg
+          asset_name: mutter-${{ needs.create-release.outputs.version }}-macos-universal.dmg
+          asset_content_type: application/x-apple-diskimage
