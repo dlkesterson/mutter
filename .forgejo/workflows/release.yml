@@ -7,55 +7,24 @@ on:
   workflow_dispatch:  # Allow manual trigger from Actions UI
 
 jobs:
-  create-release:
+  build-linux:
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get version from tag
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="dev-$(date +%Y%m%d)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Mutter ${{ steps.get_version.outputs.version }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Mutter v${{ steps.get_version.outputs.version }}
-
-            Voice-first markdown editor with local ML capabilities.
-
-            ### Downloads
-            - **Linux**: Download the AppImage or .deb package
-            - **Windows**: Download the .msi installer
-            - **macOS**: Download the .dmg (Intel) or .app (Apple Silicon)
-
-            ### Installation
-            - **Linux AppImage**: Make executable and run
-            - **Windows/macOS**: Run the installer
-
-            ### First Run
-            - Open a vault folder
-            - Download a Whisper model (Distil Medium recommended)
-            - Start voice commands with the microphone button
-
-            ---
-            🤖 Generated with Forgejo Actions
-
-  build-linux:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -63,15 +32,18 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Setup Rust
+        uses: https://github.com/actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
+          override: true
 
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \
@@ -88,92 +60,97 @@ jobs:
       - name: Build Tauri app
         run: pnpm tauri build
 
-      - name: Upload AppImage
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/release/bundle/appimage/mutter_${{ needs.create-release.outputs.version }}_amd64.AppImage
-          asset_name: mutter-${{ needs.create-release.outputs.version }}-linux-x86_64.AppImage
-          asset_content_type: application/vnd.appimage
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          VERSION=${{ env.VERSION }}
 
-      - name: Upload deb package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/release/bundle/deb/mutter_${{ needs.create-release.outputs.version }}_amd64.deb
-          asset_name: mutter-${{ needs.create-release.outputs.version }}-linux-x86_64.deb
-          asset_content_type: application/vnd.debian.binary-package
+          # Find and copy AppImage
+          if [ -f src-tauri/target/release/bundle/appimage/mutter_${VERSION}_amd64.AppImage ]; then
+            cp src-tauri/target/release/bundle/appimage/mutter_${VERSION}_amd64.AppImage \
+               artifacts/mutter-${VERSION}-linux-x86_64.AppImage
+          fi
 
-  build-windows:
-    needs: create-release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+          # Find and copy .deb package
+          if [ -f src-tauri/target/release/bundle/deb/mutter_${VERSION}_amd64.deb ]; then
+            cp src-tauri/target/release/bundle/deb/mutter_${VERSION}_amd64.deb \
+               artifacts/mutter-${VERSION}-linux-x86_64.deb
+          fi
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+          # List artifacts
+          ls -lh artifacts/
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Create release and upload artifacts
+        run: |
+          VERSION=${{ env.VERSION }}
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+          # Create release body
+          cat > release_body.md << 'EOF'
+          ## Mutter v${{ env.VERSION }}
 
-      - name: Install frontend dependencies
-        run: pnpm install
+          Voice-first markdown editor with local ML capabilities.
 
-      - name: Build Tauri app
-        run: pnpm tauri build
+          ### Downloads
+          - **Linux AppImage**: Download, make executable (`chmod +x`), and run
+          - **Linux .deb**: Install with `sudo dpkg -i mutter-*.deb`
 
-      - name: Upload MSI installer
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/release/bundle/msi/mutter_${{ needs.create-release.outputs.version }}_x64_en-US.msi
-          asset_name: mutter-${{ needs.create-release.outputs.version }}-windows-x86_64.msi
-          asset_content_type: application/x-msi
+          ### First Run
+          1. Open a vault folder (markdown files directory)
+          2. Download a Whisper model from Settings (Distil Medium recommended)
+          3. Start voice commands with the microphone button
 
-  build-macos:
-    needs: create-release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
+          ### Features
+          - Voice-controlled markdown editing (bold, italic, headings, etc.)
+          - Local speech-to-text with Whisper
+          - Semantic command recognition with BERT
+          - Live preview editor (syntax hides when not editing)
+          - Auto-save functionality
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+          ---
+          🤖 Generated with [Forgejo Actions](https://forgejo.org)
+          EOF
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+          # Create release using Forgejo API
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"tag_name\": \"${TAG_NAME}\",
+              \"name\": \"Mutter ${VERSION}\",
+              \"body\": $(jq -Rs . < release_body.md),
+              \"draft\": false,
+              \"prerelease\": false
+            }" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/releases"
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - name: Upload artifacts to release
+        run: |
+          VERSION=${{ env.VERSION }}
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
 
-      - name: Install frontend dependencies
-        run: pnpm install
+          # Get release ID
+          RELEASE_ID=$(curl -s \
+            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/${TAG_NAME}" \
+            | jq -r '.id')
 
-      - name: Build Tauri app (Universal binary)
-        run: pnpm tauri build --target universal-apple-darwin
+          echo "Release ID: $RELEASE_ID"
 
-      - name: Upload DMG
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/universal-apple-darwin/release/bundle/dmg/mutter_${{ needs.create-release.outputs.version }}_universal.dmg
-          asset_name: mutter-${{ needs.create-release.outputs.version }}-macos-universal.dmg
-          asset_content_type: application/x-apple-diskimage
+          # Upload AppImage if it exists
+          if [ -f artifacts/mutter-${VERSION}-linux-x86_64.AppImage ]; then
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+              -H "Content-Type: application/vnd.appimage" \
+              --data-binary @artifacts/mutter-${VERSION}-linux-x86_64.AppImage \
+              "${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=mutter-${VERSION}-linux-x86_64.AppImage"
+          fi
+
+          # Upload .deb if it exists
+          if [ -f artifacts/mutter-${VERSION}-linux-x86_64.deb ]; then
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+              -H "Content-Type: application/vnd.debian.binary-package" \
+              --data-binary @artifacts/mutter-${VERSION}-linux-x86_64.deb \
+              "${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=mutter-${VERSION}-linux-x86_64.deb"
+          fi
