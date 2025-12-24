@@ -65,19 +65,28 @@ jobs:
           mkdir -p artifacts
           VERSION=${{ env.VERSION }}
 
-          # Find and copy AppImage
-          if [ -f src-tauri/target/release/bundle/appimage/mutter_${VERSION}_amd64.AppImage ]; then
-            cp src-tauri/target/release/bundle/appimage/mutter_${VERSION}_amd64.AppImage \
-               artifacts/mutter-${VERSION}-linux-x86_64.AppImage
+          # Find and copy AppImage (use wildcard to match actual version)
+          APPIMAGE=$(find src-tauri/target/release/bundle/appimage -name "mutter_*.AppImage" -type f | head -n 1)
+          if [ -n "$APPIMAGE" ]; then
+            echo "Found AppImage: $APPIMAGE"
+            cp "$APPIMAGE" artifacts/mutter-${VERSION}-linux-x86_64.AppImage
+          else
+            echo "No AppImage found"
+            ls -la src-tauri/target/release/bundle/appimage/ || echo "appimage directory does not exist"
           fi
 
-          # Find and copy .deb package
-          if [ -f src-tauri/target/release/bundle/deb/mutter_${VERSION}_amd64.deb ]; then
-            cp src-tauri/target/release/bundle/deb/mutter_${VERSION}_amd64.deb \
-               artifacts/mutter-${VERSION}-linux-x86_64.deb
+          # Find and copy .deb package (use wildcard to match actual version)
+          DEB=$(find src-tauri/target/release/bundle/deb -name "mutter_*.deb" -type f | head -n 1)
+          if [ -n "$DEB" ]; then
+            echo "Found .deb: $DEB"
+            cp "$DEB" artifacts/mutter-${VERSION}-linux-x86_64.deb
+          else
+            echo "No .deb found"
+            ls -la src-tauri/target/release/bundle/deb/ || echo "deb directory does not exist"
           fi
 
           # List artifacts
+          echo "Artifacts directory contents:"
           ls -lh artifacts/
 
       - name: Create release and upload artifacts
