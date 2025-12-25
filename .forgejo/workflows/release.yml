@@ -100,8 +100,14 @@ jobs:
           Voice-first markdown editor with local ML capabilities.
 
           ### Downloads
-          - **Linux AppImage**: Download, make executable (`chmod +x`), and run
-          - **Linux .deb**: Install with `sudo dpkg -i mutter-*.deb`
+
+          **Linux:**
+          - **AppImage**: Download, make executable (`chmod +x`), and run
+          - **.deb Package**: Install with `sudo dpkg -i mutter-*.deb`
+
+          **Windows:**
+          - **MSI Installer**: Standard Windows installer package
+          - **NSIS Setup**: Alternative installer with more options
 
           ### First Run
           1. Open a vault folder (markdown files directory)
@@ -161,4 +167,117 @@ jobs:
               -H "Content-Type: application/vnd.debian.binary-package" \
               --data-binary @artifacts/mutter-${VERSION}-linux-x86_64.deb \
               "${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=mutter-${VERSION}-linux-x86_64.deb"
+          fi
+
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="dev-$(date +%Y%m%d)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Setup Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+          source "$HOME/.cargo/env"
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Add Windows target
+        run: |
+          source "$HOME/.cargo/env"
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Install Windows cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64 \
+            gcc-mingw-w64-x86-64 \
+            nsis \
+            wine64
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build Tauri app for Windows
+        run: |
+          source "$HOME/.cargo/env"
+          pnpm tauri build --target x86_64-pc-windows-gnu
+
+      - name: Prepare Windows artifacts
+        run: |
+          mkdir -p artifacts
+          VERSION=${{ env.VERSION }}
+
+          # Find and copy MSI installer
+          MSI=$(find src-tauri/target/x86_64-pc-windows-gnu/release/bundle/msi -name "*.msi" -type f | head -n 1)
+          if [ -n "$MSI" ]; then
+            echo "Found MSI: $MSI"
+            cp "$MSI" artifacts/mutter-${VERSION}-windows-x86_64.msi
+          else
+            echo "No MSI found"
+            ls -la src-tauri/target/x86_64-pc-windows-gnu/release/bundle/msi/ || echo "msi directory does not exist"
+          fi
+
+          # Find and copy NSIS installer
+          NSIS=$(find src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis -name "*.exe" -type f | head -n 1)
+          if [ -n "$NSIS" ]; then
+            echo "Found NSIS installer: $NSIS"
+            cp "$NSIS" artifacts/mutter-${VERSION}-windows-x86_64-setup.exe
+          else
+            echo "No NSIS installer found"
+            ls -la src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis/ || echo "nsis directory does not exist"
+          fi
+
+          # List artifacts
+          echo "Artifacts directory contents:"
+          ls -lh artifacts/
+
+      - name: Upload Windows artifacts to release
+        run: |
+          VERSION=${{ env.VERSION }}
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+
+          # Get release ID
+          RELEASE_ID=$(curl -s \
+            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/${TAG_NAME}" \
+            | jq -r '.id')
+
+          echo "Release ID: $RELEASE_ID"
+
+          # Upload MSI if it exists
+          if [ -f artifacts/mutter-${VERSION}-windows-x86_64.msi ]; then
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+              -H "Content-Type: application/x-msi" \
+              --data-binary @artifacts/mutter-${VERSION}-windows-x86_64.msi \
+              "${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=mutter-${VERSION}-windows-x86_64.msi"
+          fi
+
+          # Upload NSIS installer if it exists
+          if [ -f artifacts/mutter-${VERSION}-windows-x86_64-setup.exe ]; then
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+              -H "Content-Type: application/x-msdownload" \
+              --data-binary @artifacts/mutter-${VERSION}-windows-x86_64-setup.exe \
+              "${{ github.api_url }}/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=mutter-${VERSION}-windows-x86_64-setup.exe"
           fi
