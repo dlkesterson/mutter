@@ -46,6 +46,13 @@ pub struct SearchResult {
     pub excerpt: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractedTask {
+    pub description: String,
+    pub checked: bool,
+    pub line_number: usize,
+}
+
 #[tauri::command]
 pub async fn get_file_tree(vault_path: String) -> Result<Vec<FileNode>, String> {
     let root = std::path::Path::new(&vault_path);
@@ -963,4 +970,71 @@ pub async fn has_loaded_model(state: State<'_, AppState>) -> Result<bool, String
         .lock()
         .map_err(|_| "Whisper engine lock poisoned".to_string())?;
     Ok(engine.is_loaded())
+}
+
+/// Extract tasks from markdown content
+#[tauri::command]
+pub async fn extract_tasks(content: String) -> Result<Vec<ExtractedTask>, String> {
+    let mut tasks = Vec::new();
+
+    for (line_num, line) in content.lines().enumerate() {
+        let trimmed = line.trim_start();
+
+        // Match unchecked tasks: - [ ]
+        if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+            tasks.push(ExtractedTask {
+                description: rest.trim().to_string(),
+                checked: false,
+                line_number: line_num + 1, // 1-indexed for user display
+            });
+        }
+        // Match checked tasks: - [x] or - [X]
+        else if let Some(rest) = trimmed.strip_prefix("- [x] ")
+            .or_else(|| trimmed.strip_prefix("- [X] "))
+        {
+            tasks.push(ExtractedTask {
+                description: rest.trim().to_string(),
+                checked: true,
+                line_number: line_num + 1,
+            });
+        }
+    }
+
+    Ok(tasks)
+}
+
+/// Create a task in Agent-Tracker
+#[tauri::command]
+pub async fn create_agent_tracker_task(
+    description: String,
+    source_file: Option<String>,
+) -> Result<String, String> {
+    log::info!("Creating Agent-Tracker task: {}", description);
+
+    // Construct the tracker CLI command
+    // Assumes the tracker binary is in PATH or at a known location
+    let tracker_path = std::env::var("TRACKER_CLI_PATH")
+        .unwrap_or_else(|_| "tracker".to_string());
+
+    let mut cmd = std::process::Command::new(tracker_path);
+    cmd.arg("task")
+        .arg("create")
+        .arg(&description);
+
+    if let Some(file) = source_file {
+        cmd.arg("--source").arg(file);
+    }
+
+    // Execute the command
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute tracker command: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Tracker command failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.trim().to_string())
 }

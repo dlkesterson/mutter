@@ -25,3 +25,17 @@ export interface SearchResult {
     title: string;
     excerpt: string;
 }
+
+export interface Task {
+    id?: string;
+    description: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    source_file?: string;
+    line_number?: number;
+}
+
+export interface ExtractedTask {
+    description: string;
+    checked: boolean;
+    line_number: number;
+}

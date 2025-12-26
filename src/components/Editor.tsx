@@ -20,6 +20,7 @@ import {
 } from '../editor/ghostText';
 import { useToast } from '../hooks/use-toast';
 import AmbiguityPopover from './AmbiguityPopover';
+import type { ExtractedTask } from '../types';
 
 interface EditorProps {
 	filePath: string | null;
@@ -286,10 +287,98 @@ export default function Editor({
 					} else if (cmd.AppSpecific) {
 						// Handle App Specific commands
 						console.log('App Specific Command:', cmd.AppSpecific);
-						toast({
-							title: 'App Command',
-							description: `Action: ${cmd.AppSpecific}`,
-						});
+
+						if (cmd.AppSpecific === 'create_task') {
+							// Handle task creation
+							const selection = viewRef.current.state.selection.main;
+							const hasSelection = selection.from !== selection.to;
+
+							if (hasSelection) {
+								// Use selected text as task description
+								const taskDescription = viewRef.current.state.doc.sliceString(
+									selection.from,
+									selection.to
+								);
+
+								invoke('create_agent_tracker_task', {
+									description: taskDescription,
+									sourceFile: filePath || undefined,
+								})
+									.then(() => {
+										toast({
+											title: 'Task Created',
+											description: `Created task: ${taskDescription}`,
+										});
+									})
+									.catch((error) => {
+										toast({
+											title: 'Task Creation Failed',
+											description: String(error),
+											variant: 'destructive',
+										});
+									});
+							} else {
+								// Extract tasks from document
+								const docContent = viewRef.current.state.doc.toString();
+
+								invoke<ExtractedTask[]>('extract_tasks', { content: docContent })
+									.then((tasks) => {
+										if (tasks.length === 0) {
+											toast({
+												title: 'No Tasks Found',
+												description: 'No unchecked tasks found in document',
+												variant: 'destructive',
+											});
+										} else {
+											// Create all unchecked tasks
+											const uncheckedTasks = tasks.filter(t => !t.checked);
+
+											if (uncheckedTasks.length === 0) {
+												toast({
+													title: 'No Unchecked Tasks',
+													description: 'All tasks are already checked',
+													variant: 'destructive',
+												});
+												return;
+											}
+
+											Promise.all(
+												uncheckedTasks.map((task) =>
+													invoke('create_agent_tracker_task', {
+														description: task.description,
+														sourceFile: filePath || undefined,
+													})
+												)
+											)
+												.then(() => {
+													toast({
+														title: 'Tasks Created',
+														description: `Created ${uncheckedTasks.length} task(s) in Agent-Tracker`,
+													});
+												})
+												.catch((error) => {
+													toast({
+														title: 'Task Creation Failed',
+														description: String(error),
+														variant: 'destructive',
+													});
+												});
+										}
+									})
+									.catch((error) => {
+										toast({
+											title: 'Task Extraction Failed',
+											description: String(error),
+											variant: 'destructive',
+										});
+									});
+							}
+						} else {
+							toast({
+								title: 'App Command',
+								description: `Action: ${cmd.AppSpecific}`,
+							});
+						}
 					} else if (cmd.System) {
 						// Handle System commands
 						if (onSystemCommand) {

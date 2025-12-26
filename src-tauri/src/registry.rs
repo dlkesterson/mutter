@@ -314,6 +314,21 @@ impl CommandRegistry {
                 selection_required: false,
                 context_filter: None,
             },
+            CommandIntent {
+                id: "agent_tracker_create_task".to_string(),
+                phrases: vec![
+                    "create task".to_string(),
+                    "add task".to_string(),
+                    "new task".to_string(),
+                    "make a task".to_string(),
+                    "create task from selection".to_string(),
+                    "send to task tracker".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::AppSpecific("create_task".to_string()),
+                selection_required: false,
+                context_filter: None,
+            },
         ]
     }
 

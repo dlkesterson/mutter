@@ -123,6 +123,8 @@ pub fn run() {
             has_loaded_model,
             load_embedding_model,
             initialize_embeddings,
+            extract_tasks,
+            create_agent_tracker_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
