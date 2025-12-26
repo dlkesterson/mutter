@@ -16,13 +16,19 @@ import { QuickCapture } from './components/QuickCapture';
 import { Sidebar } from './components/Sidebar';
 import { CrdtSpike } from './components/CrdtSpike';
 import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
+import { TabBar, Tab } from './components/TabBar';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
 function App() {
-	const [currentFile, setCurrentFile] = useState<string | null>(null);
+	console.log('App rendering');
+	const [tabs, setTabs] = useState<Tab[]>([]);
+	const [activeTabId, setActiveTabId] = useState<string | null>(null);
+	const activeTab = tabs.find((t) => t.id === activeTabId);
+	const currentFile = activeTab?.path || null;
+
 	const [vaultPath, setVaultPath] = useState<string | null>(null);
 	const [audioState, setAudioState] = useState<
 		'idle' | 'listening' | 'processing' | 'executing'
@@ -73,6 +79,53 @@ function App() {
 		]);
 	};
 
+	const handleFileSelect = (path: string) => {
+		setTabs((prevTabs) => {
+			const existingTab = prevTabs.find((t) => t.path === path);
+			if (existingTab) {
+				setActiveTabId(existingTab.id);
+				return prevTabs;
+			}
+			
+			const newTab: Tab = {
+				id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+				path,
+				title: path.split('/').pop() || 'Untitled',
+			};
+			setActiveTabId(newTab.id);
+			return [...prevTabs, newTab];
+		});
+	};
+
+	const handleTabClose = (id: string, e: React.MouseEvent) => {
+		e.stopPropagation();
+		const newTabs = tabs.filter((t) => t.id !== id);
+		setTabs(newTabs);
+
+		if (activeTabId === id) {
+			if (newTabs.length > 0) {
+				setActiveTabId(newTabs[newTabs.length - 1].id);
+			} else {
+				setActiveTabId(null);
+			}
+		}
+	};
+
+	const handleNoteRename = (oldPath: string, newPath: string) => {
+		setTabs((prev) =>
+			prev.map((tab) => {
+				if (tab.path === oldPath) {
+					return {
+						...tab,
+						path: newPath,
+						title: newPath.split('/').pop() || 'Untitled',
+					};
+				}
+				return tab;
+			})
+		);
+	};
+
 	useEffect(() => {
 		// Initialize embeddings on startup
 		const initialize = async () => {
@@ -96,8 +149,10 @@ function App() {
 					'last_opened_file'
 				);
 				if (lastFile) {
-					setCurrentFile(lastFile);
+					handleFileSelect(lastFile);
 				}
+				
+				// TODO: Restore full tab session if we decide to persist it
 			} catch (error) {
 				console.error('Failed to initialize embeddings:', error);
 				// Still allow the app to run
@@ -125,7 +180,7 @@ function App() {
 			window.alert('Note not found in vault metadata.');
 			return;
 		}
-		setCurrentFile(path);
+		handleFileSelect(path);
 	}, [vaultMeta]);
 
 	const onSetActiveNoteTags = useCallback(() => {
@@ -287,10 +342,13 @@ function App() {
 		<div className='flex h-screen w-screen overflow-hidden bg-background text-foreground'>
 			<Sidebar
 				activePath={currentFile}
-				onFileSelect={setCurrentFile}
+				onFileSelect={handleFileSelect}
 				onSettingsClick={() => setOpenDialog('settings')}
 				onVaultPathChange={setVaultPath}
-				onNoteRenamed={(oldPath, newPath) => vaultMeta.recordRename(oldPath, newPath)}
+				onNoteRenamed={(oldPath, newPath) => {
+					vaultMeta.recordRename(oldPath, newPath);
+					handleNoteRename(oldPath, newPath);
+				}}
 				vaultId={vaultMeta.vaultId}
 				activeNoteId={vaultMeta.activeNoteId}
 			/>
@@ -301,6 +359,13 @@ function App() {
 				/>
 
 				<main className='flex-1 flex flex-col overflow-hidden relative'>
+					<TabBar 
+						tabs={tabs}
+						activeTabId={activeTabId}
+						onTabClick={setActiveTabId}
+						onTabClose={handleTabClose}
+					/>
+					
 					<Editor
 						filePath={currentFile}
 						audioState={audioState}
@@ -338,7 +403,7 @@ function App() {
 					}
 				}}
 				onFileSelect={(path) => {
-					setCurrentFile(path);
+					handleFileSelect(path);
 					setOpenDialog(null);
 					setFileDialogQuery('');
 				}}
@@ -364,13 +429,7 @@ function App() {
 			/>
 			<Toaster />
 
-			{!isInitialized && (
-				<div className='fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm'>
-					<div className='text-lg font-medium animate-pulse'>
-						Initializing AI Brain...
-					</div>
-				</div>
-			)}
+			{/* Loading overlay removed for debugging */}
 		</div>
 	);
 }

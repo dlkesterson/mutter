@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mutter WebGPU Embeddings Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    h1 {
+      color: #4CAF50;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    #output {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .status.success { background: #2e7d32; }
+    .status.error { background: #c62828; }
+    .status.warning { background: #f57c00; }
+    .status.info { background: #1976d2; }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Mutter WebGPU Embeddings Prototype</h1>
+
+  <div id="status" class="status info">
+    Initializing... Check console and output below
+  </div>
+
+  <div>
+    <button id="runTest" onclick="runTest()">Run WebGPU Test</button>
+    <button id="compareDevices" onclick="compareDevices()">Compare WebGPU vs WASM</button>
+    <button onclick="clearOutput()">Clear Output</button>
+  </div>
+
+  <div id="output"></div>
+
+  <script type="module">
+    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+    // Configuration
+    env.allowLocalModels = false;
+    env.allowRemoteModels = true;
+
+    const output = document.getElementById('output');
+    const statusDiv = document.getElementById('status');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const line = `[${timestamp}] ${message}\n`;
+      output.textContent += line;
+      output.scrollTop = output.scrollHeight;
+      console.log(message);
+    }
+
+    function setStatus(message, type = 'info') {
+      statusDiv.textContent = message;
+      statusDiv.className = `status ${type}`;
+    }
+
+    async function checkWebGPU() {
+      if (!navigator.gpu) {
+        setStatus('❌ WebGPU not available', 'error');
+        log('❌ WebGPU not available in this browser', 'error');
+        return false;
+      }
+
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+          setStatus('❌ No WebGPU adapter found', 'error');
+          log('❌ No WebGPU adapter found', 'error');
+          return false;
+        }
+
+        setStatus('✅ WebGPU available', 'success');
+        log('✅ WebGPU available');
+        log(`   Vendor: ${adapter.info.vendor || 'Unknown'}`);
+        log(`   Architecture: ${adapter.info.architecture || 'Unknown'}`);
+        return true;
+      } catch (error) {
+        setStatus('❌ WebGPU check failed', 'error');
+        log(`❌ WebGPU check failed: ${error.message}`, 'error');
+        return false;
+      }
+    }
+
+    async function runEmbedding(text, device) {
+      log(`\n🧪 Testing embeddings with ${device.toUpperCase()}`);
+      log(`   Input: "${text}"`);
+
+      const totalStart = performance.now();
+
+      try {
+        // Load model
+        setStatus(`Loading model (${device})...`, 'info');
+        log('   Loading model...');
+        const loadStart = performance.now();
+
+        const embedder = await pipeline(
+          'feature-extraction',
+          'Xenova/all-MiniLM-L6-v2',
+          {
+            device,
+            dtype: device === 'webgpu' ? 'fp32' : undefined,
+            progress_callback: (progress) => {
+              if (progress.status === 'progress') {
+                const pct = Math.round(progress.progress);
+                log(`   Download: ${progress.file} - ${pct}%`);
+              }
+            }
+          }
+        );
+
+        const loadTime = performance.now() - loadStart;
+        log(`   ✓ Model loaded in ${loadTime.toFixed(2)}ms`);
+
+        // Generate embedding
+        setStatus(`Generating embedding (${device})...`, 'info');
+        log('   Generating embedding...');
+        const embedStart = performance.now();
+
+        const embedding = await embedder(text, {
+          pooling: 'mean',
+          normalize: true
+        });
+
+        const embedTime = performance.now() - embedStart;
+        const totalTime = performance.now() - totalStart;
+
+        // Extract results
+        const firstValues = Array.from(embedding.data.slice(0, 5));
+
+        log(`   ✓ Embedding generated in ${embedTime.toFixed(2)}ms`);
+        log(`   ✓ Total time: ${totalTime.toFixed(2)}ms`);
+        log(`   Shape: [${embedding.dims.join(', ')}]`);
+        log(`   First 5 values: [${firstValues.map(v => v.toFixed(4)).join(', ')}]`);
+
+        setStatus(`✅ ${device.toUpperCase()} test complete`, 'success');
+
+        return {
+          device,
+          text,
+          embeddingTime: embedTime,
+          totalTime,
+          dimensions: embedding.dims,
+          firstValues
+        };
+      } catch (error) {
+        setStatus(`❌ ${device.toUpperCase()} test failed`, 'error');
+        log(`   ❌ Error: ${error.message}`, 'error');
+        throw error;
+      }
+    }
+
+    window.runTest = async function() {
+      output.textContent = '';
+      log('='.repeat(80));
+      log('Mutter WebGPU Embeddings Prototype');
+      log('='.repeat(80));
+
+      const hasWebGPU = await checkWebGPU();
+      if (!hasWebGPU) {
+        log('\n❌ Cannot proceed without WebGPU support');
+        log('   Make sure you\'re using Chrome 113+, Edge 113+, or Firefox with WebGPU enabled');
+        return;
+      }
+
+      const testCommands = [
+        'make this bold',
+        'heading one',
+        'create task',
+        'search for authentication',
+        'undo that'
+      ];
+
+      log('\n📝 Testing with real Mutter command examples:');
+
+      const results = [];
+      for (const command of testCommands) {
+        const result = await runEmbedding(command, 'webgpu');
+        results.push(result);
+      }
+
+      // Calculate statistics
+      const avgTime = results.reduce((sum, r) => sum + r.embeddingTime, 0) / results.length;
+      const minTime = Math.min(...results.map(r => r.embeddingTime));
+      const maxTime = Math.max(...results.map(r => r.embeddingTime));
+
+      log('\n📊 Performance Statistics:');
+      log(`   Average: ${avgTime.toFixed(2)}ms`);
+      log(`   Min: ${minTime.toFixed(2)}ms`);
+      log(`   Max: ${maxTime.toFixed(2)}ms`);
+
+      setStatus(`✅ All tests complete! Avg: ${avgTime.toFixed(2)}ms`, 'success');
+    };
+
+    window.compareDevices = async function() {
+      output.textContent = '';
+      log('='.repeat(80));
+      log('WebGPU vs WASM Performance Comparison');
+      log('='.repeat(80));
+
+      const hasWebGPU = await checkWebGPU();
+      if (!hasWebGPU) {
+        log('\n❌ Cannot run comparison without WebGPU');
+        return;
+      }
+
+      const testText = 'make this bold';
+
+      // Test WebGPU
+      const webgpuResult = await runEmbedding(testText, 'webgpu');
+
+      // Test WASM
+      const wasmResult = await runEmbedding(testText, 'wasm');
+
+      // Calculate speedup
+      const speedup = wasmResult.embeddingTime / webgpuResult.embeddingTime;
+
+      log('\n📈 Comparison Results:');
+      log(`   WebGPU: ${webgpuResult.embeddingTime.toFixed(2)}ms`);
+      log(`   WASM:   ${wasmResult.embeddingTime.toFixed(2)}ms`);
+      log(`   Speedup: ${speedup.toFixed(2)}x faster with WebGPU`);
+
+      if (speedup > 10) {
+        log('   🚀 Massive speedup! WebGPU is significantly faster.');
+        setStatus(`🚀 ${speedup.toFixed(2)}x speedup!`, 'success');
+      } else if (speedup > 2) {
+        log('   ✅ Good speedup. WebGPU provides clear benefit.');
+        setStatus(`✅ ${speedup.toFixed(2)}x speedup`, 'success');
+      } else {
+        log('   ⚠️  Modest speedup. May not justify migration.');
+        setStatus(`⚠️ Only ${speedup.toFixed(2)}x speedup`, 'warning');
+      }
+    };
+
+    window.clearOutput = function() {
+      output.textContent = '';
+      setStatus('Ready to test', 'info');
+    };
+
+    // Auto-check on load
+    checkWebGPU();
+  </script>
+</body>
+</html>
