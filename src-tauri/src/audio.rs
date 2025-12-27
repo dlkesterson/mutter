@@ -33,7 +33,7 @@ pub enum VadEvent {
 
 /// Voice Activity Detection state
 pub struct VadState {
-    is_speaking: bool,
+    pub is_speaking: bool,
     silence_duration: f32,
     speech_duration: f32,
 
@@ -53,9 +53,9 @@ impl VadState {
             speech_duration: 0.0,
             energy_history: Vec::with_capacity(10),
             adaptive_threshold: 0.002,
-            min_speech_duration: 0.3, // 300ms
-            silence_threshold: 0.8,   // 800ms
-            sensitivity: 1.0,
+            min_speech_duration: 0.15, // 150ms (lowered from 300ms to be more sensitive)
+            silence_threshold: 0.5,    // 500ms (lowered from 800ms for faster response)
+            sensitivity: 0.8,          // Increased sensitivity (lower value = more sensitive)
         }
     }
 
@@ -104,14 +104,17 @@ impl VadState {
 
                 if self.silence_duration > self.silence_threshold {
                     self.is_speaking = false;
+                    let was_real_speech = self.speech_duration > self.min_speech_duration;
 
-                    if self.speech_duration > self.min_speech_duration {
-                        self.speech_duration = 0.0;
-                        return VadEvent::SpeechEnd;
-                    }
+                    // Log for debugging
+                    log::debug!("[VAD] Speech->Silence transition: duration={:.2}s, threshold={:.2}s, real_speech={}",
+                               self.speech_duration, self.min_speech_duration, was_real_speech);
 
                     self.speech_duration = 0.0;
-                    return VadEvent::Silence; // Was just noise
+
+                    // Always emit SpeechEnd to trigger auto-stop, even for short utterances
+                    // This ensures the auto-stop mechanism works reliably
+                    return VadEvent::SpeechEnd;
                 }
                 return VadEvent::SpeechContinue; // Still waiting for silence timeout
             }

@@ -267,7 +267,11 @@ pub struct WhisperEngine {
 
 impl WhisperEngine {
     pub fn new() -> Self {
-        let device = Device::Cpu;
+        // Try to use CUDA GPU if available, fall back to CPU
+        let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
+
+        log::info!("Whisper using device: {:?}", device);
+
         Self {
             device,
             model: None,
@@ -362,6 +366,8 @@ impl WhisperEngine {
     }
 
     pub fn transcribe(&mut self, audio: &[f32]) -> Result<String> {
+        let start_time = std::time::Instant::now();
+
         if !self.is_loaded() {
             return Err(anyhow::anyhow!(
                 "Whisper model not loaded. Please load the model first."
@@ -476,7 +482,12 @@ impl WhisperEngine {
             }
         }
 
-        log::info!("✓ Transcription complete: '{}'", text);
+        let duration = start_time.elapsed();
+        log::info!(
+            "✓ Transcription complete in {:.2}ms: '{}'",
+            duration.as_secs_f64() * 1000.0,
+            text
+        );
         Ok(text)
     }
 
@@ -600,8 +611,13 @@ pub struct EmbeddingEngine {
 
 impl EmbeddingEngine {
     pub fn new() -> Self {
+        // Try to use CUDA GPU if available, fall back to CPU
+        let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
+
+        log::info!("Embedding engine using device: {:?}", device);
+
         Self {
-            device: Device::Cpu,
+            device,
             model: None,
             tokenizer: None,
             // A small, fast model excellent for semantic similarity

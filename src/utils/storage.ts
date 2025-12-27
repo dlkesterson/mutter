@@ -121,4 +121,7 @@ export const StorageKeys = {
     LAST_OPENED_FILE: 'last_opened_file',
     EDITOR_SETTINGS: 'editor_settings',
     VOICE_LOG_COLLAPSED: 'voice_log_collapsed',
+    AUTO_STOP_ENABLED: 'auto_stop_enabled',
+    AUTO_STOP_TIMEOUT_MS: 'auto_stop_timeout_ms',
+    MINIMAP_ENABLED: 'minimap_enabled',
 } as const;

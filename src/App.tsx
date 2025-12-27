@@ -23,7 +23,6 @@ type DialogType = 'files' | 'voice-log' | 'settings' | null;
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
 function App() {
-	console.log('App rendering');
 	const [tabs, setTabs] = useState<Tab[]>([]);
 	const [activeTabId, setActiveTabId] = useState<string | null>(null);
 	const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -33,6 +32,7 @@ function App() {
 	const [audioState, setAudioState] = useState<
 		'idle' | 'listening' | 'processing' | 'executing'
 	>('idle');
+	const [streamingTranscription, setStreamingTranscription] = useState<string>('');
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -40,6 +40,23 @@ function App() {
 	const [fileDialogQuery, setFileDialogQuery] = useState<string>('');
 	const [isQuickCapture, setIsQuickCapture] = useState(false);
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
+
+	// Auto-stop settings
+	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
+	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
+
+	// Load auto-stop settings from storage
+	useEffect(() => {
+		const loadSettings = async () => {
+			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
+			const timeout = await getStorageItem<number>('auto_stop_timeout_ms');
+
+			if (enabled !== null) setAutoStopEnabled(enabled);
+			if (timeout !== null) setAutoStopTimeoutMs(timeout);
+		};
+
+		loadSettings();
+	}, []);
 
 	useEffect(() => {
 		const syncModeFromHash = () => {
@@ -54,8 +71,16 @@ function App() {
 			window.removeEventListener('hashchange', syncModeFromHash);
 	}, []);
 
-	const { startRecording, stopRecording } = useAudioRecorder(() => {
-		console.log('Silence detected');
+	const { startRecording, stopRecording, setAutoStopCallback, recentAudioSamples } = useAudioRecorder({
+		onSilenceDetected: () => {
+			console.log('🔇 Silence detected');
+		},
+		onStreamingTranscription: (text: string) => {
+			console.log('📝 Streaming transcription:', text);
+			setStreamingTranscription(text);
+		},
+		autoStopOnSilence: autoStopEnabled,
+		silenceTimeoutMs: autoStopTimeoutMs,
 	});
 
 	if (isQuickCapture) {
@@ -109,6 +134,46 @@ function App() {
 				setActiveTabId(null);
 			}
 		}
+	};
+
+	const handleTabReorder = (fromIndex: number, toIndex: number) => {
+		const newTabs = [...tabs];
+		const [movedTab] = newTabs.splice(fromIndex, 1);
+		newTabs.splice(toIndex, 0, movedTab);
+		setTabs(newTabs);
+	};
+
+	const handleCloseOthers = (id: string) => {
+		const tab = tabs.find((t) => t.id === id);
+		if (tab) {
+			setTabs([tab]);
+			setActiveTabId(id);
+		}
+	};
+
+	const handleCloseToRight = (id: string) => {
+		const index = tabs.findIndex((t) => t.id === id);
+		if (index !== -1) {
+			const newTabs = tabs.slice(0, index + 1);
+			setTabs(newTabs);
+			// If the active tab was closed, switch to the rightmost remaining tab
+			if (activeTabId && !newTabs.find((t) => t.id === activeTabId)) {
+				setActiveTabId(newTabs[newTabs.length - 1].id);
+			}
+		}
+	};
+
+	const handleCloseAll = () => {
+		setTabs([]);
+		setActiveTabId(null);
+	};
+
+	const handleTabDirtyChange = (path: string, isDirty: boolean) => {
+		setTabs((prev) =>
+			prev.map((tab) =>
+				tab.path === path ? { ...tab, isDirty } : tab
+			)
+		);
 	};
 
 	const handleNoteRename = (oldPath: string, newPath: string) => {
@@ -282,18 +347,53 @@ function App() {
 
 	const toggleListening = async () => {
 		if (audioState === 'listening') {
-			setAudioState('processing');
-			const result = await stopRecording();
-			if (result) {
-				if ((window as any).handleTranscription) {
-					setAudioState('executing');
-					await (window as any).handleTranscription(result.text);
+			try {
+				setAudioState('processing');
+				const result = await stopRecording();
+				if (result) {
+					if ((window as any).handleTranscription) {
+						setAudioState('executing');
+						await (window as any).handleTranscription(result.text);
+					}
 				}
+			} catch (error) {
+				console.error('Voice input error:', error);
+			} finally {
+				// Always reset to idle, even if there's an error
+				setAudioState('idle');
+				setStreamingTranscription(''); // Clear streaming text
 			}
-			setAudioState('idle');
 		} else {
-			await startRecording();
-			setAudioState('listening');
+			try {
+				setStreamingTranscription(''); // Clear previous streaming text
+
+				// Set the auto-stop callback BEFORE starting recording to avoid race condition
+				setAutoStopCallback(async () => {
+					console.log('🛑 Auto-stopping recording after 3s silence');
+					try {
+						setAudioState('processing');
+						const result = await stopRecording();
+						if (result) {
+							if ((window as any).handleTranscription) {
+								setAudioState('executing');
+								await (window as any).handleTranscription(result.text);
+							}
+						}
+					} catch (error) {
+						console.error('Auto-stop error:', error);
+					} finally {
+						setAudioState('idle');
+						setStreamingTranscription('');
+					}
+				});
+
+				// Now start recording with callback already set
+				await startRecording();
+				setAudioState('listening');
+			} catch (error) {
+				console.error('Failed to start recording:', error);
+				setAudioState('idle');
+			}
 		}
 	};
 
@@ -359,11 +459,15 @@ function App() {
 				/>
 
 				<main className='flex-1 flex flex-col overflow-hidden relative'>
-					<TabBar 
+					<TabBar
 						tabs={tabs}
 						activeTabId={activeTabId}
 						onTabClick={setActiveTabId}
 						onTabClose={handleTabClose}
+						onTabReorder={handleTabReorder}
+						onCloseOthers={handleCloseOthers}
+						onCloseToRight={handleCloseToRight}
+						onCloseAll={handleCloseAll}
 					/>
 					
 					<Editor
@@ -372,6 +476,11 @@ function App() {
 						onVoiceLogEntry={addVoiceLogEntry}
 						onSystemCommand={handleSystemCommand}
 						onContentSaved={(content) => vaultMeta.recordContent(content)}
+						onDirtyChange={(isDirty) => {
+							if (currentFile) {
+								handleTabDirtyChange(currentFile, isDirty);
+							}
+						}}
 					/>
 
 					<Omnibox
@@ -389,6 +498,8 @@ function App() {
 						state={audioState}
 						onLogClick={() => setOpenDialog('voice-log')}
 						onToggleListening={toggleListening}
+						streamingText={streamingTranscription}
+						audioSamples={recentAudioSamples}
 					/>
 				</main>
 			</div>

@@ -312,6 +312,7 @@ export function Sidebar({
 							nodes={fileTree}
 							onSelect={onFileSelect}
 							onRename={handleRename}
+							onFileTreeUpdate={() => loadFileTree(vaultPath)}
 							className='h-full p-2'
 							activePath={activePath}
 						/>

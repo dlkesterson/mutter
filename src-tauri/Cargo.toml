@@ -28,6 +28,8 @@ tauri = { version = "2.9.4", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-clipboard-manager = "2"
 byteorder = "1.5.0"
 tauri-plugin-global-shortcut = "2.3.1"
 walkdir = "2.5.0"
@@ -37,10 +39,10 @@ active-win-pos-rs = "0.9.1"
 hound = "3.5"
 ringbuf = "0.3"
 
-# ML inference with Candle
-candle-core = { version = "0.8", features = [] }
-candle-nn = { version = "0.8", features = [] }
-candle-transformers = { version = "0.8", features = [] }
+# ML inference with Candle (with CUDA GPU support for 10x faster transcription)
+candle-core = { version = "0.8", features = ["cuda"] }
+candle-nn = { version = "0.8", features = ["cuda"] }
+candle-transformers = { version = "0.8", features = ["cuda"] }
 tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
 safetensors = "0.4"
 

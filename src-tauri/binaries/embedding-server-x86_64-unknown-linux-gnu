@@ -1,0 +1,9 @@
+#!/bin/bash
+# Mutter Embedding Server Sidecar
+# This script is executed by Tauri to start the embedding service
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Start the Python embedding server
+exec python3 "$SCRIPT_DIR/embedding-server.py"

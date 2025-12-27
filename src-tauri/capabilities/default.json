@@ -30,7 +30,9 @@
     "core:window:allow-close",
     "global-shortcut:allow-register",
     "global-shortcut:allow-is-registered",
-    "global-shortcut:allow-unregister"
+    "global-shortcut:allow-unregister",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
   ],
   "platforms": ["linux", "macOS", "windows"]
 }

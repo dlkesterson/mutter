@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
 	Dialog,
@@ -17,6 +17,7 @@ import {
 	SelectValue,
 } from '@/components/ui/select';
 import { useTheme } from '@/components/ThemeProvider';
+import { getStorageItem, setStorageItem } from '@/utils/storage';
 
 interface SettingsDialogProps {
 	open: boolean;
@@ -32,6 +33,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [silenceThreshold, setSilenceThreshold] = useState(800);
 	const [minSpeechDuration, setMinSpeechDuration] = useState(300);
 	const [sensitivity, setSensitivity] = useState(1.0);
+
+	// Auto-Stop Settings
+	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
+	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
+
+	// Load settings from storage
+	useEffect(() => {
+		const loadSettings = async () => {
+			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
+			const timeout = await getStorageItem<number>('auto_stop_timeout_ms');
+
+			if (enabled !== null) setAutoStopEnabled(enabled);
+			if (timeout !== null) setAutoStopTimeoutMs(timeout);
+		};
+
+		loadSettings();
+	}, []);
 
 	const updateVad = async (
 		silence: number,
@@ -214,6 +232,81 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 									</SelectItem>
 								</SelectContent>
 							</Select>
+						</div>
+					</div>
+
+					<div className='space-y-4 border-t border-border pt-4'>
+						<h3 className='font-medium'>Auto-Stop Recording</h3>
+
+						<div className='space-y-2'>
+							<Label className='flex items-center gap-2 cursor-pointer'>
+								<input
+									type='checkbox'
+									checked={autoStopEnabled}
+									onChange={(e) => {
+										const enabled = e.target.checked;
+										setAutoStopEnabled(enabled);
+										setStorageItem('auto_stop_enabled', enabled);
+									}}
+									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+								/>
+								Enable auto-stop on silence
+							</Label>
+							<p className='text-xs text-muted-foreground'>
+								Automatically stop recording after detecting silence.
+							</p>
+						</div>
+
+						{autoStopEnabled && (
+							<div className='space-y-2'>
+								<div className='flex justify-between'>
+									<Label>Auto-stop Timeout</Label>
+									<span className='text-sm text-muted-foreground'>
+										{(autoStopTimeoutMs / 1000).toFixed(1)}s
+									</span>
+								</div>
+								<input
+									type='range'
+									min='1000'
+									max='7000'
+									step='500'
+									value={autoStopTimeoutMs}
+									onChange={(e) => {
+										const val = parseInt(e.target.value);
+										setAutoStopTimeoutMs(val);
+										setStorageItem('auto_stop_timeout_ms', val);
+									}}
+									className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
+								/>
+								<p className='text-xs text-muted-foreground'>
+									How long to wait after silence before stopping
+									(1-7 seconds).
+								</p>
+							</div>
+						)}
+					</div>
+
+					<div className='space-y-4 border-t border-border pt-4'>
+						<h3 className='font-medium'>Editor</h3>
+
+						<div className='space-y-2'>
+							<Label className='flex items-center gap-2 cursor-pointer'>
+								<input
+									type='checkbox'
+									defaultChecked
+									onChange={(e) => {
+										// Call the global toggle function - it handles state and storage
+										if ((window as any).toggleMinimap) {
+											(window as any).toggleMinimap(e.target.checked);
+										}
+									}}
+									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+								/>
+								Show minimap
+							</Label>
+							<p className='text-xs text-muted-foreground'>
+								Display a visual overview of the entire document on the right side.
+							</p>
 						</div>
 					</div>
 

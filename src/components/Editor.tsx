@@ -4,10 +4,11 @@ import { indentWithTab } from '@codemirror/commands';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Compartment } from '@codemirror/state';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { showMinimap } from '@replit/codemirror-minimap';
 import { livePreviewPlugin, cursorPosField } from '../editor/livePreview';
 import { editorThemeExtension } from '../editor/theme';
 import { executeCommand, CommandAction } from '../editor/commands';
@@ -19,6 +20,7 @@ import {
 	clearGhostText,
 } from '../editor/ghostText';
 import { useToast } from '../hooks/use-toast';
+import { getStorageItem, setStorageItem } from '../utils/storage';
 import AmbiguityPopover from './AmbiguityPopover';
 import type { ExtractedTask } from '../types';
 
@@ -39,6 +41,7 @@ interface EditorProps {
 	}) => void;
 	onSystemCommand?: (action: any) => void;
 	onContentSaved?: (content: string) => void;
+	onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface ClassificationResult {
@@ -66,11 +69,15 @@ export default function Editor({
 	onVoiceLogEntry,
 	onSystemCommand,
 	onContentSaved,
+	onDirtyChange,
 }: EditorProps) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
+	const minimapCompartment = useRef(new Compartment());
 	const [content, setContent] = useState('');
+	const [savedContent, setSavedContent] = useState('');
+	const [minimapEnabled, setMinimapEnabled] = useState(true);
 	const [ambiguityData, setAmbiguityData] = useState<{
 		text: string;
 		command: CommandAction;
@@ -90,6 +97,48 @@ export default function Editor({
 	const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>(
 		[]
 	);
+
+	// Load minimap setting from storage
+	useEffect(() => {
+		getStorageItem<boolean>('minimap_enabled').then((enabled) => {
+			if (enabled !== null) {
+				setMinimapEnabled(enabled);
+			}
+		});
+	}, []);
+
+	// Update minimap when enabled state changes
+	useEffect(() => {
+		if (!viewRef.current) return;
+
+		const minimapExtension = minimapEnabled
+			? showMinimap.compute(['doc'], (state) => ({
+					create: (view: EditorView) => {
+						const dom = document.createElement('div');
+						dom.className = 'cm-minimap';
+						return { dom };
+					},
+					displayText: 'blocks',
+					showOverlay: 'always',
+			  }))
+			: [];
+
+		viewRef.current.dispatch({
+			effects: minimapCompartment.current.reconfigure(minimapExtension),
+		});
+	}, [minimapEnabled]);
+
+	// Expose toggle function globally for settings to call
+	useEffect(() => {
+		(window as any).toggleMinimap = (enabled: boolean) => {
+			setMinimapEnabled(enabled);
+			setStorageItem('minimap_enabled', enabled);
+		};
+
+		return () => {
+			delete (window as any).toggleMinimap;
+		};
+	}, []);
 
 	const executeVoiceCommand = (command: CommandAction) => {
 		if (!viewRef.current) return;
@@ -515,6 +564,19 @@ export default function Editor({
 				flashEffect,
 				markdownAutoPairExtension,
 				ghostTextExtension,
+				minimapCompartment.current.of(
+					minimapEnabled
+						? showMinimap.compute(['doc'], (state) => ({
+								create: (view: EditorView) => {
+									const dom = document.createElement('div');
+									dom.className = 'cm-minimap';
+									return { dom };
+								},
+								displayText: 'blocks',
+								showOverlay: 'always',
+						  }))
+						: []
+				),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
@@ -541,6 +603,7 @@ export default function Editor({
 		readTextFile(filePath)
 			.then((text) => {
 				setContent(text);
+				setSavedContent(text);
 				if (viewRef.current) {
 					viewRef.current.dispatch({
 						changes: {
@@ -554,12 +617,23 @@ export default function Editor({
 			.catch(console.error);
 	}, [filePath]);
 
+	// Track dirty state
+	useEffect(() => {
+		if (!filePath) return;
+		const isDirty = content !== savedContent;
+		onDirtyChange?.(isDirty);
+	}, [content, savedContent, filePath]);
+
+	// Auto-save
 	useEffect(() => {
 		if (!filePath || !content) return;
 
 		const timer = setTimeout(() => {
 			writeTextFile(filePath, content)
-				.then(() => onContentSaved?.(content))
+				.then(() => {
+					setSavedContent(content);
+					onContentSaved?.(content);
+				})
 				.catch(console.error);
 		}, 500);
 

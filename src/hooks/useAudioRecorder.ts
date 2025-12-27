@@ -7,8 +7,23 @@ export interface TranscriptionResult {
     duration_ms: number;
 }
 
-export function useAudioRecorder(onSilenceDetected?: () => void) {
+interface AudioRecorderOptions {
+    onSilenceDetected?: () => void;
+    onStreamingTranscription?: (text: string) => void;
+    autoStopOnSilence?: boolean;
+    silenceTimeoutMs?: number;
+}
+
+export function useAudioRecorder(options?: AudioRecorderOptions) {
+    const {
+        onSilenceDetected,
+        onStreamingTranscription,
+        autoStopOnSilence = true,
+        silenceTimeoutMs = 5000
+    } = options || {};
+
     const [isRecording, setIsRecording] = useState(false);
+    const [recentAudioSamples, setRecentAudioSamples] = useState<number[]>([]);
     const audioContextRef = useRef<AudioContext | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -16,30 +31,132 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
     const audioBufferRef = useRef<number[]>([]);
     const lastTranscriptionTimeRef = useRef<number>(0);
     const isRecordingRef = useRef(false);
+    const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const autoStopCallbackRef = useRef<(() => void) | null>(null);
+    const recentSamplesRef = useRef<number[]>([]); // For waveform visualization
+
+    // Use refs for settings to avoid stale closures
+    const autoStopOnSilenceRef = useRef(autoStopOnSilence);
+    const silenceTimeoutMsRef = useRef(silenceTimeoutMs);
+    const onSilenceDetectedRef = useRef(onSilenceDetected);
+
+    // Update refs when props change
+    useEffect(() => {
+        autoStopOnSilenceRef.current = autoStopOnSilence;
+        silenceTimeoutMsRef.current = silenceTimeoutMs;
+        onSilenceDetectedRef.current = onSilenceDetected;
+    }, [autoStopOnSilence, silenceTimeoutMs, onSilenceDetected]);
 
     useEffect(() => {
         isRecordingRef.current = isRecording;
     }, [isRecording]);
 
     useEffect(() => {
+        console.log('[useAudioRecorder] Setting up VAD event listeners');
+
         const unlisten = listen('vad-silence-detected', () => {
+            console.log('[VAD Event] Received vad-silence-detected, isRecording:', isRecordingRef.current);
+
             if (isRecordingRef.current) {
-                console.log('VAD detected silence');
-                if (onSilenceDetected) onSilenceDetected();
+                console.log('[VAD Event] ✓ Starting auto-stop timer');
+
+                // Clear any existing timeout
+                if (silenceTimeoutRef.current) {
+                    console.log('[VAD Event] Clearing existing timeout');
+                    clearTimeout(silenceTimeoutRef.current);
+                }
+
+                // Start new timeout for auto-stop
+                const shouldAutoStop = autoStopOnSilenceRef.current;
+                const timeoutMs = silenceTimeoutMsRef.current;
+
+                if (shouldAutoStop && autoStopCallbackRef.current) {
+                    console.log(`[VAD Event] ✓ Scheduling auto-stop in ${timeoutMs}ms`);
+                    silenceTimeoutRef.current = setTimeout(() => {
+                        console.log(`[Auto-Stop] ⏱️ Triggering auto-stop after ${timeoutMs}ms of silence`);
+                        if (autoStopCallbackRef.current) {
+                            autoStopCallbackRef.current();
+                        }
+                    }, timeoutMs);
+                } else {
+                    console.warn('[VAD Event] ⚠️ Cannot schedule auto-stop:', {
+                        shouldAutoStop,
+                        hasCallback: !!autoStopCallbackRef.current
+                    });
+                }
+
+                // Also call the optional callback
+                const onSilence = onSilenceDetectedRef.current;
+                if (onSilence) onSilence();
+            } else {
+                console.log('[VAD Event] ⚠️ Ignoring silence event - not recording');
             }
         });
+
+        // Listen for speech start to cancel auto-stop
+        const unlistenSpeech = listen('vad-speech-start', () => {
+            console.log('[VAD Event] Received vad-speech-start');
+            if (silenceTimeoutRef.current) {
+                console.log('[VAD Event] ✓ Speech detected - canceling auto-stop timer');
+                clearTimeout(silenceTimeoutRef.current);
+                silenceTimeoutRef.current = null;
+            }
+        });
+
         return () => {
             unlisten.then(f => f());
+            unlistenSpeech.then(f => f());
+            // DON'T clear the timeout here - we want it to persist across re-renders
+            // It will be cleared when stopRecording is called or when a new timer starts
         };
-    }, [onSilenceDetected]);
+    }, []); // Remove dependencies to prevent re-running and clearing the timer
 
     const startRecording = useCallback(async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('🎤 Requesting microphone access...');
+
+            // Simplified constraints - let browser choose optimal settings
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
             streamRef.current = stream;
+
+            // Log audio track info
+            const audioTrack = stream.getAudioTracks()[0];
+            const settings = audioTrack.getSettings();
+            const constraints = audioTrack.getConstraints();
+            const capabilities = audioTrack.getCapabilities ? audioTrack.getCapabilities() : null;
+
+            console.log('🎤 Audio track info:', {
+                label: audioTrack.label,
+                readyState: audioTrack.readyState,
+                enabled: audioTrack.enabled,
+                muted: audioTrack.muted,
+                settings: settings,
+                constraints: constraints,
+                capabilities: capabilities
+            });
+
+            // Check if track is actually active
+            if (audioTrack.readyState !== 'live') {
+                console.error('⚠️ Audio track is not live! readyState:', audioTrack.readyState);
+            }
+            if (audioTrack.muted) {
+                console.error('⚠️ Audio track is muted!');
+            }
 
             const audioContext = new AudioContext({ sampleRate: 16000 });
             audioContextRef.current = audioContext;
+
+            console.log('🎧 AudioContext info:', {
+                requested: 16000,
+                actual: audioContext.sampleRate,
+                mismatch: audioContext.sampleRate !== 16000
+            });
+
+            if (audioContext.sampleRate !== 16000) {
+                console.warn('⚠️  Sample rate mismatch! Browser using', audioContext.sampleRate, 'Hz instead of 16000 Hz');
+            }
 
             const source = audioContext.createMediaStreamSource(stream);
             sourceRef.current = source;
@@ -51,6 +168,7 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
             audioBufferRef.current = [];
             setIsRecording(true);
 
+            let frameCounter = 0;
             processor.onaudioprocess = (e) => {
                 if (!isRecordingRef.current) return;
 
@@ -63,13 +181,21 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
                 // Send to VAD
                 invoke('process_audio_chunk', { pcmData });
 
-                // Streaming transcription every 500ms
-                const now = Date.now();
-                if (now - lastTranscriptionTimeRef.current > 500) {
-                    lastTranscriptionTimeRef.current = now;
-                    // Send accumulated buffer for streaming transcription
-                    invoke('transcribe_streaming', { audioBuffer: audioBufferRef.current });
+                // Update waveform visualization data (keep last ~1 second)
+                const maxSamples = 16000; // 1 second at 16kHz
+                recentSamplesRef.current = [...recentSamplesRef.current, ...pcmData].slice(-maxSamples);
+
+                // Update state every 2 chunks (~512ms) for smooth waveform without excessive re-renders
+                // At 4096 buffer size and 16kHz, each chunk is 256ms
+                frameCounter++;
+                if (frameCounter % 2 === 0) {
+                    setRecentAudioSamples([...recentSamplesRef.current]);
                 }
+
+                // Streaming transcription DISABLED - causes infinite loop and blocks auto-stop
+                // TODO: Re-enable after fixing the async transcription issue
+                // The problem: transcription takes 12+ seconds, blocks the event loop,
+                // and causes the component to re-render continuously
             };
 
             source.connect(processor);
@@ -82,6 +208,14 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
     }, []);
 
     const stopRecording = useCallback(async (): Promise<TranscriptionResult | null> => {
+        const frontendStartTime = performance.now();
+
+        // Clear any pending silence timeout
+        if (silenceTimeoutRef.current) {
+            clearTimeout(silenceTimeoutRef.current);
+            silenceTimeoutRef.current = null;
+        }
+
         if (processorRef.current && sourceRef.current) {
             sourceRef.current.disconnect();
             processorRef.current.disconnect();
@@ -93,11 +227,17 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
             audioContextRef.current.close();
         }
         setIsRecording(false);
+        setRecentAudioSamples([]); // Clear waveform
+        recentSamplesRef.current = [];
 
         // Final transcription
         if (audioBufferRef.current.length > 0) {
             try {
-                return await invoke<TranscriptionResult>('transcribe_audio', { audioBuffer: audioBufferRef.current });
+                console.log('🎯 Starting final transcription...');
+                const result = await invoke<TranscriptionResult>('transcribe_audio', { audioBuffer: audioBufferRef.current });
+                const frontendDuration = performance.now() - frontendStartTime;
+                console.log(`⚡ Total frontend time: ${frontendDuration.toFixed(2)}ms (includes Rust time: ${result.duration_ms.toFixed(2)}ms)`);
+                return result;
             } catch (e) {
                 console.error("Transcription failed", e);
                 return null;
@@ -106,5 +246,17 @@ export function useAudioRecorder(onSilenceDetected?: () => void) {
         return null;
     }, []);
 
-    return { isRecording, startRecording, stopRecording };
+    // Allow setting the auto-stop callback from outside
+    const setAutoStopCallback = useCallback((callback: () => void) => {
+        console.log('[useAudioRecorder] ✓ Auto-stop callback set');
+        autoStopCallbackRef.current = callback;
+    }, []);
+
+    return {
+        isRecording,
+        startRecording,
+        stopRecording,
+        setAutoStopCallback,
+        recentAudioSamples // For waveform visualization
+    };
 }

@@ -154,3 +154,44 @@
 .cm-flash-command {
 	background-color: rgba(250, 204, 21, 0.3); /* yellow-400/30 */
 }
+
+/* Minimap Styles */
+.cm-minimap {
+	position: absolute;
+	right: 0;
+	top: 0;
+	height: 100%;
+	cursor: pointer;
+	z-index: 1;
+}
+
+.cm-minimap-content {
+	font-size: 2px;
+	line-height: 1.2;
+	overflow: hidden;
+}
+
+.cm-minimap-overlay {
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.cm-minimap-overlay:hover {
+	background-color: hsl(var(--primary) / 0.25) !important;
+}
+
+.cm-minimap .cm-line {
+	overflow: hidden;
+	text-overflow: clip;
+	white-space: nowrap;
+}
+
+/* Hide scrollbar for tab bar */
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
+.no-scrollbar {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}

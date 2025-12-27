@@ -11,12 +11,15 @@ use commands::*;
 use system::*;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_shell::ShellExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
@@ -91,6 +94,22 @@ pub fn run() {
                     .ok();
             }
 
+            // Start the embedding server sidecar
+            log::info!("Starting embedding server sidecar...");
+            let sidecar_command = app
+                .shell()
+                .sidecar("embedding-server")
+                .expect("failed to create embedding-server sidecar command");
+
+            let (_rx, _child) = sidecar_command
+                .spawn()
+                .expect("Failed to spawn embedding server sidecar");
+
+            log::info!("Embedding server sidecar started successfully on port 8080");
+
+            // Store the child process handle so it gets cleaned up on app exit
+            // Tauri automatically kills sidecars when the app closes
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -125,6 +144,10 @@ pub fn run() {
             initialize_embeddings,
             extract_tasks,
             create_agent_tracker_task,
+            move_file,
+            delete_file,
+            duplicate_file,
+            open_in_system,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

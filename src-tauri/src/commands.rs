@@ -283,22 +283,39 @@ pub async fn process_audio_chunk(
     buffer.push(&pcm_data);
     drop(buffer); // Release lock
 
-    // Log audio level occasionally
-    if rand::random::<f32>() < 0.05 {
-        let rms = (pcm_data.iter().map(|x| x * x).sum::<f32>() / pcm_data.len() as f32).sqrt();
-        log::info!("Received audio chunk RMS: {:.4}", rms);
-    }
+    // Calculate audio energy for logging
+    let energy: f32 = pcm_data.iter().map(|&x| x * x).sum::<f32>() / pcm_data.len() as f32;
 
     // Check VAD
     let mut vad = state.vad_state.lock().unwrap();
-    match vad.process(&pcm_data, 16000.0) {
+    let vad_event = vad.process(&pcm_data, 16000.0);
+    let threshold = vad.adaptive_threshold;
+    let is_speaking = vad.is_speaking;
+    drop(vad); // Release lock before emitting events
+
+    // Log VAD state occasionally for debugging
+    if rand::random::<f32>() < 0.05 {
+        let rms = energy.sqrt();
+        log::info!("[VAD] RMS: {:.4}, Energy: {:.6}, Threshold: {:.6}, IsSpeaking: {}, Event: {:?}",
+                   rms, energy, threshold, is_speaking, vad_event);
+    }
+
+    match vad_event {
         VadEvent::SpeechEnd => {
             // Silence detected after speech - trigger transcription
-            log::info!("VAD detected end of speech - triggering transcription");
+            log::info!("[VAD] ✓ Speech end detected - emitting silence event");
             let _ = app.emit("vad-silence-detected", ());
         }
         VadEvent::SpeechStart => {
+            log::info!("[VAD] ✓ Speech start detected");
             let _ = app.emit("vad-speech-start", ());
+        }
+        VadEvent::Silence => {
+            // Continuous silence (never started speaking)
+            // Log occasionally to help debug threshold issues
+            if rand::random::<f32>() < 0.01 {
+                log::debug!("[VAD] Continuous silence (never detected speech)");
+            }
         }
         _ => {}
     }
@@ -666,17 +683,36 @@ fn match_command_patterns(text: &str) -> Option<CommandAction> {
 }
 
 fn looks_like_dictation(text: &str, command_similarity: f32) -> bool {
-    // Only treat as dictation if:
-    // 1. Command similarity is very low (<0.5)
-    // 2. AND it looks like natural speech
-
-    if command_similarity > 0.5 {
-        return false; // Probably a command
-    }
+    // Check for strong dictation signals FIRST, regardless of similarity
+    // Natural speech patterns are more reliable than embedding similarity
 
     let word_count = text.split_whitespace().count();
+    let text_lower = text.to_lowercase();
 
-    // Long sentences are likely dictation
+    // Strong dictation markers that override similarity
+    let strong_markers = [
+        "i think",
+        "i was",
+        "i am",
+        "i'm",
+        "we should",
+        "let's",
+        "yesterday",
+        "today",
+        "tomorrow",
+        "meeting with",
+        "testing",
+        "trying",
+        "checking if",
+        "seeing if",
+    ];
+
+    // If contains strong dictation markers, it's dictation
+    if strong_markers.iter().any(|m| text_lower.contains(m)) {
+        return true;
+    }
+
+    // Long sentences (>8 words) are likely dictation
     if word_count > 8 {
         return true;
     }
@@ -686,21 +722,8 @@ fn looks_like_dictation(text: &str, command_similarity: f32) -> bool {
         return true;
     }
 
-    // Contains common dictation phrases
-    let dictation_markers = [
-        "i think",
-        "i was",
-        "i am",
-        "we should",
-        "let's",
-        "yesterday",
-        "today",
-        "tomorrow",
-        "meeting with",
-    ];
-
-    let text_lower = text.to_lowercase();
-    if dictation_markers.iter().any(|m| text_lower.contains(m)) {
+    // Only if similarity is very low AND no other signals
+    if command_similarity < 0.5 {
         return true;
     }
 
@@ -1037,4 +1060,151 @@ pub async fn create_agent_tracker_task(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout.trim().to_string())
+}
+
+/// Move a file or folder to a new location
+#[tauri::command]
+pub async fn move_file(old_path: String, new_parent_path: String) -> Result<String, String> {
+    let old_path_buf = std::path::Path::new(&old_path);
+    if !old_path_buf.exists() {
+        return Err("Source path does not exist".to_string());
+    }
+
+    let new_parent = std::path::Path::new(&new_parent_path);
+    if !new_parent.exists() || !new_parent.is_dir() {
+        return Err("Destination path does not exist or is not a directory".to_string());
+    }
+
+    let file_name = old_path_buf
+        .file_name()
+        .ok_or("Invalid source path")?;
+    let mut new_path_buf = new_parent.join(file_name);
+
+    // Handle duplicate names
+    let mut counter = 1;
+    let base_name = new_path_buf.file_stem().and_then(|s| s.to_str()).unwrap_or("file").to_string();
+    let extension = new_path_buf.extension().and_then(|s| s.to_str()).map(|s| s.to_string());
+
+    while new_path_buf.exists() {
+        let new_name = if let Some(ext) = &extension {
+            format!("{} {}.{}", base_name, counter, ext)
+        } else {
+            format!("{} {}", base_name, counter)
+        };
+        new_path_buf = new_parent.join(new_name);
+        counter += 1;
+    }
+
+    std::fs::rename(old_path_buf, &new_path_buf).map_err(|e| e.to_string())?;
+
+    Ok(new_path_buf.to_string_lossy().to_string())
+}
+
+/// Delete a file or folder
+#[tauri::command]
+pub async fn delete_file(path: String) -> Result<(), String> {
+    let path_buf = std::path::Path::new(&path);
+    if !path_buf.exists() {
+        return Err("Path does not exist".to_string());
+    }
+
+    if path_buf.is_dir() {
+        std::fs::remove_dir_all(path_buf).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(path_buf).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Duplicate a file or folder
+#[tauri::command]
+pub async fn duplicate_file(path: String) -> Result<String, String> {
+    let path_buf = std::path::Path::new(&path);
+    if !path_buf.exists() {
+        return Err("Path does not exist".to_string());
+    }
+
+    let parent = path_buf.parent().ok_or("Invalid path")?;
+    let file_stem = path_buf.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+    let extension = path_buf.extension().and_then(|s| s.to_str());
+
+    // Find available name
+    let mut counter = 1;
+    let mut new_path_buf;
+    loop {
+        let new_name = if let Some(ext) = extension {
+            format!("{} copy {}.{}", file_stem, counter, ext)
+        } else {
+            format!("{} copy {}", file_stem, counter)
+        };
+        new_path_buf = parent.join(new_name);
+
+        if !new_path_buf.exists() {
+            break;
+        }
+        counter += 1;
+    }
+
+    // Copy file or directory
+    if path_buf.is_dir() {
+        copy_dir_recursive(path_buf, &new_path_buf)?;
+    } else {
+        std::fs::copy(path_buf, &new_path_buf).map_err(|e| e.to_string())?;
+    }
+
+    Ok(new_path_buf.to_string_lossy().to_string())
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Open file or folder in system file explorer
+#[tauri::command]
+pub async fn open_in_system(path: String) -> Result<(), String> {
+    let path_buf = std::path::Path::new(&path);
+    if !path_buf.exists() {
+        return Err("Path does not exist".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(path_buf)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path_buf)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path_buf)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

@@ -150,6 +150,26 @@ export const editorTheme = EditorView.theme({
         borderTop: '2px solid hsl(var(--muted))',
         margin: '2em 0',
     },
+    // Minimap Styles
+    '.cm-minimap': {
+        backgroundColor: 'hsl(var(--muted) / 0.3)',
+        borderLeft: '1px solid hsl(var(--border))',
+        width: '120px',
+    },
+    '.cm-minimap-content': {
+        backgroundColor: 'hsl(var(--background))',
+    },
+    '.cm-minimap-gutter': {
+        backgroundColor: 'transparent',
+    },
+    '.cm-minimap-overlay': {
+        backgroundColor: 'hsl(var(--primary) / 0.15)',
+        border: '1px solid hsl(var(--primary) / 0.3)',
+        borderRadius: '3px',
+    },
+    '.cm-minimap .cm-gutterElement': {
+        display: 'none',
+    },
 });
 
 export const editorThemeExtension = [
