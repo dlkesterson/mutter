@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { FileTree } from './FileTree';
-import { FileNode, SearchResult } from '@/types';
+import { TaskPanel } from './TaskPanel';
+import { SyncStatus } from './SyncStatus';
+import { FileNode, SearchResult, AgentTrackerTask } from '@/types';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
 import {
@@ -318,6 +320,17 @@ export function Sidebar({
 						/>
 					)}
 				</div>
+
+				{/* Task Panel */}
+				<TaskPanel
+					onFileSelect={onFileSelect}
+					onTaskClick={(task) => {
+						console.log('Task clicked:', task);
+					}}
+				/>
+
+				{/* Sync Status */}
+				<SyncStatus vaultPath={vaultPath} />
 
 				{/* Footer */}
 				<div className='p-2 border-t border-border shrink-0 flex justify-between items-center'>
