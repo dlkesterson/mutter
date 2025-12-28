@@ -35,12 +35,31 @@ pub fn start_watching(
         match result {
             Ok(events) => {
                 // Filter out noise: metadata changes, hidden files, sync files, etc.
+                // ONLY trigger on structural changes (create/delete/rename), NOT content modifications
                 let relevant_events: Vec<&DebouncedEvent> = events
                     .iter()
                     .filter(|event| {
                         // Ignore metadata/access events
                         if event.event.kind.is_access() || event.event.kind.is_other() {
                             return false;
+                        }
+
+                        // IMPORTANT: Ignore content modification events - only care about structure changes
+                        // This prevents constant reloads when files are being edited or synced
+                        if event.event.kind.is_modify() {
+                            // Only allow rename events through (they're under Modify category)
+                            use notify::event::ModifyKind;
+                            if let notify::EventKind::Modify(modify_kind) = &event.event.kind {
+                                // Allow rename events
+                                if matches!(modify_kind, ModifyKind::Name(_)) {
+                                    // Continue to other checks below
+                                } else {
+                                    // Ignore content modifications, metadata changes, etc.
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
                         }
 
                         // Check all paths in the event
@@ -65,6 +84,7 @@ pub fn start_watching(
                             if let Some(path_str) = path.to_str() {
                                 if path_str.contains("/.git/")
                                     || path_str.contains("/.obsidian/")
+                                    || path_str.contains("/.mutter/")
                                     || path_str.contains("/.sync/")
                                     || path_str.contains("/.stfolder/")
                                     || path_str.contains("/.stversions/") {
@@ -78,7 +98,7 @@ pub fn start_watching(
                     .collect();
 
                 if !relevant_events.is_empty() {
-                    log::info!("File system changes detected: {} events", relevant_events.len());
+                    log::info!("File system structure changes detected: {} events", relevant_events.len());
 
                     // Debug: Log the actual paths that passed the filter
                     for event in &relevant_events {

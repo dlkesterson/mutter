@@ -23,24 +23,24 @@ export function VoiceIndicator({
 	const getStatusColor = () => {
 		switch (state) {
 			case 'listening':
-				return 'bg-red-500 animate-pulse';
+				return 'border-primary text-primary'; // International Orange
 			case 'processing':
-				return 'bg-yellow-500';
+				return 'border-warning text-warning'; // Signal Yellow
 			case 'executing':
-				return 'bg-blue-500';
+				return 'border-success text-success'; // Lab Green
 			default:
-				return 'bg-muted';
+				return 'border-border text-muted-foreground';
 		}
 	};
 
 	const getStatusLabel = () => {
 		switch (state) {
 			case 'listening':
-				return '� Listening...';
+				return 'Listening...';
 			case 'processing':
-				return '⏳ Processing...';
+				return 'Processing...';
 			case 'executing':
-				return '✅ Executing';
+				return 'Executing';
 			default:
 				return 'Click to Speak';
 		}
@@ -50,15 +50,15 @@ export function VoiceIndicator({
 		<div className='fixed bottom-8 right-8 flex flex-col items-end gap-2 z-40'>
 			{/* Streaming transcription display */}
 			{streamingText && (
-				<div className='max-w-md p-3 bg-background/95 backdrop-blur-md border border-border rounded-lg shadow-xl animate-in fade-in slide-in-from-bottom-2'>
-					<p className='text-xs text-muted-foreground mb-1'>Partial transcription:</p>
+				<div className='max-w-md p-3 bg-surface/95 backdrop-blur-md border border-border/20 rounded shadow-xl animate-in fade-in slide-in-from-bottom-2'>
+					<p className='text-xs text-muted-foreground mb-1 font-mono'>Partial transcription:</p>
 					<p className='text-sm text-foreground'>{streamingText}</p>
 				</div>
 			)}
 
 			{/* Waveform visualization - show when listening */}
 			{state === 'listening' && (
-				<div className='p-3 bg-background/95 backdrop-blur-md border border-border rounded-lg shadow-xl'>
+				<div className='p-3 bg-surface/95 backdrop-blur-md border border-primary/30 rounded shadow-xl'>
 					<WaveformVisualization
 						audioData={audioSamples}
 						isRecording={true}
@@ -68,28 +68,22 @@ export function VoiceIndicator({
 				</div>
 			)}
 
-			{/* Voice controls */}
-			<div className='flex items-center gap-1 p-1.5 bg-background/80 backdrop-blur-md border border-border rounded-full shadow-2xl transition-all hover:scale-105'>
+			{/* Voice controls - Border-only design (Dieter Rams style) */}
+			<div className='flex items-center gap-1 p-1.5 bg-surface/80 backdrop-blur-md border border-border/20 rounded-full shadow-xl transition-all hover:scale-102'>
 				<button
 					onClick={onLogClick}
-					className='p-2.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors'
+					className='p-2.5 rounded-full hover:bg-muted/10 text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border/20'
 					title='View Voice Log'
 				>
 					<FileText className='w-4 h-4' />
 				</button>
 
-				<div className='w-px h-4 bg-border mx-1' />
+				<div className='w-px h-4 bg-border/20 mx-1' />
 
 				<button
 					onClick={onToggleListening}
-					className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 ${
-						state === 'listening'
-							? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
-							: state === 'processing'
-							? 'bg-yellow-500 text-white'
-							: state === 'executing'
-							? 'bg-blue-500 text-white'
-							: 'hover:bg-muted text-foreground'
+					className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 border-2 ${getStatusColor()} ${
+						state === 'listening' ? 'bg-primary/10' : 'bg-transparent hover:bg-muted/10'
 					}`}
 				>
 					<Mic
@@ -97,7 +91,7 @@ export function VoiceIndicator({
 							state === 'listening' ? 'animate-pulse' : ''
 						}`}
 					/>
-					<span className={`text-sm font-medium`}>
+					<span className='text-sm font-medium'>
 						{getStatusLabel()}
 					</span>
 				</button>

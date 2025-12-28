@@ -1,91 +1,70 @@
-# Mutter - Voice-First Markdown Editor
+# Mutter: Voice-First Markdown
 
-A voice-controlled markdown editor with semantic command recognition, built with Tauri v2, React, and Rust + Candle ML.
+<img src="docs/images/banner.png" alt="Mutter Banner" width="100%" />
 
-## Features
+Most markdown editors expect your hands to be on the keyboard 100% of the time. **Mutter** is an experiment in writing and formatting notes using your voice, without sacrificing privacy or dealing with the lag of cloud-based STT.
 
-### ✅ Implemented
-- **Live Preview Editor**: CodeMirror 6 with custom decorations that hide markdown syntax when cursor is outside
-  - Bold (**text**), Italic (*text*), Headers (# text)
-  - Syntax only shows when editing, hidden when reading
-  
-- **Voice Control Infrastructure**:
-  - Audio capture with Web Audio API
-  - VAD (Voice Activity Detection) with ring buffer
-  - Rust backend with Candle ML framework integration
-  - **Streaming Transcription**: Real-time visual feedback of speech-to-text
-  
-- **Semantic Command Router**:
-  - Command registry with confidence-based matching
-  - Disambiguation UI for ambiguous commands
-  - Context-aware command execution (selection required/optional)
-  - **Voice Log**: Detailed history of voice interactions, including confidence scores, execution times, and interpretation debugging
+It’s built with a Rust backend (Tauri) to keep things fast and runs Whisper models locally, so your voice data never leaves your machine.
 
-- **User Interface**:
-  - **Flexible Layout**: Resizable panels for file navigation, editor, and voice log
-  - **Collapsible Sidebars**: Maximize writing space by collapsing navigation and logs
-  - **Layout Persistence**: Remembers your panel sizes and preferences
-  - **Dark Mode**: Optimized for focus
+---
 
-- **File System**:
-  - Sidebar with file navigation
-  - File watcher for vault changes
-  - Auto-save functionality
+## Why Mutter?
 
-- **Model Management**:
-  - Integrated Whisper model downloader and selector
-  - Support for Distil-Whisper and standard Whisper models (Tiny, Base, Small, Medium, Large v3)
-  - Real-time download progress tracking
-  - **Local Embeddings**: Uses BERT for semantic understanding of commands
+I built this because I found myself constantly breaking my flow to toggle formatting or fix lists. Mutter treats voice as a first-class citizen, not just an accessibility afterthought.
 
-## Quick Start
+* **Actually Private:** No telemetry. No cloud APIs. It uses Hugging Face's `candle` crate to run inference on your CPU/GPU locally.
+* **Context-Aware:** You don't have to be a robot. It uses BERT embeddings to understand that "Make this a title" and "Turn this into a heading" mean the same thing.
+* **Robust State:** Your notes are plain Markdown files, but we use Automerge (CRDTs) under the hood to make sure you never lose a character, even if you’re jumping between devices or instances.
 
-### Installation & Setup
+## What it looks like in practice
+
+* **Live Preview:** Powered by CodeMirror 6. The syntax (like `**` or `#`) fades away when you aren't editing that specific line, keeping the interface clean (inspired by Dieter Rams' principles).
+* **The Command Router:** Instead of just transcribing text, Mutter listens for commands. You can say "Delete that" or "Bold the last sentence" and it just works.
+* **Agent-Tracker:** If you use [Agent-Tracker](https://github.com/forever-tools/agent-tracker), you can create tasks directly from your notes via voice.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+* **Node.js** (v18+) and **pnpm**
+* **Rust** (Stable)
+* **Linux users:** You'll need `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, and `libasound2-dev` for the audio engine.
+
+### Setup
 
 ```bash
-# Install dependencies
+git clone https://github.com/yourusername/mutter.git
+cd mutter
 pnpm install
-
-# Run in development mode
 pnpm tauri:dev
 
-# Build for production
-pnpm tauri:build
 ```
 
-### First Time Setup
+**Note on first run:** The app will ask to download a Whisper model. I recommend **Distil-Whisper Medium**—it’s the best balance of speed and accuracy for most setups.
 
-1. Launch the app
-2. Click **"Open Folder"** in the sidebar to select your vault directory
-3. Click **"+ New Note"** to create a note
-4. Click the **microphone icon** to enable voice commands
-5. On first use, you'll be prompted to download a Whisper model (Recommended: Distil Whisper Medium)
+---
 
-## Voice Commands
+## Talk to your editor
 
-### Formatting
-- **"Make this bold"** - Wraps selection in `**text**`
-- **"Make this italic"** - Wraps selection in `*text*`
-- **"Turn into heading"** or **"Heading one"** - Adds `# ` prefix
-- **"Heading two"** - Adds `## ` prefix
-- **"Quote this"** - Adds `> ` prefix
-- **"Make this a list"** - Adds `- ` prefix
+| If you say... | Mutter will... |
+| --- | --- |
+| "Make this bold" | Wrap the selection in `**` |
+| "Heading one" | Add a `#` to the start of the line |
+| "Create a list" | Insert a `- ` bullet point |
+| "Undo that" | Trigger a standard editor undo |
+| "Task: Fix the CSS bug" | Send a new task to Agent-Tracker |
 
-### Editor Actions
-- **"Undo"** - Undo last change
-- **"Redo"** - Redo last change
-- **"Delete that"** - Delete selection
+---
 
-### Usage Tips
-1. Select text first for commands that need selection (bold, italic)
-2. For headings/lists, place cursor on the line
-3. Wait for silence detection (~800ms) after speaking
-4. Watch the microphone icon for feedback:
-   - 🟢 Listening
-   - ⏳ Processing
-   - ✅ Executing
+## The Tech Stack
 
-## Tech Stack
+* **The Engine:** Rust + Tauri v2 + Tokio for the heavy lifting.
+* **The ML:** Candle 0.8 (Pure Rust ML framework) for local inference.
+* **The UI:** React 19, TypeScript, and Tailwind v4.
+* **The Editor:** CodeMirror 6 with a custom "distraction-free" configuration.
 
-- **Frontend**: React 19, TypeScript, Vite 7, CodeMirror 6, Tailwind CSS v4, shadcn/ui, react-resizable-panels
-- **Backend**: Rust, Tauri v2, Candle 0.8 (ML), Tokio (async)
+## License
+
+MIT. Go wild.

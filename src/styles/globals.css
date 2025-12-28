@@ -1,92 +1,193 @@
+/* IBM Plex Fonts - Design System Typography (MUST come before Tailwind) */
+@import '@fontsource/ibm-plex-sans/300.css'; /* Light */
+@import '@fontsource/ibm-plex-sans/400.css'; /* Regular */
+@import '@fontsource/ibm-plex-sans/500.css'; /* Medium */
+@import '@fontsource/ibm-plex-sans/600.css'; /* SemiBold */
+@import '@fontsource/ibm-plex-sans/700.css'; /* Bold */
+@import '@fontsource/ibm-plex-mono/400.css'; /* Mono Regular */
+@import '@fontsource/ibm-plex-mono/600.css'; /* Mono SemiBold */
+
+/* Tailwind CSS v4 - Import after fonts */
 @import 'tailwindcss';
 @plugin "tailwindcss-animate";
 
-@font-face {
-	font-family: 'Atkinson Hyperlegible Mono';
-	font-style: normal;
-	font-weight: 400;
-	font-display: swap;
-	src: url('../assets/fonts/AtkinsonHyperlegibleMono-Regular.ttf')
-		format('truetype');
-}
-
-@font-face {
-	font-family: 'Atkinson Hyperlegible Mono';
-	font-style: normal;
-	font-weight: 700;
-	font-display: swap;
-	src: url('../assets/fonts/AtkinsonHyperlegibleMono-Bold.ttf')
-		format('truetype');
-}
-
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Design System Color Palette
+ * Based on Dieter Rams principles + Ink & Switch Lab aesthetic
+ * Dark mode default with International Orange accent
+ */
 :root {
-	--font-mono: 'Atkinson Hyperlegible Mono', monospace;
-	--background: 0 0% 100%;
-	--foreground: 240 10% 3.9%;
+	/* Light Mode (Warm Paper White) */
+	--background: 0 0% 98%; /* #FAFAFA */
+	--surface: 0 0% 100%; /* #FFFFFF */
+	--foreground: 0 0% 7.1%; /* #121212 at 90% opacity */
+	--foreground-secondary: 0 0% 7.1%; /* 70% opacity applied in usage */
+	--foreground-disabled: 0 0% 7.1%; /* 50% opacity applied in usage */
+
+	/* Cards & Elevated Surfaces */
 	--card: 0 0% 100%;
-	--card-foreground: 240 10% 3.9%;
+	--card-foreground: 0 0% 7.1%;
+
+	/* Popovers */
 	--popover: 0 0% 100%;
-	--popover-foreground: 240 10% 3.9%;
-	--primary: 240 5.9% 10%;
-	--primary-foreground: 0 0% 98%;
-	--secondary: 240 4.8% 95.9%;
-	--secondary-foreground: 240 5.9% 10%;
-	--muted: 240 4.8% 95.9%;
-	--muted-foreground: 240 3.8% 46.1%;
-	--accent: 240 4.8% 95.9%;
-	--accent-foreground: 240 5.9% 10%;
-	--destructive: 0 84.2% 60.2%;
-	--destructive-foreground: 0 0% 98%;
-	--border: 240 5.9% 90%;
-	--input: 240 5.9% 90%;
-	--ring: 240 5.9% 10%;
-	--radius: 0.5rem;
+	--popover-foreground: 0 0% 7.1%;
+
+	/* International Orange - Primary Action/Focus (used sparingly!) */
+	--primary: 18 100% 50%; /* #FF5E00 - Safety Orange */
+	--primary-foreground: 0 0% 100%;
+
+	/* Secondary (Subtle, unobtrusive) */
+	--secondary: 0 0% 96%;
+	--secondary-foreground: 0 0% 7.1%;
+
+	/* Muted (Backgrounds, disabled states) */
+	--muted: 0 0% 96%;
+	--muted-foreground: 0 0% 46%;
+
+	/* Accent (Reserved for interactive states) */
+	--accent: 18 100% 50%; /* Same as primary - International Orange */
+	--accent-foreground: 0 0% 100%;
+
+	/* Success / Complete - Lab Green */
+	--success: 158 100% 33%; /* #00A868 */
+	--success-foreground: 0 0% 100%;
+
+	/* Warning / Pending - Signal Yellow */
+	--warning: 45 100% 50%; /* #FFB800 */
+	--warning-foreground: 0 0% 7.1%;
+
+	/* Error / Conflict - Deep Red */
+	--destructive: 0 67% 51%; /* #D32F2F */
+	--destructive-foreground: 0 0% 100%;
+
+	/* Borders & Dividers (subtle, 20% opacity) */
+	--border: 0 0% 90%; /* #E0E0E0 */
+	--input: 0 0% 90%;
+
+	/* Focus Ring (International Orange, accessible) */
+	--ring: 18 100% 50%;
+
+	/* Border Radius (minimal, 4-8px) */
+	--radius: 8px;
+
+	/* Sidebar (256px fixed, golden ratio influenced) */
 	--sidebar: 0 0% 98%;
-	--sidebar-foreground: 240 5.3% 26.1%;
-	--sidebar-primary: 240 5.9% 10%;
-	--sidebar-primary-foreground: 0 0% 98%;
-	--sidebar-accent: 240 4.8% 95.9%;
-	--sidebar-accent-foreground: 240 5.9% 10%;
-	--sidebar-border: 220 13% 91%;
-	--sidebar-ring: 217.2 91.2% 59.8%;
+	--sidebar-foreground: 0 0% 26.1%;
+	--sidebar-primary: 18 100% 50%; /* International Orange for active items */
+	--sidebar-primary-foreground: 0 0% 100%;
+	--sidebar-accent: 0 0% 96%;
+	--sidebar-accent-foreground: 0 0% 7.1%;
+	--sidebar-border: 0 0% 90%;
+	--sidebar-ring: 18 100% 50%;
 }
 
 .dark {
-	--background: 240 10% 3.9%;
-	--foreground: 0 0% 98%;
-	--card: 240 10% 3.9%;
-	--card-foreground: 0 0% 98%;
-	--popover: 240 10% 3.9%;
-	--popover-foreground: 0 0% 98%;
-	--primary: 0 0% 98%;
-	--primary-foreground: 240 5.9% 10%;
-	--secondary: 240 3.7% 15.9%;
-	--secondary-foreground: 0 0% 98%;
-	--muted: 240 3.7% 15.9%;
-	--muted-foreground: 240 5% 64.9%;
-	--accent: 240 3.7% 15.9%;
-	--accent-foreground: 0 0% 98%;
-	--destructive: 0 62.8% 30.6%;
-	--destructive-foreground: 0 0% 98%;
-	--border: 240 3.7% 15.9%;
-	--input: 240 3.7% 15.9%;
-	--ring: 240 4.9% 83.9%;
-	--sidebar: 240 5.9% 10%;
-	--sidebar-foreground: 240 4.8% 95.9%;
-	--sidebar-primary: 224.3 76.3% 48%;
+	/* Dark Mode (Deep Black-Gray) - Default */
+	--background: 0 0% 7.1%; /* #121212 */
+	--surface: 0 0% 11.8%; /* #1E1E1E */
+	--foreground: 0 0% 100%; /* #FFFFFF at 90% opacity */
+	--foreground-secondary: 0 0% 100%; /* 70% opacity applied in usage */
+	--foreground-disabled: 0 0% 100%; /* 50% opacity applied in usage */
+
+	/* Cards & Elevated Surfaces */
+	--card: 0 0% 11.8%; /* #1E1E1E */
+	--card-foreground: 0 0% 100%;
+
+	/* Popovers */
+	--popover: 0 0% 11.8%;
+	--popover-foreground: 0 0% 100%;
+
+	/* International Orange - Primary Action/Focus */
+	--primary: 18 100% 50%; /* #FF5E00 - Safety Orange */
+	--primary-foreground: 0 0% 100%;
+
+	/* Secondary (Subtle, unobtrusive) */
+	--secondary: 0 0% 15.9%;
+	--secondary-foreground: 0 0% 100%;
+
+	/* Muted (Backgrounds, disabled states) */
+	--muted: 0 0% 15.9%;
+	--muted-foreground: 0 0% 64.9%;
+
+	/* Accent (Reserved for interactive states) */
+	--accent: 18 100% 50%; /* International Orange */
+	--accent-foreground: 0 0% 100%;
+
+	/* Success / Complete - Lab Green */
+	--success: 158 100% 33%; /* #00A868 */
+	--success-foreground: 0 0% 100%;
+
+	/* Warning / Pending - Signal Yellow */
+	--warning: 45 100% 50%; /* #FFB800 */
+	--warning-foreground: 0 0% 7.1%;
+
+	/* Error / Conflict - Deep Red */
+	--destructive: 0 67% 51%; /* #D32F2F */
+	--destructive-foreground: 0 0% 100%;
+
+	/* Borders & Dividers (subtle, 20% opacity) */
+	--border: 0 0% 20%; /* #333333 */
+	--input: 0 0% 20%;
+
+	/* Focus Ring (International Orange, accessible) */
+	--ring: 18 100% 50%;
+
+	/* Sidebar */
+	--sidebar: 0 0% 7.1%; /* #121212 */
+	--sidebar-foreground: 0 0% 95.9%;
+	--sidebar-primary: 18 100% 50%; /* International Orange for active items */
 	--sidebar-primary-foreground: 0 0% 100%;
-	--sidebar-accent: 240 3.7% 15.9%;
-	--sidebar-accent-foreground: 240 4.8% 95.9%;
-	--sidebar-border: 240 3.7% 15.9%;
-	--sidebar-ring: 217.2 91.2% 59.8%;
+	--sidebar-accent: 0 0% 15.9%;
+	--sidebar-accent-foreground: 0 0% 95.9%;
+	--sidebar-border: 0 0% 20%;
+	--sidebar-ring: 18 100% 50%;
 }
 
 @theme inline {
-	--font-sans: 'Atkinson Hyperlegible Mono', monospace;
-	--font-mono: 'Atkinson Hyperlegible Mono', monospace;
+	/* Typography - IBM Plex Family */
+	--font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+	--font-mono: 'IBM Plex Mono', 'Consolas', 'Monaco', monospace;
+
+	/* Modular Type Scale (1.250 Major Third Ratio) */
+	--font-size-xs: 0.64rem; /* 10.24px - inverse ratio */
+	--font-size-sm: 0.8rem; /* 12.8px - Small/Caption */
+	--font-size-base: 1rem; /* 16px - Body */
+	--font-size-lg: 1.25rem; /* 20px */
+	--font-size-xl: 1.563rem; /* 25px - h3 */
+	--font-size-2xl: 1.953rem; /* 31.25px - h2 */
+	--font-size-3xl: 2.441rem; /* 39px - h1 */
+	--font-size-4xl: 3.052rem; /* 48.8px - Large headings */
+
+	/* Line Heights (1.5-1.75 for body, 1.3 for headings) */
+	--line-height-tight: 1.3;
+	--line-height-normal: 1.5;
+	--line-height-relaxed: 1.75;
+
+	/* 8px Spacing System - All multiples of 8px */
+	--spacing-0: 0;
+	--spacing-1: 0.5rem; /* 8px */
+	--spacing-2: 1rem; /* 16px */
+	--spacing-3: 1.5rem; /* 24px */
+	--spacing-4: 2rem; /* 32px */
+	--spacing-5: 2.5rem; /* 40px */
+	--spacing-6: 3rem; /* 48px */
+	--spacing-8: 4rem; /* 64px */
+	--spacing-10: 5rem; /* 80px */
+	--spacing-12: 6rem; /* 96px */
+	--spacing-16: 8rem; /* 128px */
+	--spacing-20: 10rem; /* 160px */
+	--spacing-24: 12rem; /* 192px */
+	--spacing-32: 16rem; /* 256px - Sidebar width */
+	--spacing-48: 24rem; /* 384px - Golden ratio sidebar */
+	--spacing-64: 32rem; /* 512px */
+	--spacing-96: 48rem; /* 768px */
+	--spacing-128: 64rem; /* 1024px - Max content width */
+
+	/* Color System */
 	--color-background: hsl(var(--background));
+	--color-surface: hsl(var(--surface));
 	--color-foreground: hsl(var(--foreground));
 	--color-card: hsl(var(--card));
 	--color-card-foreground: hsl(var(--card-foreground));
@@ -100,6 +201,10 @@
 	--color-muted-foreground: hsl(var(--muted-foreground));
 	--color-accent: hsl(var(--accent));
 	--color-accent-foreground: hsl(var(--accent-foreground));
+	--color-success: hsl(var(--success));
+	--color-success-foreground: hsl(var(--success-foreground));
+	--color-warning: hsl(var(--warning));
+	--color-warning-foreground: hsl(var(--warning-foreground));
 	--color-destructive: hsl(var(--destructive));
 	--color-destructive-foreground: hsl(var(--destructive-foreground));
 	--color-border: hsl(var(--border));
@@ -113,10 +218,12 @@
 	--color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
 	--color-sidebar-border: hsl(var(--sidebar-border));
 	--color-sidebar-ring: hsl(var(--sidebar-ring));
-	--radius-lg: var(--radius);
-	--radius-md: calc(var(--radius) - 2px);
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-xl: calc(var(--radius) + 4px);
+
+	/* Border Radius (minimal, 4-8px per design system) */
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
 }
 
 /* Custom Scrollbar */
@@ -155,7 +262,7 @@
 	background-color: rgba(250, 204, 21, 0.3); /* yellow-400/30 */
 }
 
-/* Minimap Styles */
+/* Minimap Styles - Subtle, unobtrusive (Design System) */
 .cm-minimap {
 	position: absolute;
 	right: 0;
@@ -163,6 +270,13 @@
 	height: 100%;
 	cursor: pointer;
 	z-index: 1;
+	opacity: 0.5; /* More subtle by default */
+	border-left: 1px solid hsl(var(--border) / 0.2);
+	transition: opacity 0.2s ease;
+}
+
+.cm-minimap:hover {
+	opacity: 0.7; /* Slightly more visible on hover */
 }
 
 .cm-minimap-content {
@@ -177,13 +291,35 @@
 }
 
 .cm-minimap-overlay:hover {
-	background-color: hsl(var(--primary) / 0.25) !important;
+	background-color: hsl(var(--primary) / 0.15) !important; /* Subtle orange highlight */
 }
 
 .cm-minimap .cm-line {
 	overflow: hidden;
 	text-overflow: clip;
 	white-space: nowrap;
+}
+
+/* Editor Canvas Constraints (Design System: 1024px max-width, centered) */
+.cm-editor {
+	max-width: 1024px;
+	margin: 0 auto;
+	padding: var(--spacing-3); /* 24px padding for breathing room */
+}
+
+.cm-scroller {
+	overflow-y: auto !important;
+}
+
+.cm-content {
+	/* Vertical rhythm: 24px between blocks */
+	padding-top: var(--spacing-3);
+	padding-bottom: var(--spacing-3);
+}
+
+.cm-line {
+	/* Ensure line height matches design system */
+	line-height: var(--line-height-normal); /* 1.5 */
 }
 
 /* Hide scrollbar for tab bar */
@@ -194,4 +330,174 @@
 .no-scrollbar {
 	-ms-overflow-style: none;
 	scrollbar-width: none;
+}
+
+/* Design System Utilities */
+
+/* Typography Utilities */
+.text-display {
+	font-size: var(--font-size-4xl);
+	line-height: var(--line-height-tight);
+	font-weight: 700;
+}
+
+.text-h1 {
+	font-size: var(--font-size-3xl);
+	line-height: var(--line-height-tight);
+	font-weight: 700;
+}
+
+.text-h2 {
+	font-size: var(--font-size-2xl);
+	line-height: var(--line-height-tight);
+	font-weight: 600;
+}
+
+.text-h3 {
+	font-size: var(--font-size-xl);
+	line-height: var(--line-height-tight);
+	font-weight: 500;
+}
+
+.text-body {
+	font-size: var(--font-size-base);
+	line-height: var(--line-height-normal);
+	font-weight: 400;
+}
+
+.text-caption {
+	font-size: var(--font-size-sm);
+	line-height: var(--line-height-normal);
+	font-weight: 300;
+}
+
+.text-mono {
+	font-family: var(--font-mono);
+	font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+/* Opacity Utilities (Design System: 90%, 70%, 50%) */
+.text-primary {
+	opacity: 0.9;
+}
+
+.text-secondary {
+	opacity: 0.7;
+}
+
+.text-disabled {
+	opacity: 0.5;
+}
+
+/* Button Styles (Design System: Border-only, minimal) */
+.btn-rams {
+	/* Dieter Rams style: border-only, no fill */
+	border: 1px solid hsl(var(--border));
+	background: transparent;
+	color: hsl(var(--foreground));
+	padding: var(--spacing-1) var(--spacing-3);
+	border-radius: var(--radius-sm);
+	font-weight: 400;
+	transition: all 150ms cubic-bezier(0.2, 0.8, 0.4, 1);
+	cursor: pointer;
+}
+
+.btn-rams:hover {
+	background: hsl(var(--muted) / 0.1);
+	border-color: hsl(var(--foreground) / 0.3);
+}
+
+.btn-rams:focus-visible {
+	outline: 2px solid hsl(var(--ring));
+	outline-offset: 2px;
+}
+
+.btn-rams:active {
+	transform: translateY(0.5px);
+}
+
+.btn-primary {
+	/* Primary action: Pacific Blue accent (use sparingly!) */
+	border: 2px solid hsl(var(--primary));
+	background: transparent;
+	color: hsl(var(--primary));
+	padding: var(--spacing-1) var(--spacing-3);
+	border-radius: var(--radius-sm);
+	font-weight: 500;
+	transition: all 150ms cubic-bezier(0.2, 0.8, 0.4, 1);
+	cursor: pointer;
+}
+
+.btn-primary:hover {
+	background: hsl(var(--primary) / 0.1);
+}
+
+.btn-primary:focus-visible {
+	outline: 2px solid hsl(var(--ring));
+	outline-offset: 2px;
+}
+
+.btn-primary:active {
+	transform: translateY(0.5px);
+	background: hsl(var(--primary) / 0.2);
+}
+
+/* Card/Surface Styles */
+.surface-elevated {
+	background: hsl(var(--surface));
+	border: 1px solid hsl(var(--border));
+	border-radius: var(--radius-lg);
+}
+
+/* Focus Ring (Accessible, Pacific Blue) */
+.focus-ring {
+	outline: 2px solid hsl(var(--ring));
+	outline-offset: 2px;
+}
+
+/* Vertical Timeline Connector (Chronological emphasis) */
+.timeline-connector {
+	border-left: 1px dashed hsl(var(--border) / 0.3);
+	padding-left: var(--spacing-3);
+}
+
+/* Grid Snap Enforcement (8px multiples) */
+.grid-snap {
+	/* Helper class to ensure content snaps to 8px grid */
+	display: grid;
+	gap: var(--spacing-2);
+}
+
+/* Tactile Feedback Animations */
+.tactile-hover {
+	transition: transform 150ms cubic-bezier(0.2, 0.8, 0.4, 1);
+}
+
+.tactile-hover:hover {
+	transform: scale(1.02);
+}
+
+.tactile-hover:active {
+	transform: scale(0.98);
+}
+
+/* State Indicators (Use color sparingly - only when meaningful!) */
+.state-recording {
+	border-color: hsl(var(--primary));
+	color: hsl(var(--primary));
+}
+
+.state-success {
+	border-color: hsl(var(--success));
+	color: hsl(var(--success));
+}
+
+.state-warning {
+	border-color: hsl(var(--warning));
+	color: hsl(var(--warning));
+}
+
+.state-error {
+	border-color: hsl(var(--destructive));
+	color: hsl(var(--destructive));
 }

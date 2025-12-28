@@ -3,9 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { FileTree } from './FileTree';
-import { TaskPanel } from './TaskPanel';
-import { SyncStatus } from './SyncStatus';
-import { FileNode, SearchResult, AgentTrackerTask } from '@/types';
+import { FileNode, SearchResult } from '@/types';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +14,6 @@ import {
 	Settings,
 	Plus,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface SidebarProps {
 	activePath: string | null;
@@ -37,7 +34,7 @@ export function Sidebar({
 	vaultId,
 	activeNoteId,
 }: SidebarProps) {
-	const [width, setWidth] = useState(250);
+	const [width, setWidth] = useState(256); // Design System: 256px sidebar width
 	const [isCollapsed, setIsCollapsed] = useState(false);
 	const [isResizing, setIsResizing] = useState(false);
 	const sidebarRef = useRef<HTMLDivElement>(null);
@@ -83,12 +80,14 @@ export function Sidebar({
 		}
 	}, [search, vaultPath]);
 
-	// Listen for file system changes and reload file tree
+	// Listen for file system structure changes and reload file tree
+	// Note: File watcher only triggers on create/delete/rename, NOT content modifications
+	// This prevents constant reloads when files are being edited or synced
 	useEffect(() => {
 		if (!vaultPath) return;
 
 		const unlisten = listen('vault-changed', () => {
-			console.log('Vault changes detected, reloading file tree...');
+			console.log('Vault structure changed, reloading file tree');
 			loadFileTree(vaultPath);
 		});
 
@@ -237,9 +236,9 @@ export function Sidebar({
 			className='h-full flex shrink-0 relative group text-foreground'
 			style={{ width: width }}
 		>
-			<div className='flex-1 flex flex-col h-full border-r border-border bg-muted/10 overflow-hidden'>
+			<div className='flex-1 flex flex-col h-full border-r border-border/20 bg-muted/10 overflow-hidden'>
 				{/* Header */}
-				<div className='h-12 flex items-center justify-between px-4 border-b border-border shrink-0'>
+				<div className='h-12 flex items-center justify-between px-4 border-b border-border/20 shrink-0'>
 					<span className='font-medium text-sm truncate'>
 						{vaultPath ? (
 							vaultPath.split('/').pop()
@@ -281,14 +280,14 @@ export function Sidebar({
 					</div>
 				</div>
 				{vaultPath && (vaultId || activeNoteId) ? (
-					<div className='px-4 py-2 border-b border-border text-xs text-muted-foreground flex flex-col gap-1'>
+					<div className='px-4 py-2 border-b border-border/20 text-xs text-muted-foreground flex flex-col gap-1 font-mono'>
 						{vaultId ? <div>vault_id={vaultId.slice(0, 8)}</div> : null}
 						{activeNoteId ? <div>note_id={activeNoteId.slice(0, 8)}</div> : null}
 					</div>
 				) : null}
 
 				{/* Search */}
-				<div className='p-3 border-b border-border shrink-0'>
+				<div className='p-3 border-b border-border/20 shrink-0'>
 					<div className='relative'>
 						<Search className='absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground' />
 						<input
@@ -296,7 +295,7 @@ export function Sidebar({
 							placeholder='Search files...'
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
-							className='w-full pl-9 pr-3 py-1.5 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-ring'
+							className='w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono'
 						/>
 					</div>
 				</div>
@@ -353,19 +352,8 @@ export function Sidebar({
 					)}
 				</div>
 
-				{/* Task Panel */}
-				<TaskPanel
-					onFileSelect={onFileSelect}
-					onTaskClick={(task) => {
-						console.log('Task clicked:', task);
-					}}
-				/>
-
-				{/* Sync Status */}
-				<SyncStatus vaultPath={vaultPath} />
-
 				{/* Footer */}
-				<div className='p-2 border-t border-border shrink-0 flex justify-between items-center'>
+				<div className='p-2 border-t border-border/20 shrink-0 flex justify-between items-center'>
 					<Button
 						variant='ghost'
 						size='sm'
@@ -378,9 +366,9 @@ export function Sidebar({
 				</div>
 			</div>
 
-			{/* Resizer Handle */}
+			{/* Resizer Handle - International Orange on hover */}
 			<div
-				className='absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 transition-colors z-10'
+				className='absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100'
 				onMouseDown={startResizing}
 			/>
 		</div>

@@ -34,6 +34,7 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const autoStopCallbackRef = useRef<(() => void) | null>(null);
     const recentSamplesRef = useRef<number[]>([]); // For waveform visualization
+    const isCollectingAudioRef = useRef(true); // Track if we should collect audio (paused during silence window)
 
     // Use refs for settings to avoid stale closures
     const autoStopOnSilenceRef = useRef(autoStopOnSilence);
@@ -59,6 +60,11 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
             if (isRecordingRef.current) {
                 console.log('[VAD Event] ✓ Starting auto-stop timer');
+
+                // PAUSE audio collection to prevent recording silence
+                // This stops Whisper from hallucinating on silent audio
+                console.log('[VAD Event] ⏸️  Pausing audio collection (silence detected)');
+                isCollectingAudioRef.current = false;
 
                 // Clear any existing timeout
                 if (silenceTimeoutRef.current) {
@@ -96,6 +102,11 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
         // Listen for speech start to cancel auto-stop
         const unlistenSpeech = listen('vad-speech-start', () => {
             console.log('[VAD Event] Received vad-speech-start');
+
+            // RESUME audio collection - user is speaking again
+            console.log('[VAD Event] ▶️  Resuming audio collection (speech detected)');
+            isCollectingAudioRef.current = true;
+
             if (silenceTimeoutRef.current) {
                 console.log('[VAD Event] ✓ Speech detected - canceling auto-stop timer');
                 clearTimeout(silenceTimeoutRef.current);
@@ -166,31 +177,32 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
             processorRef.current = processor;
 
             audioBufferRef.current = [];
+            isCollectingAudioRef.current = true; // Reset collection flag for new recording
             setIsRecording(true);
 
-            let frameCounter = 0;
             processor.onaudioprocess = (e) => {
                 if (!isRecordingRef.current) return;
 
                 const inputData = e.inputBuffer.getChannelData(0);
                 const pcmData = Array.from(inputData);
 
-                // Add to local buffer
-                audioBufferRef.current.push(...pcmData);
+                // Only add to buffer if we're actively collecting (not in silence window)
+                // This prevents Whisper from hallucinating on silence at the end of recordings
+                if (isCollectingAudioRef.current) {
+                    audioBufferRef.current.push(...pcmData);
+                }
 
-                // Send to VAD
+                // Always send to VAD for silence detection, even when not collecting
                 invoke('process_audio_chunk', { pcmData });
 
                 // Update waveform visualization data (keep last ~1 second)
                 const maxSamples = 16000; // 1 second at 16kHz
                 recentSamplesRef.current = [...recentSamplesRef.current, ...pcmData].slice(-maxSamples);
 
-                // Update state every 2 chunks (~512ms) for smooth waveform without excessive re-renders
-                // At 4096 buffer size and 16kHz, each chunk is 256ms
-                frameCounter++;
-                if (frameCounter % 2 === 0) {
-                    setRecentAudioSamples([...recentSamplesRef.current]);
-                }
+                // Update state every chunk (~256ms) for smooth waveform
+                // The waveform component now uses refs and runs at 60 FPS, so more frequent
+                // data updates make it smoother without performance cost
+                setRecentAudioSamples([...recentSamplesRef.current]);
 
                 // Streaming transcription DISABLED - causes infinite loop and blocks auto-stop
                 // TODO: Re-enable after fixing the async transcription issue

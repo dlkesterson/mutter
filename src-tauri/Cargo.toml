@@ -1,6 +1,6 @@
 [package]
 name = "mutter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Voice-first markdown editor with semantic commands"
 authors = ["you"]
 license = "MIT"

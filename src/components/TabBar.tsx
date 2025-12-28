@@ -78,7 +78,7 @@ export function TabBar({
     };
 
     return (
-        <div className="flex items-center w-full bg-muted/20 border-b border-border overflow-x-auto no-scrollbar">
+        <div className="flex items-center w-full bg-surface border-b border-border/20 overflow-x-auto no-scrollbar h-10">
             {tabs.map((tab, index) => {
                 const isActive = tab.id === activeTabId;
                 const isDragging = draggedIndex === index;
@@ -98,10 +98,10 @@ export function TabBar({
                                 onDragEnd={handleDragEnd}
                                 onClick={() => onTabClick(tab.id)}
                                 className={cn(
-                                    "group flex items-center gap-2 px-3 py-2 text-sm border-r border-border/50 cursor-pointer select-none min-w-[120px] max-w-[200px] h-9 transition-all relative",
+                                    "group flex items-center gap-2 px-4 py-2 text-sm border-r border-border/20 cursor-pointer select-none min-w-[120px] max-w-[200px] h-full transition-all relative",
                                     isActive
-                                        ? "bg-background text-foreground font-medium border-t-2 border-t-primary"
-                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                                        ? "bg-background text-foreground font-medium border-b-2 border-b-primary"
+                                        : "text-muted-foreground hover:bg-muted/30 hover:text-foreground",
                                     isDragging && "opacity-50",
                                     isDragOver && "border-l-2 border-l-primary"
                                 )}

@@ -16,6 +16,17 @@ export function WaveformVisualization({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number>();
 
+    // Store audio data in a ref to avoid restarting animation loop on every update
+    const audioDataRef = useRef<number[]>(audioData);
+    const isRecordingRef = useRef(isRecording);
+
+    // Update refs when props change (doesn't restart animation loop)
+    useEffect(() => {
+        audioDataRef.current = audioData;
+        isRecordingRef.current = isRecording;
+    }, [audioData, isRecording]);
+
+    // Animation loop - runs continuously at 60 FPS without restarting
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -29,12 +40,19 @@ export function WaveformVisualization({
         canvas.height = height * dpr;
         ctx.scale(dpr, dpr);
 
+        let animating = true;
+
         const draw = () => {
+            if (!animating) return;
+
             // Clear canvas
             ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
             ctx.fillRect(0, 0, width, height);
 
-            if (!isRecording || audioData.length === 0) {
+            const currentAudioData = audioDataRef.current;
+            const currentIsRecording = isRecordingRef.current;
+
+            if (!currentIsRecording || currentAudioData.length === 0) {
                 // Show idle state - subtle baseline
                 ctx.strokeStyle = 'rgba(100, 116, 139, 0.3)';
                 ctx.lineWidth = 1;
@@ -42,6 +60,8 @@ export function WaveformVisualization({
                 ctx.moveTo(0, height / 2);
                 ctx.lineTo(width, height / 2);
                 ctx.stroke();
+
+                animationFrameRef.current = requestAnimationFrame(draw);
                 return;
             }
 
@@ -49,15 +69,15 @@ export function WaveformVisualization({
             const barWidth = 2;
             const gap = 1;
             const barCount = Math.floor(width / (barWidth + gap));
-            const samplesPerBar = Math.floor(audioData.length / barCount);
+            const samplesPerBar = Math.floor(currentAudioData.length / barCount);
 
             ctx.fillStyle = '#10b981'; // Emerald green like SuperWhisper
 
             for (let i = 0; i < barCount; i++) {
                 // Get RMS for this segment
                 const startIdx = i * samplesPerBar;
-                const endIdx = Math.min(startIdx + samplesPerBar, audioData.length);
-                const segment = audioData.slice(startIdx, endIdx);
+                const endIdx = Math.min(startIdx + samplesPerBar, currentAudioData.length);
+                const segment = currentAudioData.slice(startIdx, endIdx);
 
                 const rms = Math.sqrt(
                     segment.reduce((sum, val) => sum + val * val, 0) / segment.length
@@ -82,11 +102,12 @@ export function WaveformVisualization({
         draw();
 
         return () => {
+            animating = false;
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [audioData, isRecording, width, height]);
+    }, [width, height]); // Only restart if canvas dimensions change
 
     return (
         <canvas

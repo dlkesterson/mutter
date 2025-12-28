@@ -348,6 +348,9 @@ function App() {
 	const toggleListening = async () => {
 		if (audioState === 'listening') {
 			try {
+				// Clear auto-stop callback to prevent double insertion
+				setAutoStopCallback(null);
+
 				setAudioState('processing');
 				const result = await stopRecording();
 				if (result) {
@@ -384,6 +387,8 @@ function App() {
 					} finally {
 						setAudioState('idle');
 						setStreamingTranscription('');
+						// Clear the callback after it fires to prevent re-use
+						setAutoStopCallback(null);
 					}
 				});
 

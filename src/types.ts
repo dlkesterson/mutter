@@ -39,15 +39,3 @@ export interface ExtractedTask {
     checked: boolean;
     line_number: number;
 }
-
-export interface AgentTrackerTask {
-    id: string;
-    title: string;
-    status: 'todo' | 'in_progress' | 'done';
-    priority: 'low' | 'medium' | 'high';
-    tags: string[];
-    relevant_files: string[];
-    source_file?: string;
-    created_at: string;
-    updated_at: string;
-}
