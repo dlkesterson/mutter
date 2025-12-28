@@ -26,7 +26,6 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const { theme, setTheme } = useTheme();
-	const [voiceProvider, setVoiceProvider] = useState('system');
 	const [fontSize, setFontSize] = useState('16');
 
 	// VAD Settings
@@ -57,6 +56,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	// Load settings from storage
 	useEffect(() => {
 		const loadSettings = async () => {
+			// Font size setting
+			const savedFontSize = await getStorageItem<string>('editor_font_size');
+			if (savedFontSize !== null) setFontSize(savedFontSize);
+
 			// Auto-Stop settings
 			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
 			const timeout = await getStorageItem<number>('auto_stop_timeout_ms');
@@ -115,80 +118,123 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className='max-w-md max-h-[80vh] overflow-y-auto bg-background text-foreground border-border'>
+			<DialogContent className='max-w-4xl max-h-[85vh] overflow-y-auto bg-background text-foreground border-border'>
 				<DialogHeader>
-					<DialogTitle>Settings</DialogTitle>
+					<DialogTitle className='text-xl font-semibold'>Settings</DialogTitle>
 				</DialogHeader>
-				<div className='space-y-6'>
-					<div className='space-y-2'>
-						<Label htmlFor='theme'>Theme</Label>
-						<Select
-							value={theme}
-							onValueChange={(val: any) => setTheme(val)}
-						>
-							<SelectTrigger
-								id='theme'
-								className='bg-background border-input'
-							>
-								<SelectValue placeholder='Select theme' />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value='light'>Light</SelectItem>
-								<SelectItem value='dark'>Dark</SelectItem>
-								<SelectItem value='system'>System</SelectItem>
-							</SelectContent>
-						</Select>
+				{/* Two-column grid layout for better space usage */}
+				<div className='grid grid-cols-1 lg:grid-cols-2 gap-8'>
+					{/* LEFT COLUMN: Appearance & Editor */}
+					<div className='space-y-6'>
+						<div className='space-y-4'>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Appearance</h3>
+
+							<div className='space-y-2'>
+								<Label htmlFor='theme'>Theme</Label>
+								<Select
+									value={theme}
+									onValueChange={(val: any) => setTheme(val)}
+								>
+									<SelectTrigger
+										id='theme'
+										className='bg-background border-input'
+									>
+										<SelectValue placeholder='Select theme' />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value='light'>Light</SelectItem>
+										<SelectItem value='dark'>Dark</SelectItem>
+										<SelectItem value='system'>System</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+
+							<div className='space-y-2'>
+								<Label htmlFor='font-size'>Editor Font Size</Label>
+								<Select
+									value={fontSize}
+									onValueChange={async (val) => {
+										setFontSize(val);
+										await setStorageItem('editor_font_size', val);
+										// Notify editor to update font size
+										if ((window as any).updateEditorFontSize) {
+											(window as any).updateEditorFontSize(val);
+										}
+									}}
+								>
+									<SelectTrigger
+										id='font-size'
+										className='bg-background border-input'
+									>
+										<SelectValue placeholder='Select size' />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value='14'>14px (Small)</SelectItem>
+										<SelectItem value='16'>16px (Default)</SelectItem>
+										<SelectItem value='18'>18px (Large)</SelectItem>
+										<SelectItem value='20'>20px (Extra Large)</SelectItem>
+										<SelectItem value='22'>22px</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+
+						<div className='space-y-4 border-t border-border pt-4'>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Editor</h3>
+
+							<div className='space-y-2'>
+								<Label className='flex items-center gap-2 cursor-pointer'>
+									<input
+										type='checkbox'
+										defaultChecked
+										onChange={(e) => {
+											if ((window as any).toggleMinimap) {
+												(window as any).toggleMinimap(e.target.checked);
+											}
+										}}
+										className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+									/>
+									Show minimap
+								</Label>
+								<p className='text-xs text-muted-foreground ml-6'>
+									Display a visual overview of the entire document
+								</p>
+							</div>
+
+							<div className='space-y-2'>
+								<Label className='flex items-center gap-2 cursor-pointer'>
+									<input
+										type='checkbox'
+										defaultChecked
+										className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+									/>
+									Line numbers
+								</Label>
+								<p className='text-xs text-muted-foreground ml-6'>
+									Show line numbers in the editor gutter
+								</p>
+							</div>
+
+							<div className='space-y-2'>
+								<Label className='flex items-center gap-2 cursor-pointer'>
+									<input
+										type='checkbox'
+										defaultChecked
+										className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+									/>
+									Word wrap
+								</Label>
+								<p className='text-xs text-muted-foreground ml-6'>
+									Wrap long lines instead of scrolling horizontally
+								</p>
+							</div>
+						</div>
 					</div>
 
-					<div className='space-y-2'>
-						<Label htmlFor='voice-provider'>Voice Provider</Label>
-						<Select
-							value={voiceProvider}
-							onValueChange={setVoiceProvider}
-						>
-							<SelectTrigger
-								id='voice-provider'
-								className='bg-background border-input'
-							>
-								<SelectValue placeholder='Select provider' />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value='system'>
-									System Default
-								</SelectItem>
-								<SelectItem value='google'>
-									Google Cloud Speech
-								</SelectItem>
-								<SelectItem value='openai'>
-									OpenAI Whisper
-								</SelectItem>
-								<SelectItem value='azure'>
-									Azure Speech
-								</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
-					<div className='space-y-2'>
-						<Label htmlFor='font-size'>Editor Font Size</Label>
-						<Select value={fontSize} onValueChange={setFontSize}>
-							<SelectTrigger
-								id='font-size'
-								className='bg-background border-input'
-							>
-								<SelectValue placeholder='Select size' />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value='14'>14px</SelectItem>
-								<SelectItem value='16'>16px</SelectItem>
-								<SelectItem value='18'>18px</SelectItem>
-								<SelectItem value='20'>20px</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
-					<div className='space-y-4 border-t border-border pt-4'>
-						<h3 className='font-medium'>Voice Detection (VAD)</h3>
+					{/* RIGHT COLUMN: Voice & Recording */}
+					<div className='space-y-6'>
+						<div className='space-y-4'>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Voice Detection (VAD)</h3>
 
 						<div className='space-y-2'>
 							<div className='flex justify-between'>
@@ -279,10 +325,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 								</SelectContent>
 							</Select>
 						</div>
-					</div>
+						</div>
 
-					<div className='space-y-4 border-t border-border pt-4'>
-						<h3 className='font-medium'>Auto-Stop Recording</h3>
+						<div className='space-y-4 border-t border-border pt-4'>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Auto-Stop Recording</h3>
 
 						<div className='space-y-2'>
 							<Label className='flex items-center gap-2 cursor-pointer'>
@@ -330,53 +376,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 								</p>
 							</div>
 						)}
-					</div>
-
-					<div className='space-y-4 border-t border-border pt-4'>
-						<h3 className='font-medium'>Editor</h3>
-
-						<div className='space-y-2'>
-							<Label className='flex items-center gap-2 cursor-pointer'>
-								<input
-									type='checkbox'
-									defaultChecked
-									onChange={(e) => {
-										// Call the global toggle function - it handles state and storage
-										if ((window as any).toggleMinimap) {
-											(window as any).toggleMinimap(e.target.checked);
-										}
-									}}
-									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-								/>
-								Show minimap
-							</Label>
-							<p className='text-xs text-muted-foreground'>
-								Display a visual overview of the entire document on the right side.
-							</p>
 						</div>
 					</div>
+				</div>
 
-					<div className='space-y-2'>
-						<Label className='flex items-center gap-2 cursor-pointer'>
-							<input
-								type='checkbox'
-								defaultChecked
-								className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-							/>
-							Auto-save on voice command
-						</Label>
-						<Label className='flex items-center gap-2 cursor-pointer'>
-							<input
-								type='checkbox'
-								defaultChecked
-								className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-							/>
-							Show syntax highlighting
-						</Label>
-					</div>
-
-					<div className='space-y-4 border-t border-border pt-4'>
-						<h3 className='font-medium'>Stream Mode (LLM Formatting)</h3>
+				{/* FULL-WIDTH BOTTOM SECTION: Advanced Settings */}
+				<div className='space-y-6 border-t border-border pt-6'>
+					<div className='space-y-4'>
+						<h3 className='text-base font-semibold border-b border-border pb-2'>Stream Mode (LLM Formatting)</h3>
 
 						<div className='space-y-2'>
 							<Label className='flex items-center gap-2 cursor-pointer'>

@@ -14,6 +14,7 @@ export interface Tab {
     path: string;
     title: string;
     isDirty?: boolean;
+    isPreview?: boolean;
 }
 
 interface TabBarProps {
@@ -114,7 +115,7 @@ export function TabBar({
                                             title="Unsaved changes"
                                         />
                                     )}
-                                    <span className="truncate">{tab.title}</span>
+                                    <span className={cn("truncate", tab.isPreview && "italic font-normal")}>{tab.title}</span>
                                 </span>
                                 <button
                                     onClick={(e) => onTabClose(tab.id, e)}

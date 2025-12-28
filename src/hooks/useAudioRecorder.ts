@@ -17,7 +17,6 @@ interface AudioRecorderOptions {
 export function useAudioRecorder(options?: AudioRecorderOptions) {
     const {
         onSilenceDetected,
-        onStreamingTranscription,
         autoStopOnSilence = true,
         silenceTimeoutMs = 5000
     } = options || {};
@@ -29,7 +28,6 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     const processorRef = useRef<ScriptProcessorNode | null>(null);
     const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const audioBufferRef = useRef<number[]>([]);
-    const lastTranscriptionTimeRef = useRef<number>(0);
     const isRecordingRef = useRef(false);
     const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const autoStopCallbackRef = useRef<(() => void) | null>(null);
@@ -259,8 +257,8 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     }, []);
 
     // Allow setting the auto-stop callback from outside
-    const setAutoStopCallback = useCallback((callback: () => void) => {
-        console.log('[useAudioRecorder] ✓ Auto-stop callback set');
+    const setAutoStopCallback = useCallback((callback: (() => void) | null) => {
+        console.log('[useAudioRecorder] ✓ Auto-stop callback set:', callback ? 'function' : 'null');
         autoStopCallbackRef.current = callback;
     }, []);
 

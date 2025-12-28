@@ -105,9 +105,45 @@ pub async fn get_file_tree(vault_path: String) -> Result<Vec<FileNode>, String> 
 }
 
 #[tauri::command]
+pub async fn open_daily_note(vault_path: String) -> Result<String, String> {
+    let root = std::path::Path::new(&vault_path);
+    if !root.exists() {
+        return Err("Vault path does not exist".to_string());
+    }
+
+    let now = chrono::Local::now();
+    let year = now.format("%Y").to_string();
+    let month_folder = now.format("%Y_%m").to_string();
+    let filename = now.format("%Y-%m-%d.md").to_string();
+
+    // Path: vault/YYYY/YYYY_MM/YYYY-MM-DD.md
+    let year_path = root.join(&year);
+    let month_path = year_path.join(&month_folder);
+    let file_path = month_path.join(&filename);
+
+    // Create directories if they don't exist
+    if !year_path.exists() {
+        std::fs::create_dir(&year_path).map_err(|e| e.to_string())?;
+    }
+    if !month_path.exists() {
+        std::fs::create_dir(&month_path).map_err(|e| e.to_string())?;
+    }
+
+    // Create file if it doesn't exist
+    if !file_path.exists() {
+        let title = now.format("%Y-%m-%d").to_string();
+        let content = format!("# {}\n\n", title);
+        std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    }
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn search_notes(query: String, vault_path: String) -> Result<Vec<SearchResult>, String> {
     let mut results = vec![];
     let query_lower = query.to_lowercase();
+    let terms: Vec<&str> = query_lower.split_whitespace().collect();
 
     // Walk all .md files
     for entry in walkdir::WalkDir::new(&vault_path)
@@ -123,8 +159,10 @@ pub async fn search_notes(query: String, vault_path: String) -> Result<Vec<Searc
             Err(_) => continue,
         };
 
-        // Simple text search (can enhance with fuzzy matching later)
-        if content.to_lowercase().contains(&query_lower) {
+        let content_lower = content.to_lowercase();
+        
+        // Check if ALL terms are present (implicit AND)
+        if terms.iter().all(|&term| content_lower.contains(term)) {
             let title = entry
                 .path()
                 .file_stem()
@@ -132,8 +170,9 @@ pub async fn search_notes(query: String, vault_path: String) -> Result<Vec<Searc
                 .unwrap_or("Untitled")
                 .to_string();
 
-            // Extract excerpt
-            let excerpt = extract_excerpt(&content, &query_lower);
+            // Extract excerpt based on the first term
+            let first_term = terms.first().unwrap_or(&"");
+            let excerpt = extract_excerpt(&content, first_term);
 
             results.push(SearchResult {
                 path: entry.path().to_string_lossy().to_string(),

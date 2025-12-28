@@ -48,12 +48,7 @@ export default function WaveformVisualizer({
 			// Draw waveform
 			if (dataBufferRef.current.length > 0) {
 				// Use CSS variable for primary color if possible, or fallback
-				const computedStyle = getComputedStyle(
-					document.documentElement
-				);
-				const primaryColor =
-					computedStyle.getPropertyValue('--primary') || '#3b82f6';
-
+				
 				// Convert OKLCH to hex/rgb if needed, but for now let's stick to a safe color or try to parse
 				// Since canvas doesn't support OKLCH directly in all browsers yet, we might need a fallback
 				// For now, let's use a hardcoded color that matches our theme

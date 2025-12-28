@@ -10,7 +10,6 @@ import {
   routeCommand,
   type EmbeddingResponse,
   type BatchEmbeddingResponse,
-  type HealthResponse,
 } from '../lib/embedding-api';
 
 export function useEmbeddings() {

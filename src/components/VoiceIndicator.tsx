@@ -58,7 +58,7 @@ export function VoiceIndicator({
 
 			{/* Waveform visualization - show when listening */}
 			{state === 'listening' && (
-				<div className='p-3 bg-surface/95 backdrop-blur-md border border-primary/30 rounded shadow-xl'>
+				<div className='p-3 bg-surface/95 backdrop-blur-md border border-primary/30 rounded shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200'>
 					<WaveformVisualization
 						audioData={audioSamples}
 						isRecording={true}
@@ -69,7 +69,9 @@ export function VoiceIndicator({
 			)}
 
 			{/* Voice controls - Border-only design (Dieter Rams style) */}
-			<div className='flex items-center gap-1 p-1.5 bg-surface/80 backdrop-blur-md border border-border/20 rounded-full shadow-xl transition-all hover:scale-102'>
+			<div className={`flex items-center gap-1 p-1.5 bg-surface/80 backdrop-blur-md border border-border/20 rounded-full shadow-xl transition-all hover:scale-102 ${
+				state === 'listening' ? 'animate-breathe' : ''
+			}`}>
 				<button
 					onClick={onLogClick}
 					className='p-2.5 rounded-full hover:bg-muted/10 text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border/20'
@@ -82,13 +84,15 @@ export function VoiceIndicator({
 
 				<button
 					onClick={onToggleListening}
-					className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 border-2 ${getStatusColor()} ${
-						state === 'listening' ? 'bg-primary/10' : 'bg-transparent hover:bg-muted/10'
+					className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 border-2 ${getStatusColor()} ${
+						state === 'listening'
+							? 'bg-primary/10 scale-105'
+							: 'bg-transparent hover:bg-muted/10 hover:scale-105'
 					}`}
 				>
 					<Mic
-						className={`w-4 h-4 ${
-							state === 'listening' ? 'animate-pulse' : ''
+						className={`w-4 h-4 transition-transform duration-200 ${
+							state === 'listening' ? 'animate-pulse scale-110' : ''
 						}`}
 					/>
 					<span className='text-sm font-medium'>

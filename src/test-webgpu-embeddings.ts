@@ -71,7 +71,7 @@ async function runEmbedding(
           console.log(`   Download: ${progress.file} - ${Math.round(progress.progress)}%`);
         }
       }
-    }
+    } as any
   );
   const loadTime = performance.now() - loadStart;
   console.log(`   Model loaded in ${loadTime.toFixed(2)}ms`);

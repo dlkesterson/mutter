@@ -8,7 +8,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 interface FileTreeProps {
 	nodes: FileNode[];
-	onSelect: (path: string) => void;
+	onSelect: (path: string, permanent?: boolean) => void;
 	onRename?: (path: string, newName: string) => void;
 	onFileTreeUpdate?: () => void;
 	className?: string;
@@ -17,7 +17,7 @@ interface FileTreeProps {
 
 interface FileTreeNodeProps {
 	node: FileNode;
-	onSelect: (path: string) => void;
+	onSelect: (path: string, permanent?: boolean) => void;
 	onRename?: (path: string, newName: string) => void;
 	onFileTreeUpdate?: () => void;
 	depth?: number;
@@ -68,7 +68,14 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 		if (node.is_dir) {
 			onToggleFolder(node.path);
 		} else {
-			onSelect(node.path);
+			onSelect(node.path, false);
+		}
+	};
+
+	const handleDoubleClick = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (!node.is_dir) {
+			onSelect(node.path, true);
 		}
 	};
 
@@ -167,15 +174,18 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 				)}
 				style={{ paddingLeft: `${depth * 12 + 8}px` }}
 				onClick={handleToggle}
+				onDoubleClick={handleDoubleClick}
 				onContextMenu={handleContextMenu}
 			>
 				{node.is_dir && (
 					<span className='mr-1 text-muted-foreground shrink-0'>
-						{isOpen ? (
-							<ChevronDown size={14} />
-						) : (
-							<ChevronRight size={14} />
-						)}
+						<ChevronRight
+							size={14}
+							className={cn(
+								'transition-transform duration-150',
+								isOpen && 'rotate-90'
+							)}
+						/>
 					</span>
 				)}
 
@@ -202,7 +212,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 			</div>
 
 			{isOpen && node.children && (
-				<div>
+				<div className='animate-in fade-in slide-in-from-top-1 duration-200'>
 					{node.children.map((child) => (
 						<FileTreeNode
 							key={child.path}

@@ -14,7 +14,7 @@ export function WaveformVisualization({
     height = 40,
 }: WaveformVisualizationProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const animationFrameRef = useRef<number>();
+    const animationFrameRef = useRef<number | null>(null);
 
     // Store audio data in a ref to avoid restarting animation loop on every update
     const audioDataRef = useRef<number[]>(audioData);

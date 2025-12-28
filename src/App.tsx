@@ -104,23 +104,78 @@ function App() {
 		]);
 	};
 
-	const handleFileSelect = (path: string) => {
+	const handleFileSelect = (path: string, permanent: boolean = false) => {
 		setTabs((prevTabs) => {
 			const existingTab = prevTabs.find((t) => t.path === path);
 			if (existingTab) {
 				setActiveTabId(existingTab.id);
+				if (permanent && existingTab.isPreview) {
+					return prevTabs.map((t) =>
+						t.id === existingTab.id ? { ...t, isPreview: false } : t
+					);
+				}
 				return prevTabs;
 			}
-			
+
+			const activeTab = prevTabs.find((t) => t.id === activeTabId);
+
+			// Reuse preview tab if available and not dirty
+			if (
+				activeTab &&
+				activeTab.isPreview &&
+				!permanent &&
+				!activeTab.isDirty
+			) {
+				return prevTabs.map((t) => {
+					if (t.id === activeTabId) {
+						return {
+							...t,
+							path,
+							title: path.split('/').pop() || 'Untitled',
+							isPreview: true,
+						};
+					}
+					return t;
+				});
+			}
+
 			const newTab: Tab = {
 				id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
 				path,
 				title: path.split('/').pop() || 'Untitled',
+				isPreview: !permanent,
 			};
 			setActiveTabId(newTab.id);
 			return [...prevTabs, newTab];
 		});
 	};
+
+	// Zoom handling
+	useEffect(() => {
+		const handleZoom = (e: KeyboardEvent) => {
+			if (e.ctrlKey || e.metaKey) {
+				if (e.key === '=' || e.key === '+' || e.key === '-') {
+					e.preventDefault();
+					const delta = e.key === '=' || e.key === '+' ? 0.1 : -0.1;
+					const currentZoom = parseFloat(
+						(document.body.style as any).zoom || '1'
+					);
+					const newZoom = Math.max(
+						0.5,
+						Math.min(3.0, currentZoom + delta)
+					);
+					(document.body.style as any).zoom = newZoom;
+				}
+				if (e.key === '0') {
+					e.preventDefault();
+					(document.body.style as any).zoom = '1';
+				}
+			}
+		};
+
+		window.addEventListener('keydown', handleZoom);
+		return () => window.removeEventListener('keydown', handleZoom);
+	}, []);
 
 	const handleTabClose = (id: string, e: React.MouseEvent) => {
 		e.stopPropagation();
@@ -170,9 +225,17 @@ function App() {
 
 	const handleTabDirtyChange = (path: string, isDirty: boolean) => {
 		setTabs((prev) =>
-			prev.map((tab) =>
-				tab.path === path ? { ...tab, isDirty } : tab
-			)
+			prev.map((tab) => {
+				if (tab.path === path) {
+					// If becoming dirty, also pin the tab (remove preview status)
+					return {
+						...tab,
+						isDirty,
+						isPreview: isDirty ? false : tab.isPreview,
+					};
+				}
+				return tab;
+			})
 		);
 	};
 

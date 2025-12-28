@@ -158,6 +158,7 @@ pub fn run() {
             delete_file,
             duplicate_file,
             open_in_system,
+            open_daily_note,
             file_watcher::start_vault_watcher,
             file_watcher::stop_vault_watcher,
         ])

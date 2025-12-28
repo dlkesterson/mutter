@@ -76,9 +76,12 @@ export default function Editor({
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const minimapCompartment = useRef(new Compartment());
+	const fontSizeCompartment = useRef(new Compartment());
 	const [content, setContent] = useState('');
 	const [savedContent, setSavedContent] = useState('');
 	const [minimapEnabled, setMinimapEnabled] = useState(true);
+	const [editorFontSize, setEditorFontSize] = useState('16');
+	const [isLoadingFile, setIsLoadingFile] = useState(false);
 	const [ambiguityData, setAmbiguityData] = useState<{
 		text: string;
 		command: CommandAction;
@@ -108,13 +111,22 @@ export default function Editor({
 		});
 	}, []);
 
+	// Load editor font size from storage
+	useEffect(() => {
+		getStorageItem<string>('editor_font_size').then((size) => {
+			if (size !== null) {
+				setEditorFontSize(size);
+			}
+		});
+	}, []);
+
 	// Update minimap when enabled state changes
 	useEffect(() => {
 		if (!viewRef.current) return;
 
 		const minimapExtension = minimapEnabled
-			? showMinimap.compute(['doc'], (state) => ({
-					create: (view: EditorView) => {
+			? showMinimap.compute(['doc'], (_state) => ({
+					create: (_view: EditorView) => {
 						const dom = document.createElement('div');
 						dom.className = 'cm-minimap';
 						return { dom };
@@ -129,6 +141,32 @@ export default function Editor({
 		});
 	}, [minimapEnabled]);
 
+	// Update editor font size when it changes
+	useEffect(() => {
+		if (!viewRef.current) return;
+
+		// Convert font size string to rem (14px -> 0.875rem, 16px -> 1rem, etc.)
+		const fontSizeMap: Record<string, string> = {
+			'14': '0.875rem',
+			'16': '1rem',
+			'18': '1.125rem',
+			'20': '1.25rem',
+			'22': '1.375rem',
+		};
+
+		const fontSizeRem = fontSizeMap[editorFontSize] || '1rem';
+
+		const fontSizeTheme = EditorView.theme({
+			'&': {
+				fontSize: fontSizeRem,
+			},
+		});
+
+		viewRef.current.dispatch({
+			effects: fontSizeCompartment.current.reconfigure(fontSizeTheme),
+		});
+	}, [editorFontSize]);
+
 	// Expose toggle function globally for settings to call
 	useEffect(() => {
 		(window as any).toggleMinimap = (enabled: boolean) => {
@@ -136,8 +174,13 @@ export default function Editor({
 			setStorageItem('minimap_enabled', enabled);
 		};
 
+		(window as any).updateEditorFontSize = (size: string) => {
+			setEditorFontSize(size);
+		};
+
 		return () => {
 			delete (window as any).toggleMinimap;
+			delete (window as any).updateEditorFontSize;
 		};
 	}, []);
 
@@ -724,6 +767,22 @@ export default function Editor({
 				EditorView.lineWrapping,
 				markdown({ codeLanguages: languages }),
 				editorThemeExtension,
+				fontSizeCompartment.current.of(
+					EditorView.theme({
+						'&': {
+							fontSize: (() => {
+								const fontSizeMap: Record<string, string> = {
+									'14': '0.875rem',
+									'16': '1rem',
+									'18': '1.125rem',
+									'20': '1.25rem',
+									'22': '1.375rem',
+								};
+								return fontSizeMap[editorFontSize] || '1rem';
+							})(),
+						},
+					})
+				),
 				cursorPosField,
 				livePreviewPlugin,
 				flashEffect,
@@ -731,8 +790,8 @@ export default function Editor({
 				ghostTextExtension,
 				minimapCompartment.current.of(
 					minimapEnabled
-						? showMinimap.compute(['doc'], (state) => ({
-								create: (view: EditorView) => {
+						? showMinimap.compute(['doc'], (_state) => ({
+								create: (_view: EditorView) => {
 									const dom = document.createElement('div');
 									dom.className = 'cm-minimap';
 									return { dom };
@@ -763,23 +822,48 @@ export default function Editor({
 	}, []);
 
 	useEffect(() => {
-		if (!filePath) return;
+		if (!filePath) {
+			// Clear editor when no file is open (all tabs closed)
+			setIsLoadingFile(true);
+			setContent('');
+			setSavedContent('');
+			if (viewRef.current) {
+				viewRef.current.dispatch({
+					changes: {
+						from: 0,
+						to: viewRef.current.state.doc.length,
+						insert: '',
+					},
+				});
+			}
+			// Fade back in after clearing
+			setTimeout(() => setIsLoadingFile(false), 100);
+			return;
+		}
 
-		readTextFile(filePath)
-			.then((text) => {
-				setContent(text);
-				setSavedContent(text);
-				if (viewRef.current) {
-					viewRef.current.dispatch({
-						changes: {
-							from: 0,
-							to: viewRef.current.state.doc.length,
-							insert: text,
-						},
-					});
-				}
-			})
-			.catch(console.error);
+		// Fade out before loading new file
+		setIsLoadingFile(true);
+
+		// Small delay to allow fade-out animation
+		setTimeout(() => {
+			readTextFile(filePath)
+				.then((text) => {
+					setContent(text);
+					setSavedContent(text);
+					if (viewRef.current) {
+						viewRef.current.dispatch({
+							changes: {
+								from: 0,
+								to: viewRef.current.state.doc.length,
+								insert: text,
+							},
+						});
+					}
+					// Fade back in after content loads
+					setTimeout(() => setIsLoadingFile(false), 50);
+				})
+				.catch(console.error);
+		}, 100);
 	}, [filePath]);
 
 	// Track dirty state
@@ -810,7 +894,7 @@ export default function Editor({
 			<div
 				ref={editorRef}
 				className={`flex-1 overflow-auto transition-opacity duration-200 ${
-					audioState === 'processing' ? 'opacity-70' : ''
+					audioState === 'processing' || isLoadingFile ? 'opacity-0' : 'opacity-100'
 				}`}
 			/>
 			{ambiguityData && (
