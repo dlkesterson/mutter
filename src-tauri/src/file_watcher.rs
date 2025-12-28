@@ -1,5 +1,5 @@
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, DebouncedEvent, FileIdMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -34,16 +34,58 @@ pub fn start_watching(
     let event_handler = move |result: DebounceEventResult| {
         match result {
             Ok(events) => {
-                // Filter out metadata-only changes and focus on actual file operations
-                let relevant_events: Vec<&Event> = events
+                // Filter out noise: metadata changes, hidden files, sync files, etc.
+                let relevant_events: Vec<&DebouncedEvent> = events
                     .iter()
                     .filter(|event| {
-                        !event.kind.is_access() && !event.kind.is_other()
+                        // Ignore metadata/access events
+                        if event.event.kind.is_access() || event.event.kind.is_other() {
+                            return false;
+                        }
+
+                        // Check all paths in the event
+                        for path in &event.event.paths {
+                            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                                // Ignore hidden files and folders (starting with .)
+                                if file_name.starts_with('.') {
+                                    return false;
+                                }
+
+                                // Ignore common sync/temp files
+                                if file_name.contains(".sync-conflict")
+                                    || file_name.contains(".syncthing")
+                                    || file_name.ends_with(".tmp")
+                                    || file_name.ends_with(".swp")
+                                    || file_name.ends_with("~") {
+                                    return false;
+                                }
+                            }
+
+                            // Ignore changes in hidden directories
+                            if let Some(path_str) = path.to_str() {
+                                if path_str.contains("/.git/")
+                                    || path_str.contains("/.obsidian/")
+                                    || path_str.contains("/.sync/")
+                                    || path_str.contains("/.stfolder/")
+                                    || path_str.contains("/.stversions/") {
+                                    return false;
+                                }
+                            }
+                        }
+
+                        true
                     })
                     .collect();
 
                 if !relevant_events.is_empty() {
                     log::info!("File system changes detected: {} events", relevant_events.len());
+
+                    // Debug: Log the actual paths that passed the filter
+                    for event in &relevant_events {
+                        for path in &event.event.paths {
+                            log::info!("  Event kind: {:?}, Path: {}", event.event.kind, path.display());
+                        }
+                    }
 
                     // Emit event to frontend
                     if let Err(e) = app_handle.emit("vault-changed", ()) {
