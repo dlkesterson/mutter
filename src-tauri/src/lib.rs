@@ -1,6 +1,8 @@
 mod audio;
 mod commands;
+mod config;
 mod device;
+mod file_watcher;
 mod ml;
 mod registry;
 mod system;
@@ -12,6 +14,7 @@ use system::*;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_shell::ShellExt;
+use std::sync::{Arc, Mutex};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -50,6 +53,7 @@ pub fn run() {
                 .build(),
         )
         .manage(commands::AppState::default())
+        .manage(Arc::new(Mutex::new(file_watcher::FileWatcherState::new())))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -121,6 +125,13 @@ pub fn run() {
             vault_crdt_fs::read_vault_crdt_snapshot_cmd,
             vault_crdt_fs::vault_crdt_snapshot_relative_path_cmd,
             vault_crdt_fs::prune_vault_crdt_snapshots_cmd,
+            config::get_settings_cmd,
+            config::save_settings_cmd,
+            config::get_credentials_cmd,
+            config::save_credentials_cmd,
+            config::get_state_cmd,
+            config::save_state_cmd,
+            config::get_config_dir_cmd,
             process_audio_chunk,
             update_vad_settings,
             register_global_hotkey,
@@ -152,6 +163,8 @@ pub fn run() {
             delete_file,
             duplicate_file,
             open_in_system,
+            file_watcher::start_vault_watcher,
+            file_watcher::stop_vault_watcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

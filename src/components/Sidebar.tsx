@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { FileTree } from './FileTree';
 import { TaskPanel } from './TaskPanel';
@@ -54,7 +55,24 @@ export function Sidebar({
 	useEffect(() => {
 		if (vaultPath) {
 			loadFileTree(vaultPath);
+
+			// Start file watcher for the vault
+			invoke('start_vault_watcher', { vaultPath })
+				.then(() => {
+					console.log('File watcher started for:', vaultPath);
+				})
+				.catch((error) => {
+					console.error('Failed to start file watcher:', error);
+				});
 		}
+
+		return () => {
+			// Stop file watcher when vault path changes or component unmounts
+			invoke('stop_vault_watcher')
+				.catch((error) => {
+					console.error('Failed to stop file watcher:', error);
+				});
+		};
 	}, [vaultPath]);
 
 	useEffect(() => {
@@ -64,6 +82,20 @@ export function Sidebar({
 			setSearchResults([]);
 		}
 	}, [search, vaultPath]);
+
+	// Listen for file system changes and reload file tree
+	useEffect(() => {
+		if (!vaultPath) return;
+
+		const unlisten = listen('vault-changed', () => {
+			console.log('Vault changes detected, reloading file tree...');
+			loadFileTree(vaultPath);
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [vaultPath]);
 
 	const loadVaultPath = async () => {
 		const path = await getStorageItem<string>('vault_path');
