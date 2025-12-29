@@ -17,6 +17,8 @@ import { Sidebar } from './components/Sidebar';
 import { CrdtSpike } from './components/CrdtSpike';
 import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
 import { TabBar, Tab } from './components/TabBar';
+import { EditorContextProvider } from '@/context/EditorContextProvider';
+import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
@@ -507,6 +509,14 @@ function App() {
 	};
 
 	return (
+		<EditorContextProvider>
+		<VaultMetadataProvider
+			ready={vaultMeta.ready}
+			doc={vaultMeta.doc}
+			handle={vaultMeta.handle}
+			activeNoteId={vaultMeta.activeNoteId}
+			vaultPath={vaultPath}
+		>
 		<div className='flex h-screen w-screen overflow-hidden bg-background text-foreground'>
 			<Sidebar
 				activePath={currentFile}
@@ -549,6 +559,7 @@ function App() {
 								handleTabDirtyChange(currentFile, isDirty);
 							}
 						}}
+						noteId={vaultMeta.activeNoteId}
 					/>
 
 					<Omnibox
@@ -610,6 +621,8 @@ function App() {
 
 			{/* Loading overlay removed for debugging */}
 		</div>
+		</VaultMetadataProvider>
+		</EditorContextProvider>
 	);
 }
 

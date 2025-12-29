@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FileNode } from '../types';
-import { ChevronRight, ChevronDown, Folder, File } from 'lucide-react';
+import { ChevronRight, Folder, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ContextMenu, useContextMenu, contextMenuIcons } from './ContextMenu';
 import { invoke } from '@tauri-apps/api/core';

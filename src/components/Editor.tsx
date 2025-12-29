@@ -19,10 +19,19 @@ import {
 	setGhostText,
 	clearGhostText,
 } from '../editor/ghostText';
+import {
+	blockIdExtensionWithStyles,
+	getBlockAtCursor,
+} from '../editor/blockIdExtension';
+import { ensureBlockIds, type BlockInfo } from '../editor/blockIds';
 import { useToast } from '../hooks/use-toast';
+import { useEditorContextSync } from '../hooks/useEditorContextSync';
+import { useEditorContext } from '../context/EditorContextProvider';
+import { commandToIntentBucket } from '../types/editorContext';
 import { getStorageItem, setStorageItem } from '../utils/storage';
 import { formatWithLLM, type FormattingContext, type LLMSettings } from '../services/llm-formatter';
 import AmbiguityPopover from './AmbiguityPopover';
+import { VoiceSuggestions, useCursorScreenPosition } from './VoiceSuggestions';
 import type { ExtractedTask } from '../types';
 
 interface EditorProps {
@@ -43,6 +52,10 @@ interface EditorProps {
 	onSystemCommand?: (action: any) => void;
 	onContentSaved?: (content: string) => void;
 	onDirtyChange?: (isDirty: boolean) => void;
+	/** Called when the cursor moves to a different block */
+	onBlockChange?: (block: BlockInfo | null) => void;
+	/** Note ID from CRDT for context tracking */
+	noteId?: string | null;
 }
 
 interface ClassificationResult {
@@ -71,12 +84,16 @@ export default function Editor({
 	onSystemCommand,
 	onContentSaved,
 	onDirtyChange,
+	onBlockChange,
+	noteId,
 }: EditorProps) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const minimapCompartment = useRef(new Compartment());
 	const fontSizeCompartment = useRef(new Compartment());
+	const lastBlockIdRef = useRef<string | null>(null);
+	const onBlockChangeRef = useRef(onBlockChange);
 	const [content, setContent] = useState('');
 	const [savedContent, setSavedContent] = useState('');
 	const [minimapEnabled, setMinimapEnabled] = useState(true);
@@ -101,6 +118,27 @@ export default function Editor({
 	const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>(
 		[]
 	);
+
+	// Context signal system
+	const { recordIntent } = useEditorContext();
+	const hasUnsavedChanges = content !== savedContent;
+
+	// Sync editor state to context
+	const { syncCursor } = useEditorContextSync(viewRef, {
+		filePath,
+		noteId: noteId ?? null,
+		hasUnsavedChanges,
+	});
+	const syncCursorRef = useRef(syncCursor);
+
+	// Keep refs in sync
+	useEffect(() => {
+		onBlockChangeRef.current = onBlockChange;
+		syncCursorRef.current = syncCursor;
+	}, [onBlockChange, syncCursor]);
+
+	// Get cursor screen position for voice suggestions
+	const cursorScreenPosition = useCursorScreenPosition(viewRef.current);
 
 	// Load minimap setting from storage
 	useEffect(() => {
@@ -212,6 +250,10 @@ export default function Editor({
 				afterState,
 			},
 		]);
+
+		// Record intent for context tracking
+		const commandName = JSON.stringify(command);
+		recordIntent(commandToIntentBucket(commandName));
 	};
 
 	const undoLastVoiceCommand = () => {
@@ -785,6 +827,7 @@ export default function Editor({
 				),
 				cursorPosField,
 				livePreviewPlugin,
+				blockIdExtensionWithStyles,
 				flashEffect,
 				markdownAutoPairExtension,
 				ghostTextExtension,
@@ -805,6 +848,21 @@ export default function Editor({
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
 						setContent(newContent);
+					}
+
+					// Track block changes and sync context on cursor movement
+					if (update.selectionSet || update.docChanged) {
+						const block = getBlockAtCursor(update.view);
+						const blockId = block?.id ?? null;
+
+						// Only fire callback if block changed
+						if (blockId !== lastBlockIdRef.current) {
+							lastBlockIdRef.current = blockId;
+							onBlockChangeRef.current?.(block);
+						}
+
+						// Sync cursor state to EditorContext
+						syncCursorRef.current?.();
 					}
 				}),
 			],
@@ -873,15 +931,45 @@ export default function Editor({
 		onDirtyChange?.(isDirty);
 	}, [content, savedContent, filePath]);
 
-	// Auto-save
+	// Auto-save with block ID processing
 	useEffect(() => {
 		if (!filePath || !content) return;
 
 		const timer = setTimeout(() => {
-			writeTextFile(filePath, content)
+			// Process block IDs before saving
+			const { content: processedContent, blocks, modified, duplicatesFixed } = ensureBlockIds(content);
+
+			if (duplicatesFixed > 0) {
+				console.log(`[BlockIds] Fixed ${duplicatesFixed} duplicate block ID(s)`);
+			}
+
+			// If content was modified (IDs added/fixed), update the editor
+			if (modified && viewRef.current) {
+				const currentPos = viewRef.current.state.selection.main.head;
+				viewRef.current.dispatch({
+					changes: {
+						from: 0,
+						to: viewRef.current.state.doc.length,
+						insert: processedContent,
+					},
+					// Preserve cursor position
+					selection: { anchor: Math.min(currentPos, processedContent.length) },
+				});
+				setContent(processedContent);
+			}
+
+			// Save the (potentially modified) content
+			const contentToSave = modified ? processedContent : content;
+
+			writeTextFile(filePath, contentToSave)
 				.then(() => {
-					setSavedContent(content);
-					onContentSaved?.(content);
+					setSavedContent(contentToSave);
+					onContentSaved?.(contentToSave);
+
+					// Log block count for debugging
+					if (blocks.length > 0) {
+						console.log(`[BlockIds] Document has ${blocks.length} blocks`);
+					}
 				})
 				.catch(console.error);
 		}, 500);
@@ -935,6 +1023,10 @@ export default function Editor({
 					onDismiss={() => setAmbiguityData(null)}
 				/>
 			)}
+			<VoiceSuggestions
+				cursorPosition={cursorScreenPosition ?? undefined}
+				visible={audioState === 'listening'}
+			/>
 		</div>
 	);
 }

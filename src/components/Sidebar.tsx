@@ -32,8 +32,8 @@ export function Sidebar({
 	onSettingsClick,
 	onVaultPathChange,
 	onNoteRenamed,
-	vaultId,
-	activeNoteId,
+	vaultId: _vaultId,
+	activeNoteId: _activeNoteId,
 }: SidebarProps) {
 	const [width, setWidth] = useState(256); // Design System: 256px sidebar width
 	const [isCollapsed, setIsCollapsed] = useState(false);

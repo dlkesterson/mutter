@@ -14,8 +14,13 @@ import {
   setNoteLinksFromContent,
   setNoteTags,
   toVaultRelativePath,
+  updateNoteBlocks,
+  VAULT_METADATA_SCHEMA_VERSION,
   type VaultMetadataDoc,
 } from '@/crdt/vaultMetadataDoc';
+import { extractBlocks } from '@/editor/blockIds';
+import { buildVaultGraph, buildGraphForNote, graphNeedsRebuild } from '@/graph/graphBuilder';
+import { readTextFile } from '@tauri-apps/plugin-fs';
 
 type Result = {
   ready: boolean;
@@ -28,6 +33,10 @@ type Result = {
   setActiveNoteTags: (tags: string[]) => void;
   recordRename: (oldPath: string, newPath: string) => void;
   recordContent: (content: string) => void;
+  /** Get current CRDT document (may be null if not ready) */
+  doc: VaultMetadataDoc | null;
+  /** Get CRDT handle for advanced operations */
+  handle: DocHandle<VaultMetadataDoc> | null;
 };
 
 export function useVaultMetadataCrdt(params: {
@@ -84,10 +93,14 @@ export function useVaultMetadataCrdt(params: {
           handle = await repo.find<VaultMetadataDoc>(state.vault_metadata_doc_url);
         } else {
           handle = repo.create<VaultMetadataDoc>({
-            schema_version: 1,
+            schema_version: VAULT_METADATA_SCHEMA_VERSION,
             meta: { created_at: Date.now(), vault_id: state.vault_id },
             notes: {},
             note_id_by_path: {},
+            // v3 fields
+            supertag_definitions: {},
+            graph_edges: {},
+            backlink_index: {},
           });
           await setVaultMetadataDocUrl(vaultPath, handle.url);
         }
@@ -110,6 +123,23 @@ export function useVaultMetadataCrdt(params: {
           pollMs: 2000,
           onStatus: setFsSyncStatus,
         });
+
+        // Build vault graph if needed (async, doesn't block ready state)
+        const currentDoc = handle.doc();
+        if (currentDoc && graphNeedsRebuild(currentDoc)) {
+          console.log('[VaultMeta] Graph needs rebuild, starting...');
+          const vaultPathNormalized = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+          buildVaultGraph({
+            handle,
+            readNoteContent: async (relPath: string) => {
+              return await readTextFile(`${vaultPathNormalized}/${relPath}`);
+            },
+          }).then((result) => {
+            console.log(`[VaultMeta] Graph built: ${result.edgesCreated} edges from ${result.notesProcessed} notes`);
+          }).catch((err) => {
+            console.error('[VaultMeta] Graph build failed:', err);
+          });
+        }
       } catch (e) {
         if (cancelled) return;
         setLastError(e instanceof Error ? e.message : String(e));
@@ -213,10 +243,48 @@ export function useVaultMetadataCrdt(params: {
       const handle = handleRef.current;
       if (!handle?.isReady?.()) return;
       if (!activeNoteId) return;
+
+      // Extract and persist links
       setNoteLinksFromContent({ handle, noteId: activeNoteId, content });
+
+      // Extract and persist blocks to CRDT
+      const blocks = extractBlocks(content);
+      if (blocks.length > 0) {
+        updateNoteBlocks({ handle, noteId: activeNoteId, blocks });
+        console.log(`[CRDT] Persisted ${blocks.length} blocks for note ${activeNoteId}`);
+      }
+
+      // Rebuild graph edges for this note (incremental update)
+      const result = buildGraphForNote({
+        handle,
+        sourceNoteId: activeNoteId,
+        sourceBlockId: null,
+        content,
+      });
+      if (result.edgesCreated > 0 || result.unresolvedLinks.length > 0) {
+        console.log(`[CRDT] Graph updated: ${result.edgesCreated} edges, ${result.unresolvedLinks.length} unresolved`);
+      }
     },
     [activeNoteId]
   );
 
-  return { ready, vaultId, docUrl, lastError, fsSyncStatus, activeNoteId, openNoteById, setActiveNoteTags, recordRename, recordContent };
+  // Get current doc snapshot (memoized to prevent unnecessary rerenders)
+  const doc = useMemo(() => {
+    return handleRef.current?.doc() ?? null;
+  }, [ready, activeNoteId]); // Re-compute when ready or activeNoteId changes
+
+  return {
+    ready,
+    vaultId,
+    docUrl,
+    lastError,
+    fsSyncStatus,
+    activeNoteId,
+    openNoteById,
+    setActiveNoteTags,
+    recordRename,
+    recordContent,
+    doc,
+    handle: handleRef.current,
+  };
 }
