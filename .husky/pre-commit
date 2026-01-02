@@ -1,0 +1,13 @@
+#!/bin/sh
+# Pre-commit hook for Mutter
+# Runs type check and tests before each commit
+
+# Unset PREFIX (conflicts with nvm in sandboxed environments like GitHub Desktop)
+unset PREFIX
+
+# Load nvm if available
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+# Run checks
+pnpm tsc --noEmit && pnpm test:run

@@ -1,6 +1,6 @@
 {
   "name": "mutter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Voice-first markdown editor with semantic commands",
   "type": "module",
   "scripts": {
@@ -8,7 +8,13 @@
     "build": "vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "lint": "tsc --noEmit",
+    "prepare": "husky"
   },
   "keywords": [
     "markdown",
@@ -21,18 +27,23 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.17",
     "@tauri-apps/cli": "^2.9.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "@webgpu/types": "^0.1.68",
+    "husky": "^9.1.7",
+    "jsdom": "^27.4.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.7",
     "vite-plugin-top-level-await": "^1.6.0",
-    "vite-plugin-wasm": "^3.5.0"
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^4.0.16"
   },
   "dependencies": {
     "@automerge/automerge-repo": "^2.5.1",

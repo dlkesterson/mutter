@@ -8,11 +8,20 @@ import type { ParsedQuery, FilterTerm, TextTerm, FilterOperator } from './parser
 import type { VaultMetadataDoc, VaultNote } from '@/crdt/vaultMetadataDoc';
 import { getBacklinks } from '@/crdt/vaultMetadataDoc';
 
+export interface QueryTiming {
+  parseMs: number;
+  indexLookupMs: number;
+  filterMs: number;
+  sortMs: number;
+  totalMs: number;
+}
+
 export interface QueryResult {
   notes: VaultNote[];
   totalCount: number;
   executionTimeMs: number;
   query: ParsedQuery;
+  timing?: QueryTiming;
 }
 
 /**
@@ -223,12 +232,35 @@ function matchesText(note: VaultNote, text: TextTerm): boolean {
 }
 
 /**
+ * Get notes with a specific supertag (indexed lookup for optimization)
+ */
+function getNotesBySupertag(doc: VaultMetadataDoc, tagName: string): VaultNote[] {
+  const def = Object.values(doc.supertag_definitions).find(
+    (d) => d.name.toLowerCase() === tagName.toLowerCase()
+  );
+
+  if (!def) return [];
+
+  return Object.values(doc.notes).filter(
+    (note) => note.supertags?.some((st) => st.definitionId === def.id)
+  );
+}
+
+/**
  * Execute a parsed query against the vault metadata
  */
 export function executeQuery(
   query: ParsedQuery,
-  doc: VaultMetadataDoc | null
+  doc: VaultMetadataDoc | null,
+  options?: { limit?: number; offset?: number }
 ): QueryResult {
+  const timing: QueryTiming = {
+    parseMs: 0,
+    indexLookupMs: 0,
+    filterMs: 0,
+    sortMs: 0,
+    totalMs: 0,
+  };
   const startTime = performance.now();
 
   // Handle null doc
@@ -238,41 +270,86 @@ export function executeQuery(
       totalCount: 0,
       executionTimeMs: 0,
       query,
+      timing,
     };
   }
 
-  let notes = Object.values(doc.notes);
+  // Optimization: If query has `type:` filter, start from supertag index
+  const typeFilter = query.terms.find(
+    (t) => t.type === 'filter' && (t as FilterTerm).key === 'type'
+  ) as FilterTerm | undefined;
+
+  let notes: VaultNote[];
+  const indexStart = performance.now();
+
+  if (typeFilter) {
+    // Use supertag index for faster initial filtering
+    notes = getNotesBySupertag(doc, typeFilter.value);
+  } else {
+    notes = Object.values(doc.notes);
+  }
+
+  timing.indexLookupMs = performance.now() - indexStart;
 
   // If no terms, return all notes
   if (query.terms.length === 0) {
+    const sortStart = performance.now();
     notes.sort((a, b) => b.updated_at - a.updated_at);
+    timing.sortMs = performance.now() - sortStart;
+    timing.totalMs = performance.now() - startTime;
+
     return {
       notes,
       totalCount: notes.length,
-      executionTimeMs: performance.now() - startTime,
+      executionTimeMs: timing.totalMs,
       query,
+      timing,
     };
   }
 
-  // Apply each term as a filter (AND logic)
+  // Apply remaining filters (skip type filter if already used for index)
+  const filterStart = performance.now();
   for (const term of query.terms) {
     if (term.type === 'filter') {
+      // Skip type filter if we already used it for index lookup
+      if (term === typeFilter) continue;
       notes = notes.filter((note) => matchesFilter(note, term, doc));
     } else {
       notes = notes.filter((note) => matchesText(note, term));
     }
   }
+  timing.filterMs = performance.now() - filterStart;
 
   // Sort by updated_at descending (most recent first)
+  const sortStart = performance.now();
   notes.sort((a, b) => b.updated_at - a.updated_at);
+  timing.sortMs = performance.now() - sortStart;
 
-  const executionTimeMs = performance.now() - startTime;
+  // Pagination support
+  const totalCount = notes.length;
+  const { limit, offset = 0 } = options || {};
+
+  if (offset > 0 || limit) {
+    notes = notes.slice(offset, limit ? offset + limit : undefined);
+  }
+
+  timing.totalMs = performance.now() - startTime;
+
+  // Emit performance event for monitoring
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('mutter:query-executed', {
+        detail: { executionTimeMs: timing.totalMs, timing, noteCount: totalCount },
+      })
+    );
+  }
 
   return {
     notes,
-    totalCount: notes.length,
-    executionTimeMs,
+    totalCount,
+    executionTimeMs: timing.totalMs,
     query,
+    timing,
   };
 }
 
