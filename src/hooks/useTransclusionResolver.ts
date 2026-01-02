@@ -1,0 +1,177 @@
+/**
+ * Transclusion Resolver Hook
+ *
+ * Resolves embed targets (![[Note Name#blockId]]) to their content.
+ * Uses the CRDT metadata to find notes and the file system to read content.
+ * Blocks are located by parsing the file content with extractBlocks.
+ */
+
+import { useCallback } from 'react';
+import { useVaultMetadata } from '@/context/VaultMetadataContext';
+import { readTextFile } from '@tauri-apps/plugin-fs';
+import { findNoteIdByRelPath } from '@/crdt/vaultMetadataDoc';
+import { extractBlocks, findBlockById } from '@/editor/blockIds';
+
+/**
+ * Maximum characters to return for a full note embed
+ * Prevents overwhelming the editor with very large embeds
+ */
+const MAX_EMBED_CHARS = 5000;
+
+/**
+ * Result of useTransclusionResolver hook
+ */
+export interface TransclusionResolverResult {
+  /**
+   * Resolve embed content
+   * @param target - Note name or relative path
+   * @param blockId - Block ID (or null for full note)
+   * @returns The content to display
+   * @throws Error if note or block not found
+   */
+  resolveEmbed: (target: string, blockId: string | null) => Promise<string>;
+
+  /**
+   * Navigate to the source note/block
+   */
+  jumpToSource: (target: string, blockId: string | null) => void;
+
+  /**
+   * Open the source for editing (same as jump for now)
+   */
+  editInPlace: (target: string, blockId: string | null) => void;
+}
+
+/**
+ * Hook that provides transclusion resolution capabilities
+ *
+ * @param vaultPath - Path to the vault root directory
+ * @returns Functions for resolving embeds and navigation
+ *
+ * @example
+ * ```tsx
+ * function Editor() {
+ *   const { resolveEmbed, jumpToSource, editInPlace } = useTransclusionResolver(vaultPath);
+ *
+ *   // Use in transclusion extension
+ *   const ext = transclusionExtension({
+ *     resolveEmbed,
+ *     onEdit: editInPlace,
+ *     onJump: jumpToSource,
+ *   });
+ * }
+ * ```
+ */
+export function useTransclusionResolver(
+  vaultPath: string | null
+): TransclusionResolverResult {
+  const { doc } = useVaultMetadata();
+
+  /**
+   * Normalize vault path (remove trailing slashes, normalize separators)
+   */
+  const normalizeVaultPath = (path: string): string => {
+    return path.replaceAll('\\', '/').replace(/\/+$/g, '');
+  };
+
+  /**
+   * Resolve a note target to its full path
+   * Handles:
+   * - Simple names: "My Note" -> finds "My Note.md"
+   * - With extension: "My Note.md" -> uses as-is
+   * - With path: "folder/My Note" -> finds "folder/My Note.md"
+   */
+  const resolveNotePath = (target: string): string => {
+    return target.endsWith('.md') ? target : target + '.md';
+  };
+
+  /**
+   * Resolve embed content from the vault
+   */
+  const resolveEmbed = useCallback(
+    async (target: string, blockId: string | null): Promise<string> => {
+      if (!doc || !vaultPath) {
+        throw new Error('Vault not loaded');
+      }
+
+      // Resolve target to relative path
+      const targetPath = resolveNotePath(target);
+      const noteId = findNoteIdByRelPath(doc, targetPath);
+
+      if (!noteId) {
+        throw new Error(`Note not found: ${target}`);
+      }
+
+      const note = doc.notes[noteId];
+      if (!note) {
+        throw new Error(`Note not found: ${target}`);
+      }
+
+      // Build full path and read file content
+      const normalizedVault = normalizeVaultPath(vaultPath);
+      const fullPath = `${normalizedVault}/${note.rel_path}`;
+      const content = await readTextFile(fullPath);
+
+      // If no blockId, return full content (truncated)
+      if (!blockId) {
+        const truncated = content.slice(0, MAX_EMBED_CHARS);
+        if (content.length > MAX_EMBED_CHARS) {
+          return truncated + '\n\n[... content truncated ...]';
+        }
+        return truncated;
+      }
+
+      // Find specific block by ID
+      // We use extractBlocks to get line ranges from the actual file content
+      const blocks = extractBlocks(content);
+      const block = findBlockById(blocks, blockId);
+
+      if (!block) {
+        throw new Error(`Block not found: #${blockId}`);
+      }
+
+      // Extract block content from file using line ranges
+      const lines = content.split('\n');
+      const blockLines = lines.slice(block.lineStart, block.lineEnd + 1);
+
+      // Remove the block ID suffix from the last line for cleaner display
+      const lastLine = blockLines[blockLines.length - 1];
+      blockLines[blockLines.length - 1] = lastLine.replace(/ \^[a-z0-9]{6}$/, '');
+
+      return blockLines.join('\n');
+    },
+    [doc, vaultPath]
+  );
+
+  /**
+   * Navigate to the source note/block
+   * Dispatches a custom event that App.tsx listens for
+   */
+  const jumpToSource = useCallback(
+    (target: string, blockId: string | null) => {
+      window.dispatchEvent(
+        new CustomEvent('mutter:navigate', {
+          detail: { target, blockId },
+        })
+      );
+    },
+    []
+  );
+
+  /**
+   * Open source for editing
+   * For now, same as jumpToSource - future could open inline editor
+   */
+  const editInPlace = useCallback(
+    (target: string, blockId: string | null) => {
+      window.dispatchEvent(
+        new CustomEvent('mutter:edit-embed', {
+          detail: { target, blockId },
+        })
+      );
+    },
+    []
+  );
+
+  return { resolveEmbed, jumpToSource, editInPlace };
+}

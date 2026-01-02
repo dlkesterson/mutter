@@ -19,6 +19,9 @@ import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
 import { TabBar, Tab } from './components/TabBar';
 import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
+import { BacklinksPanel } from './components/BacklinksPanel';
+import { AIQueryPanel } from './components/AIQueryPanel';
+import type { LLMSettings } from './services/llm-formatter';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
@@ -42,6 +45,17 @@ function App() {
 	const [fileDialogQuery, setFileDialogQuery] = useState<string>('');
 	const [isQuickCapture, setIsQuickCapture] = useState(false);
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
+
+	// Right panel state
+	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | null>(null);
+
+	// Default LLM settings for AI Query panel (would normally come from settings)
+	const [llmSettings] = useState<LLMSettings>({
+		provider: 'claude',
+		apiKey: '',
+		model: 'claude-3-sonnet-20240229',
+		timeoutMs: 30000,
+	});
 
 	// Auto-stop settings
 	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
@@ -71,6 +85,36 @@ function App() {
 		window.addEventListener('hashchange', syncModeFromHash);
 		return () =>
 			window.removeEventListener('hashchange', syncModeFromHash);
+	}, []);
+
+	// Listen for dialog/panel open events from voice commands and Editor
+	useEffect(() => {
+		const handleOpenDialog = (event: CustomEvent<{ dialog: string; [key: string]: any }>) => {
+			const { dialog } = event.detail;
+			console.log('[App] Received mutter:open-dialog:', dialog, event.detail);
+
+			switch (dialog) {
+				case 'ai-query':
+					setRightPanel('ai-query');
+					break;
+				case 'backlinks':
+					setRightPanel('backlinks');
+					break;
+				case 'supertag-apply':
+				case 'supertag-query':
+				case 'insert-embed':
+					// These could open dedicated dialogs in the future
+					console.log(`[App] Dialog ${dialog} not yet implemented`);
+					break;
+				default:
+					console.warn('[App] Unknown dialog:', dialog);
+			}
+		};
+
+		window.addEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
+		return () => {
+			window.removeEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
+		};
 	}, []);
 
 	const { startRecording, stopRecording, setAutoStopCallback, recentAudioSamples } = useAudioRecorder({
@@ -560,6 +604,14 @@ function App() {
 							}
 						}}
 						noteId={vaultMeta.activeNoteId}
+						vaultPath={vaultPath}
+						onNavigate={(target, _blockId) => {
+							// Navigate to the target note from transclusion
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+							const targetPath = target.endsWith('.md') ? target : target + '.md';
+							handleFileSelect(`${normalizedVault}/${targetPath}`);
+						}}
 					/>
 
 					<Omnibox
@@ -582,6 +634,58 @@ function App() {
 					/>
 				</main>
 			</div>
+
+			{/* Right Panel */}
+			{rightPanel && (
+				<div className="w-80 border-l border-border bg-background flex flex-col">
+					<div className="flex items-center justify-between px-3 py-2 border-b border-border">
+						<div className="flex gap-2">
+							<button
+								className={`text-xs px-2 py-1 rounded ${rightPanel === 'backlinks' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+								onClick={() => setRightPanel('backlinks')}
+							>
+								Backlinks
+							</button>
+							<button
+								className={`text-xs px-2 py-1 rounded ${rightPanel === 'ai-query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+								onClick={() => setRightPanel('ai-query')}
+							>
+								AI Query
+							</button>
+						</div>
+						<button
+							className="text-muted-foreground hover:text-foreground"
+							onClick={() => setRightPanel(null)}
+							title="Close panel"
+						>
+							<span className="text-lg">&times;</span>
+						</button>
+					</div>
+					<div className="flex-1 overflow-auto">
+						{rightPanel === 'backlinks' && (
+							<BacklinksPanel
+								noteId={vaultMeta.activeNoteId}
+								onNavigate={(relPath) => {
+									if (!vaultPath) return;
+									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+									handleFileSelect(`${normalizedVault}/${relPath}`);
+								}}
+							/>
+						)}
+						{rightPanel === 'ai-query' && (
+							<AIQueryPanel
+								vaultPath={vaultPath}
+								llmSettings={llmSettings}
+								onNavigate={(relPath) => {
+									if (!vaultPath) return;
+									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+									handleFileSelect(`${normalizedVault}/${relPath}`);
+								}}
+							/>
+						)}
+					</div>
+				</div>
+			)}
 
 			{/* Dialogs */}
 			<FileNavigatorDialog

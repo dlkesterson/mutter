@@ -631,6 +631,5 @@ The file watcher logs events to Rust console. Look for:
 - [Tauri Extension](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode)
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
 
-## License
 
-MIT
+Use 'bd' for task tracking

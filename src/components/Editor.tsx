@@ -23,10 +23,14 @@ import {
 	blockIdExtensionWithStyles,
 	getBlockAtCursor,
 } from '../editor/blockIdExtension';
-import { ensureBlockIds, type BlockInfo } from '../editor/blockIds';
+import { ensureBlockIds, extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
+import { transclusionExtension } from '../editor/transclusionExtension';
+import { findNoteIdByRelPath } from '../crdt/vaultMetadataDoc';
+import '../editor/transclusion.css';
 import { useToast } from '../hooks/use-toast';
 import { useEditorContextSync } from '../hooks/useEditorContextSync';
 import { useEditorContext } from '../context/EditorContextProvider';
+import { useVaultMetadata } from '../context/VaultMetadataContext';
 import { commandToIntentBucket } from '../types/editorContext';
 import { getStorageItem, setStorageItem } from '../utils/storage';
 import { formatWithLLM, type FormattingContext, type LLMSettings } from '../services/llm-formatter';
@@ -56,6 +60,10 @@ interface EditorProps {
 	onBlockChange?: (block: BlockInfo | null) => void;
 	/** Note ID from CRDT for context tracking */
 	noteId?: string | null;
+	/** Vault path for transclusion resolution */
+	vaultPath?: string | null;
+	/** Navigate to a file (for transclusion jump) */
+	onNavigate?: (target: string, blockId: string | null) => void;
 }
 
 interface ClassificationResult {
@@ -86,6 +94,8 @@ export default function Editor({
 	onDirtyChange,
 	onBlockChange,
 	noteId,
+	vaultPath,
+	onNavigate,
 }: EditorProps) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
@@ -94,6 +104,10 @@ export default function Editor({
 	const fontSizeCompartment = useRef(new Compartment());
 	const lastBlockIdRef = useRef<string | null>(null);
 	const onBlockChangeRef = useRef(onBlockChange);
+	const vaultPathRef = useRef(vaultPath);
+	const onNavigateRef = useRef(onNavigate);
+	const { doc: vaultDoc } = useVaultMetadata();
+	const vaultDocRef = useRef(vaultDoc);
 	const [content, setContent] = useState('');
 	const [savedContent, setSavedContent] = useState('');
 	const [minimapEnabled, setMinimapEnabled] = useState(true);
@@ -135,7 +149,10 @@ export default function Editor({
 	useEffect(() => {
 		onBlockChangeRef.current = onBlockChange;
 		syncCursorRef.current = syncCursor;
-	}, [onBlockChange, syncCursor]);
+		vaultPathRef.current = vaultPath;
+		onNavigateRef.current = onNavigate;
+		vaultDocRef.current = vaultDoc;
+	}, [onBlockChange, syncCursor, vaultPath, onNavigate, vaultDoc]);
 
 	// Get cursor screen position for voice suggestions
 	const cursorScreenPosition = useCursorScreenPosition(viewRef.current);
@@ -798,6 +815,60 @@ export default function Editor({
 		};
 	}, []);
 
+	// Listen for voice command execution events (from VoiceSuggestions, voice commands, etc.)
+	useEffect(() => {
+		const handleExecuteCommand = (event: CustomEvent<{ command: string; args?: any }>) => {
+			const { command, args } = event.detail;
+			console.log('[Editor] Received mutter:execute-command:', command, args);
+
+			if (!viewRef.current) {
+				console.warn('[Editor] No view available for command execution');
+				return;
+			}
+
+			// Handle different command types
+			switch (command) {
+				case 'open-supertag-dialog':
+					// Dispatch event for App.tsx to handle
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: { dialog: 'supertag-apply', noteId }
+					}));
+					break;
+				case 'query-supertag':
+					// Open supertag query - handled by App.tsx
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: { dialog: 'supertag-query' }
+					}));
+					break;
+				case 'insert-embed':
+					// Open embed insertion dialog
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: { dialog: 'insert-embed' }
+					}));
+					break;
+				case 'ai-query':
+					// Open AI query panel or focus it
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: { dialog: 'ai-query', mode: args?.mode }
+					}));
+					break;
+				default:
+					// Try to execute as a formatting/editor command
+					try {
+						const cmdAction = JSON.parse(command);
+						executeCommand(viewRef.current, cmdAction);
+					} catch {
+						console.warn('[Editor] Unknown command:', command);
+					}
+			}
+		};
+
+		window.addEventListener('mutter:execute-command', handleExecuteCommand as EventListener);
+		return () => {
+			window.removeEventListener('mutter:execute-command', handleExecuteCommand as EventListener);
+		};
+	}, [noteId]);
+
 	useEffect(() => {
 		if (!editorRef.current) return;
 
@@ -831,6 +902,56 @@ export default function Editor({
 				flashEffect,
 				markdownAutoPairExtension,
 				ghostTextExtension,
+				// Transclusion extension for live embeds
+				transclusionExtension({
+					resolveEmbed: async (target, blockId) => {
+						const doc = vaultDocRef.current;
+						const vp = vaultPathRef.current;
+						if (!doc || !vp) {
+							throw new Error('Vault not loaded');
+						}
+						const normalizedVault = vp.replaceAll('\\', '/').replace(/\/+$/g, '');
+						const targetPath = target.endsWith('.md') ? target : target + '.md';
+						const noteId = findNoteIdByRelPath(doc, targetPath);
+						if (!noteId) {
+							throw new Error(`Note not found: ${target}`);
+						}
+						const note = doc.notes[noteId];
+						if (!note) {
+							throw new Error(`Note not found: ${target}`);
+						}
+						const fullPath = `${normalizedVault}/${note.rel_path}`;
+						const content = await readTextFile(fullPath);
+						if (!blockId) {
+							// Return full content (truncated for safety)
+							const maxChars = 5000;
+							if (content.length > maxChars) {
+								return content.slice(0, maxChars) + '\n\n[... content truncated ...]';
+							}
+							return content;
+						}
+						// Find specific block
+						const blocks = extractBlocks(content);
+						const block = findBlockById(blocks, blockId);
+						if (!block) {
+							throw new Error(`Block not found: #${blockId}`);
+						}
+						const lines = content.split('\n');
+						const blockLines = lines.slice(block.lineStart, block.lineEnd + 1);
+						// Remove block ID suffix from display
+						const lastLine = blockLines[blockLines.length - 1];
+						blockLines[blockLines.length - 1] = lastLine.replace(/ \^[a-z0-9]{6}$/, '');
+						return blockLines.join('\n');
+					},
+					onEdit: (target, blockId) => {
+						// Navigate to edit the source
+						onNavigateRef.current?.(target, blockId);
+					},
+					onJump: (target, blockId) => {
+						// Navigate to the source
+						onNavigateRef.current?.(target, blockId);
+					},
+				}),
 				minimapCompartment.current.of(
 					minimapEnabled
 						? showMinimap.compute(['doc'], (_state) => ({

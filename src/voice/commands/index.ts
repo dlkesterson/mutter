@@ -10,6 +10,8 @@ import { registerFormattingCommands } from './formatting';
 import { registerNavigationCommands } from './navigation';
 import { registerLinkingCommands } from './linking';
 import { registerMetaCommands } from './meta';
+import { registerSupertagCommands } from './supertags';
+import { registerQueryCommands } from './query';
 
 /**
  * Register all built-in commands
@@ -27,6 +29,8 @@ export function registerAllCommands(): void {
   registerNavigationCommands();
   registerLinkingCommands();
   registerMetaCommands();
+  registerSupertagCommands();
+  registerQueryCommands();
 
   commandRegistry.markInitialized();
 }
@@ -37,3 +41,5 @@ export { formattingCommands } from './formatting';
 export { navigationCommands } from './navigation';
 export { linkingCommands } from './linking';
 export { metaCommands } from './meta';
+export { supertagCommands } from './supertags';
+export { queryCommands } from './query';

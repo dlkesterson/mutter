@@ -1,0 +1,119 @@
+/**
+ * Transclusion Widget Styles
+ *
+ * Styles for the CodeMirror transclusion extension.
+ * Uses CSS custom properties from the app theme for consistency.
+ */
+
+.cm-transclusion {
+  display: block;
+  margin: 8px 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--bg-muted, #1a1a1a);
+  border: 1px solid var(--border-subtle, #333);
+}
+
+/* Loading state */
+.cm-transclusion-loading {
+  color: var(--text-muted, #888);
+  font-size: 13px;
+}
+
+/* Error state */
+.cm-transclusion-error {
+  color: var(--text-warning, #f59e0b);
+  font-size: 13px;
+}
+
+/* Content container */
+.cm-transclusion-content {
+  position: relative;
+}
+
+/* Source reference header */
+.cm-transclusion-header {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border-subtle, #333);
+}
+
+.cm-transclusion-source {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+}
+
+/* Body content */
+.cm-transclusion-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cm-transclusion-text {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: transparent;
+  color: var(--text-secondary, #aaa);
+}
+
+/* Action buttons container - hidden by default */
+.cm-transclusion-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, #333);
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+/* Show actions on hover */
+.cm-transclusion:hover .cm-transclusion-actions {
+  opacity: 1;
+}
+
+/* Action buttons */
+.cm-transclusion-edit,
+.cm-transclusion-jump {
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle, #333);
+  border-radius: 4px;
+  background: var(--bg-surface, #222);
+  color: var(--text-secondary, #aaa);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.cm-transclusion-edit:hover,
+.cm-transclusion-jump:hover {
+  background: var(--bg-hover, #2a2a2a);
+  color: var(--text-primary, #fff);
+}
+
+.cm-transclusion-edit:focus,
+.cm-transclusion-jump:focus {
+  outline: 2px solid var(--accent-primary, #00a0b4);
+  outline-offset: 1px;
+}
+
+/* Animation for loading state */
+.cm-transclusion-loading .animate-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
