@@ -18,6 +18,14 @@ import {
 } from '@/components/ui/select';
 import { useTheme } from '@/components/ThemeProvider';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
+import { SyncSettingsPanel } from '@/components/sync/SyncSettingsPanel';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import {
+  ExpertiseLevel,
+  EXPERTISE_THRESHOLDS,
+  getExpertiseLabel,
+  getExpertiseDescription,
+} from '@/types/userProfile';
 
 interface SettingsDialogProps {
 	open: boolean;
@@ -27,6 +35,7 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const { theme, setTheme } = useTheme();
 	const [fontSize, setFontSize] = useState('16');
+	const { profile, setExpertiseLevel } = useUserProfile();
 
 	// VAD Settings
 	const [silenceThreshold, setSilenceThreshold] = useState(800);
@@ -377,6 +386,58 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							</div>
 						)}
 						</div>
+
+						{/* Expertise Settings */}
+						<div className='space-y-4 border-t border-border pt-4'>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Expertise Level</h3>
+							<p className='text-sm text-muted-foreground'>
+								Your expertise level affects which voice commands require confirmation before executing.
+							</p>
+
+							<div className='space-y-2'>
+								{(['novice', 'intermediate', 'expert'] as ExpertiseLevel[]).map((level) => (
+									<label
+										key={level}
+										className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+											profile.expertiseLevel === level
+												? 'border-primary bg-primary/5'
+												: 'border-border hover:bg-muted/50'
+										}`}
+									>
+										<input
+											type='radio'
+											name='expertise'
+											value={level}
+											checked={profile.expertiseLevel === level}
+											onChange={() => setExpertiseLevel(level)}
+											className='mt-1 h-4 w-4 accent-primary'
+										/>
+										<div>
+											<div className='font-medium'>{getExpertiseLabel(level)}</div>
+											<div className='text-sm text-muted-foreground'>
+												{getExpertiseDescription(level)}
+											</div>
+										</div>
+									</label>
+								))}
+							</div>
+
+							<div className='text-xs text-muted-foreground space-y-1 mt-3'>
+								<p>
+									Commands executed: <span className='font-mono'>{profile.commandsExecuted}</span>
+								</p>
+								<p>
+									Next level at: <span className='font-mono'>
+										{profile.expertiseLevel === 'expert'
+											? 'Max level reached'
+											: profile.expertiseLevel === 'intermediate'
+												? `${EXPERTISE_THRESHOLDS.expert} commands`
+												: `${EXPERTISE_THRESHOLDS.intermediate} commands`
+										}
+									</span>
+								</p>
+							</div>
+						</div>
 					</div>
 				</div>
 
@@ -632,6 +693,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							</>
 						)}
 					</div>
+				</div>
+
+				{/* FULL-WIDTH SECTION: Sync Settings */}
+				<div className='border-t border-border pt-6'>
+					<SyncSettingsPanel />
 				</div>
 			</DialogContent>
 		</Dialog>

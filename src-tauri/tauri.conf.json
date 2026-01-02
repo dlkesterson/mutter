@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; media-src 'self' blob: mediastream:; connect-src 'self' ipc: http://ipc.localhost http://localhost:8080; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; media-src 'self' blob: mediastream:; connect-src 'self' ipc: http://ipc.localhost http://localhost:8080 ws://localhost:* ws://127.0.0.1:* wss://*; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
@@ -39,7 +39,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/embedding-server"
+      "binaries/embedding-server",
+      "binaries/sync-server"
     ]
   }
 }

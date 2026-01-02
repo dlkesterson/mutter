@@ -21,6 +21,8 @@ import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { AIQueryPanel } from './components/AIQueryPanel';
+import { QueryPanel } from './components/QueryPanel';
+import { SyncStatusIndicator } from './components/sync/SyncStatusIndicator';
 import type { LLMSettings } from './services/llm-formatter';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
@@ -47,7 +49,7 @@ function App() {
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Right panel state
-	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | null>(null);
+	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | null>(null);
 
 	// Default LLM settings for AI Query panel (would normally come from settings)
 	const [llmSettings] = useState<LLMSettings>({
@@ -100,6 +102,9 @@ function App() {
 				case 'backlinks':
 					setRightPanel('backlinks');
 					break;
+				case 'query':
+					setRightPanel('query');
+					break;
 				case 'supertag-apply':
 				case 'supertag-query':
 				case 'insert-embed':
@@ -111,9 +116,16 @@ function App() {
 			}
 		};
 
+		// Listen for settings open events (e.g., from SyncStatusIndicator)
+		const handleOpenSettings = () => {
+			setOpenDialog('settings');
+		};
+
 		window.addEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
+		window.addEventListener('mutter:open-settings', handleOpenSettings);
 		return () => {
 			window.removeEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
+			window.removeEventListener('mutter:open-settings', handleOpenSettings);
 		};
 	}, []);
 
@@ -632,6 +644,11 @@ function App() {
 						streamingText={streamingTranscription}
 						audioSamples={recentAudioSamples}
 					/>
+
+					{/* Sync Status Indicator - fixed bottom-left */}
+					<div className="fixed bottom-8 left-8 z-40">
+						<SyncStatusIndicator showLabel />
+					</div>
 				</main>
 			</div>
 
@@ -645,6 +662,12 @@ function App() {
 								onClick={() => setRightPanel('backlinks')}
 							>
 								Backlinks
+							</button>
+							<button
+								className={`text-xs px-2 py-1 rounded ${rightPanel === 'query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+								onClick={() => setRightPanel('query')}
+							>
+								Query
 							</button>
 							<button
 								className={`text-xs px-2 py-1 rounded ${rightPanel === 'ai-query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
@@ -665,6 +688,15 @@ function App() {
 						{rightPanel === 'backlinks' && (
 							<BacklinksPanel
 								noteId={vaultMeta.activeNoteId}
+								onNavigate={(relPath) => {
+									if (!vaultPath) return;
+									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+									handleFileSelect(`${normalizedVault}/${relPath}`);
+								}}
+							/>
+						)}
+						{rightPanel === 'query' && (
+							<QueryPanel
 								onNavigate={(relPath) => {
 									if (!vaultPath) return;
 									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');

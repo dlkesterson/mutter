@@ -7,6 +7,32 @@ use std::path::PathBuf;
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncSettings {
+    /// Sync mode: "disabled", "local", or "remote"
+    #[serde(default = "default_sync_mode")]
+    pub mode: String,
+    /// Remote server URL (when mode is "remote")
+    pub remote_url: Option<String>,
+    /// Whether to auto-start local server on app launch
+    #[serde(default = "default_false")]
+    pub auto_start_local: bool,
+}
+
+fn default_sync_mode() -> String {
+    "disabled".to_string()
+}
+
+impl Default for SyncSettings {
+    fn default() -> Self {
+        Self {
+            mode: "disabled".to_string(),
+            remote_url: None,
+            auto_start_local: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_version")]
     pub version: String,
@@ -20,6 +46,8 @@ pub struct Settings {
     pub stream_mode: StreamModeSettings,
     #[serde(default)]
     pub ai_providers: AiProviderSettings,
+    #[serde(default)]
+    pub sync: SyncSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +309,7 @@ impl Default for Settings {
             voice: VoiceSettings::default(),
             stream_mode: StreamModeSettings::default(),
             ai_providers: AiProviderSettings::default(),
+            sync: SyncSettings::default(),
         }
     }
 }

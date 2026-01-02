@@ -1,7 +1,8 @@
-# Mutter Implementation Roadmap (4-Week Sprint)
+# Mutter Implementation Roadmap (5-Week Sprint)
 
 **Created:** 2024-12-28
-**Goal:** Implement all major features from research docs in ~1 month
+**Updated:** 2025-01-02
+**Goal:** Implement all major features from research docs + release preparation
 
 ## Feature Inventory
 
@@ -90,14 +91,26 @@
 | 3-4 | **Transclusion** | `![[note#blockID]]` syntax. Live embed rendering in CodeMirror. Edit-in-place. |
 | 5 | **AI Voice Queries** | "Summarize notes on X" → embeddings search → LLM summary → spoken/displayed |
 
-### Week 4: Sync Server + Polish
+### Week 4: Sync Server + Polish ✅
+
+| Day | Focus | Deliverable | Status |
+|-----|-------|-------------|--------|
+| 1-2 | **Automerge Sync Server Sidecar** | Bundle `automerge-repo-sync-server` as Tauri sidecar. WebSocket connection. | ✅ |
+| 3 | **Sync UI** | Settings panel for server URL, status indicators, conflict visualization | ✅ |
+| 4 | **Confirmation UI + Progressive Disclosure** | Risk-based confirmations. User experience level tracking. | ✅ |
+| 5 | **Query Engine** | Simple DSL parser (`type:project status:open`). Execute against CRDT graph. | ✅ |
+
+### Week 5: Release Preparation
 
 | Day | Focus | Deliverable |
 |-----|-------|-------------|
-| 1-2 | **Automerge Sync Server Sidecar** | Bundle `automerge-repo-sync-server` as Tauri sidecar. WebSocket connection. |
-| 3 | **Sync UI** | Settings panel for server URL, status indicators, conflict visualization |
-| 4 | **Confirmation UI + Progressive Disclosure** | Risk-based confirmations. User experience level tracking. |
-| 5 | **Query Engine** | Simple DSL parser (`type:project status:open`). Execute against CRDT graph. |
+| 1 | **Integration Testing** | End-to-end workflow tests, cross-feature validation |
+| 2 | **Performance Profiling** | Query optimization, sync latency, large vault handling |
+| 3 | **Documentation** | User guide, query DSL reference, voice command help |
+| 4 | **CI/CD Pipeline** | Forgejo runner setup, cross-platform build validation |
+| 5 | **Polish + Release** | Bug fixes, version bump, changelog, release tag |
+
+See `docs/WEEK5-TECHNICAL-SPEC.md` for detailed implementation plan.
 
 ---
 
@@ -138,12 +151,22 @@ Sync Server                 AI Voice Queries
 
 ## Success Criteria
 
-By end of Week 4:
-- [ ] Every block in a document has a stable ID
-- [ ] Voice commands are context-aware and ranked by relevance
-- [ ] Backlinks work via graph indexing
-- [ ] Supertags can be defined and applied to notes
-- [ ] Transclusion renders embedded blocks inline
-- [ ] "Summarize notes on X" voice command works
-- [ ] Sync server runs as sidecar (at least locally)
-- [ ] Query DSL can filter notes by type/tag/field
+### Weeks 1-4 (Feature Implementation) ✅
+
+- [x] Every block in a document has a stable ID
+- [x] Voice commands are context-aware and ranked by relevance
+- [x] Backlinks work via graph indexing
+- [x] Supertags can be defined and applied to notes
+- [x] Transclusion renders embedded blocks inline
+- [x] "Summarize notes on X" voice command works
+- [x] Sync server runs as sidecar (at least locally)
+- [x] Query DSL can filter notes by type/tag/field
+
+### Week 5 (Release Preparation)
+
+- [ ] All Week 1-4 features work together correctly
+- [ ] Query execution <100ms for 1k notes
+- [ ] User documentation complete (guide, query DSL, shortcuts)
+- [ ] CI/CD pipeline builds all platforms (Linux, Windows, macOS)
+- [ ] Version 0.3.0 released with changelog
+- [ ] No P0/P1 bugs remaining

@@ -5,6 +5,7 @@ mod device;
 mod file_watcher;
 mod ml;
 mod registry;
+mod sync_server;
 mod system;
 mod vault_crdt_fs;
 mod vault_state;
@@ -54,6 +55,7 @@ pub fn run() {
         )
         .manage(commands::AppState::default())
         .manage(Arc::new(Mutex::new(file_watcher::FileWatcherState::new())))
+        .manage(sync_server::SyncServerState::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -161,6 +163,11 @@ pub fn run() {
             open_daily_note,
             file_watcher::start_vault_watcher,
             file_watcher::stop_vault_watcher,
+            sync_server::start_sync_server,
+            sync_server::stop_sync_server,
+            sync_server::get_sync_server_status,
+            sync_server::get_sync_server_url,
+            sync_server::check_sync_server_health,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
