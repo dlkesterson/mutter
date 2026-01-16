@@ -26,6 +26,8 @@ export interface EditorSettings {
 }
 
 export interface VoiceSettings {
+	/** Whether voice UI is enabled (shows mic button) */
+	enabled: boolean;
 	auto_stop_enabled: boolean;
 	auto_stop_timeout_ms: number;
 	selected_whisper_model: string | null;
@@ -348,6 +350,7 @@ export async function migrateFromIndexedDB(): Promise<{
 			font_size: null,
 		},
 		voice: {
+			enabled: (await getStorageItem<boolean>('voice_enabled')) ?? true,
 			auto_stop_enabled: (await getStorageItem<boolean>('auto_stop_enabled')) ?? true,
 			auto_stop_timeout_ms: (await getStorageItem<number>('auto_stop_timeout_ms')) ?? 3000,
 			selected_whisper_model:

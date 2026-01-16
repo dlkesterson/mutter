@@ -66,6 +66,9 @@ pub struct EditorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceSettings {
+    /// Whether voice UI is enabled (shows mic button)
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     #[serde(default = "default_true")]
     pub auto_stop_enabled: bool,
     #[serde(default = "default_auto_stop_timeout")]
@@ -237,6 +240,7 @@ impl Default for EditorSettings {
 impl Default for VoiceSettings {
     fn default() -> Self {
         Self {
+            enabled: true,
             auto_stop_enabled: true,
             auto_stop_timeout_ms: 3000,
             selected_whisper_model: None,

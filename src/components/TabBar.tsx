@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Pin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     ContextMenu,
@@ -15,6 +15,7 @@ export interface Tab {
     title: string;
     isDirty?: boolean;
     isPreview?: boolean;
+    isPinned?: boolean;
 }
 
 interface TabBarProps {
@@ -26,6 +27,12 @@ interface TabBarProps {
     onCloseOthers?: (id: string) => void;
     onCloseToRight?: (id: string) => void;
     onCloseAll?: () => void;
+    onTogglePin?: (id: string) => void;
+    onRevealInExplorer?: (path: string) => void;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    onGoBack?: () => void;
+    onGoForward?: () => void;
 }
 
 export function TabBar({
@@ -37,11 +44,54 @@ export function TabBar({
     onCloseOthers,
     onCloseToRight,
     onCloseAll,
+    onTogglePin,
+    onRevealInExplorer,
+    canGoBack = false,
+    canGoForward = false,
+    onGoBack,
+    onGoForward,
 }: TabBarProps) {
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-    if (tabs.length === 0) return null;
+    if (tabs.length === 0) {
+        // Still show navigation buttons even with no tabs
+        if (onGoBack || onGoForward) {
+            return (
+                <div className="flex items-center w-full bg-surface border-b border-border/20 h-10 px-2">
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={onGoBack}
+                            disabled={!canGoBack}
+                            className={cn(
+                                "p-1.5 rounded-sm transition-colors",
+                                canGoBack
+                                    ? "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                                    : "text-muted-foreground/30 cursor-not-allowed"
+                            )}
+                            title="Go back (Alt+←)"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <button
+                            onClick={onGoForward}
+                            disabled={!canGoForward}
+                            className={cn(
+                                "p-1.5 rounded-sm transition-colors",
+                                canGoForward
+                                    ? "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                                    : "text-muted-foreground/30 cursor-not-allowed"
+                            )}
+                            title="Go forward (Alt+→)"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    }
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
         setDraggedIndex(index);
@@ -80,6 +130,39 @@ export function TabBar({
 
     return (
         <div className="flex items-center w-full bg-surface border-b border-border/20 overflow-x-auto no-scrollbar h-10">
+            {/* Navigation buttons */}
+            {(onGoBack || onGoForward) && (
+                <div className="flex items-center gap-0.5 px-1 border-r border-border/20 h-full">
+                    <button
+                        onClick={onGoBack}
+                        disabled={!canGoBack}
+                        className={cn(
+                            "p-1.5 rounded-sm transition-colors",
+                            canGoBack
+                                ? "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                                : "text-muted-foreground/30 cursor-not-allowed"
+                        )}
+                        title="Go back (Alt+←)"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <button
+                        onClick={onGoForward}
+                        disabled={!canGoForward}
+                        className={cn(
+                            "p-1.5 rounded-sm transition-colors",
+                            canGoForward
+                                ? "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                                : "text-muted-foreground/30 cursor-not-allowed"
+                        )}
+                        title="Go forward (Alt+→)"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            )}
+
+            {/* Tabs */}
             {tabs.map((tab, index) => {
                 const isActive = tab.id === activeTabId;
                 const isDragging = draggedIndex === index;
@@ -108,6 +191,15 @@ export function TabBar({
                                 )}
                                 title={tab.path}
                             >
+                                {/* Pin indicator */}
+                                {tab.isPinned && (
+                                    <span title="Pinned tab">
+                                        <Pin
+                                            size={12}
+                                            className="flex-shrink-0 text-primary"
+                                        />
+                                    </span>
+                                )}
                                 <span className="truncate flex-1 flex items-center gap-1.5">
                                     {tab.isDirty && (
                                         <span
@@ -132,6 +224,16 @@ export function TabBar({
                             <ContextMenuItem onClick={() => onTabClick(tab.id)}>
                                 Go to Tab
                             </ContextMenuItem>
+                            {onTogglePin && (
+                                <ContextMenuItem onClick={() => onTogglePin(tab.id)}>
+                                    {tab.isPinned ? 'Unpin Tab' : 'Pin Tab'}
+                                </ContextMenuItem>
+                            )}
+                            {onRevealInExplorer && (
+                                <ContextMenuItem onClick={() => onRevealInExplorer(tab.path)}>
+                                    Reveal in File Explorer
+                                </ContextMenuItem>
+                            )}
                             <ContextMenuSeparator />
                             <ContextMenuItem
                                 onClick={() => onCloseOthers?.(tab.id)}

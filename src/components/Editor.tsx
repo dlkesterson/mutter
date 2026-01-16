@@ -23,7 +23,7 @@ import {
 	blockIdExtensionWithStyles,
 	getBlockAtCursor,
 } from '../editor/blockIdExtension';
-import { ensureBlockIds, extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
+import { extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
 import { findNoteIdByRelPath } from '../crdt/vaultMetadataDoc';
 import '../editor/transclusion.css';
@@ -55,6 +55,7 @@ interface EditorProps {
 	}) => void;
 	onSystemCommand?: (action: any) => void;
 	onContentSaved?: (content: string) => void;
+	onContentChange?: (content: string) => void;
 	onDirtyChange?: (isDirty: boolean) => void;
 	/** Called when the cursor moves to a different block */
 	onBlockChange?: (block: BlockInfo | null) => void;
@@ -91,6 +92,7 @@ export default function Editor({
 	onVoiceLogEntry,
 	onSystemCommand,
 	onContentSaved,
+	onContentChange,
 	onDirtyChange,
 	onBlockChange,
 	noteId,
@@ -869,6 +871,34 @@ export default function Editor({
 		};
 	}, [noteId]);
 
+	// Listen for scroll-to-line events from OutlinePanel
+	useEffect(() => {
+		const handleScrollToLine = (event: CustomEvent<{ line: number }>) => {
+			if (!viewRef.current) return;
+
+			const { line } = event.detail;
+			const doc = viewRef.current.state.doc;
+
+			// Clamp line number to valid range (1-indexed from OutlinePanel)
+			const lineNumber = Math.max(1, Math.min(line, doc.lines));
+			const lineInfo = doc.line(lineNumber);
+
+			// Scroll to the line and move cursor there
+			viewRef.current.dispatch({
+				selection: { anchor: lineInfo.from },
+				effects: EditorView.scrollIntoView(lineInfo.from, { y: 'start' }),
+			});
+
+			// Focus the editor
+			viewRef.current.focus();
+		};
+
+		window.addEventListener('mutter:scroll-to-line', handleScrollToLine as EventListener);
+		return () => {
+			window.removeEventListener('mutter:scroll-to-line', handleScrollToLine as EventListener);
+		};
+	}, []);
+
 	useEffect(() => {
 		if (!editorRef.current) return;
 
@@ -876,7 +906,33 @@ export default function Editor({
 			doc: content,
 			extensions: [
 				basicSetup,
-				keymap.of([indentWithTab]),
+				keymap.of([
+					indentWithTab,
+					// Ctrl/Cmd+B for bold
+					{
+						key: 'Mod-b',
+						run: (view) => {
+							executeCommand(view, { Format: { Bold: true } });
+							return true;
+						},
+					},
+					// Ctrl/Cmd+I for italic
+					{
+						key: 'Mod-i',
+						run: (view) => {
+							executeCommand(view, { Format: { Italic: true } });
+							return true;
+						},
+					},
+					// Ctrl/Cmd+` for inline code
+					{
+						key: 'Mod-`',
+						run: (view) => {
+							executeCommand(view, { Format: { Code: true } });
+							return true;
+						},
+					},
+				]),
 				EditorView.lineWrapping,
 				markdown({ codeLanguages: languages }),
 				editorThemeExtension,
@@ -969,6 +1025,7 @@ export default function Editor({
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
 						setContent(newContent);
+						onContentChange?.(newContent);
 					}
 
 					// Track block changes and sync context on cursor movement
@@ -1052,45 +1109,18 @@ export default function Editor({
 		onDirtyChange?.(isDirty);
 	}, [content, savedContent, filePath]);
 
-	// Auto-save with block ID processing
+	// Auto-save content
+	// Note: Block ID auto-generation has been disabled to avoid polluting markdown files.
+	// Existing block IDs in files are still parsed and displayed correctly.
+	// Block IDs should only be added when explicitly creating block references.
 	useEffect(() => {
 		if (!filePath || !content) return;
 
 		const timer = setTimeout(() => {
-			// Process block IDs before saving
-			const { content: processedContent, blocks, modified, duplicatesFixed } = ensureBlockIds(content);
-
-			if (duplicatesFixed > 0) {
-				console.log(`[BlockIds] Fixed ${duplicatesFixed} duplicate block ID(s)`);
-			}
-
-			// If content was modified (IDs added/fixed), update the editor
-			if (modified && viewRef.current) {
-				const currentPos = viewRef.current.state.selection.main.head;
-				viewRef.current.dispatch({
-					changes: {
-						from: 0,
-						to: viewRef.current.state.doc.length,
-						insert: processedContent,
-					},
-					// Preserve cursor position
-					selection: { anchor: Math.min(currentPos, processedContent.length) },
-				});
-				setContent(processedContent);
-			}
-
-			// Save the (potentially modified) content
-			const contentToSave = modified ? processedContent : content;
-
-			writeTextFile(filePath, contentToSave)
+			writeTextFile(filePath, content)
 				.then(() => {
-					setSavedContent(contentToSave);
-					onContentSaved?.(contentToSave);
-
-					// Log block count for debugging
-					if (blocks.length > 0) {
-						console.log(`[BlockIds] Document has ${blocks.length} blocks`);
-					}
+					setSavedContent(content);
+					onContentSaved?.(content);
 				})
 				.catch(console.error);
 		}, 500);

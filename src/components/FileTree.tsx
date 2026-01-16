@@ -9,6 +9,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 interface FileTreeProps {
 	nodes: FileNode[];
 	onSelect: (path: string, permanent?: boolean) => void;
+	onOpenInNewTab?: (path: string) => void;
 	onRename?: (path: string, newName: string) => void;
 	onFileTreeUpdate?: () => void;
 	className?: string;
@@ -18,6 +19,7 @@ interface FileTreeProps {
 interface FileTreeNodeProps {
 	node: FileNode;
 	onSelect: (path: string, permanent?: boolean) => void;
+	onOpenInNewTab?: (path: string) => void;
 	onRename?: (path: string, newName: string) => void;
 	onFileTreeUpdate?: () => void;
 	depth?: number;
@@ -27,11 +29,13 @@ interface FileTreeNodeProps {
 	onShowContextMenu: (event: React.MouseEvent, node: FileNode) => void;
 	editingPath: string | null;
 	onEditComplete: () => void;
+	highlightedPath?: string | null;
 }
 
 const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 	node,
 	onSelect,
+	onOpenInNewTab,
 	onRename,
 	onFileTreeUpdate,
 	depth = 0,
@@ -41,6 +45,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 	onShowContextMenu,
 	editingPath,
 	onEditComplete,
+	highlightedPath,
 }) => {
 	const [editName, setEditName] = useState(node.name);
 	const [isDragOver, setIsDragOver] = useState(false);
@@ -68,7 +73,12 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 		if (node.is_dir) {
 			onToggleFolder(node.path);
 		} else {
-			onSelect(node.path, false);
+			// Ctrl+Click (or Cmd+Click on macOS) opens in new tab
+			if ((e.ctrlKey || e.metaKey) && onOpenInNewTab) {
+				onOpenInNewTab(node.path);
+			} else {
+				onSelect(node.path, false);
+			}
 		}
 	};
 
@@ -155,11 +165,13 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 	};
 
 	const isActive = activePath === node.path;
+	const isHighlighted = highlightedPath === node.path;
 
 	return (
 		<div>
 			<div
 				ref={nodeRef}
+				data-file-path={node.path}
 				draggable={!isEditing}
 				onDragStart={handleDragStart}
 				onDragEnd={handleDragEnd}
@@ -170,7 +182,8 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 					'flex items-center py-1 px-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm select-none transition-colors rounded-sm',
 					isActive && 'bg-accent text-accent-foreground font-medium',
 					isDragOver && 'bg-primary/20 border-2 border-primary border-dashed',
-					isDragging && 'opacity-50'
+					isDragging && 'opacity-50',
+					isHighlighted && 'ring-2 ring-primary bg-primary/10 animate-pulse'
 				)}
 				style={{ paddingLeft: `${depth * 12 + 8}px` }}
 				onClick={handleToggle}
@@ -218,6 +231,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 							key={child.path}
 							node={child}
 							onSelect={onSelect}
+							onOpenInNewTab={onOpenInNewTab}
 							onRename={onRename}
 							onFileTreeUpdate={onFileTreeUpdate}
 							depth={depth + 1}
@@ -227,6 +241,7 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 							onShowContextMenu={onShowContextMenu}
 							editingPath={editingPath}
 							onEditComplete={onEditComplete}
+							highlightedPath={highlightedPath}
 						/>
 					))}
 				</div>
@@ -235,9 +250,26 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 	);
 };
 
+/**
+ * Extract all parent folder paths from a file path
+ * e.g., "/vault/projects/2024/notes.md" => ["/vault", "/vault/projects", "/vault/projects/2024"]
+ */
+function getParentFolders(filePath: string): string[] {
+	const parts = filePath.split('/');
+	const parents: string[] = [];
+
+	// Build up parent paths, excluding the file itself
+	for (let i = 1; i < parts.length - 1; i++) {
+		parents.push(parts.slice(0, i + 1).join('/'));
+	}
+
+	return parents;
+}
+
 export const FileTree: React.FC<FileTreeProps> = ({
 	nodes,
 	onSelect,
+	onOpenInNewTab,
 	onRename,
 	onFileTreeUpdate,
 	className,
@@ -245,7 +277,69 @@ export const FileTree: React.FC<FileTreeProps> = ({
 }) => {
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 	const [editingPath, setEditingPath] = useState<string | null>(null);
+	const [highlightedPath, setHighlightedPath] = useState<string | null>(null);
 	const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
+
+	// Listen for "reveal in explorer" events from tab context menu
+	useEffect(() => {
+		const handleReveal = (event: CustomEvent<{ path: string }>) => {
+			const { path } = event.detail;
+
+			// Expand parent folders to reveal the file
+			const parentFolders = getParentFolders(path);
+			setExpandedFolders(prev => {
+				const next = new Set(prev);
+				for (const folder of parentFolders) {
+					next.add(folder);
+				}
+				return next;
+			});
+
+			// Highlight the file briefly
+			setHighlightedPath(path);
+
+			// Scroll to the element after a brief delay for expansion
+			setTimeout(() => {
+				const element = document.querySelector(`[data-file-path="${CSS.escape(path)}"]`);
+				if (element) {
+					element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				}
+			}, 100);
+
+			// Clear highlight after animation
+			setTimeout(() => {
+				setHighlightedPath(null);
+			}, 2000);
+		};
+
+		window.addEventListener('mutter:reveal-in-explorer', handleReveal as EventListener);
+		return () => {
+			window.removeEventListener('mutter:reveal-in-explorer', handleReveal as EventListener);
+		};
+	}, []);
+
+	// Auto-expand folders to show the active file
+	// This ensures when navigating via backlinks, quick switcher, or tabs,
+	// the file tree reveals the active file's location
+	useEffect(() => {
+		if (!activePath) return;
+
+		const parentFolders = getParentFolders(activePath);
+		if (parentFolders.length === 0) return;
+
+		setExpandedFolders(prev => {
+			// Check if all parents are already expanded
+			const allExpanded = parentFolders.every(p => prev.has(p));
+			if (allExpanded) return prev;
+
+			// Add missing parent folders
+			const next = new Set(prev);
+			for (const folder of parentFolders) {
+				next.add(folder);
+			}
+			return next;
+		});
+	}, [activePath]);
 
 	const handleToggleFolder = (path: string) => {
 		setExpandedFolders((prev) => {
@@ -261,6 +355,19 @@ export const FileTree: React.FC<FileTreeProps> = ({
 
 	const handleShowContextMenu = (event: React.MouseEvent, node: FileNode) => {
 		const items = [
+			// Only show "Open in New Tab" for files, not folders
+			...(!node.is_dir && onOpenInNewTab ? [{
+				label: 'Open in New Tab',
+				icon: contextMenuIcons.openInNewTab,
+				onClick: () => {
+					onOpenInNewTab(node.path);
+				},
+			},
+			{
+				separator: true,
+				label: '',
+				onClick: () => {},
+			}] : []),
 			{
 				label: 'Rename',
 				icon: contextMenuIcons.rename,
@@ -343,6 +450,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
 						key={node.path}
 						node={node}
 						onSelect={onSelect}
+						onOpenInNewTab={onOpenInNewTab}
 						onRename={onRename}
 						onFileTreeUpdate={onFileTreeUpdate}
 						activePath={activePath}
@@ -351,6 +459,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
 						onShowContextMenu={handleShowContextMenu}
 						editingPath={editingPath}
 						onEditComplete={handleEditComplete}
+						highlightedPath={highlightedPath}
 					/>
 				))}
 			</div>

@@ -6,6 +6,8 @@ import {
 	Copy,
 	FolderOpen,
 	Files,
+	ExternalLink,
+	FileSearch,
 } from 'lucide-react';
 
 export interface ContextMenuItem {
@@ -143,4 +145,6 @@ export const contextMenuIcons = {
 	duplicate: <Files size={16} />,
 	copyPath: <Copy size={16} />,
 	openInSystem: <FolderOpen size={16} />,
+	openInNewTab: <ExternalLink size={16} />,
+	revealInExplorer: <FileSearch size={16} />,
 };

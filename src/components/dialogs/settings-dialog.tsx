@@ -42,6 +42,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [minSpeechDuration, setMinSpeechDuration] = useState(300);
 	const [sensitivity, setSensitivity] = useState(1.0);
 
+	// Voice UI Settings
+	const [voiceEnabled, setVoiceEnabled] = useState(true);
+
 	// Auto-Stop Settings
 	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
 	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
@@ -68,6 +71,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 			// Font size setting
 			const savedFontSize = await getStorageItem<string>('editor_font_size');
 			if (savedFontSize !== null) setFontSize(savedFontSize);
+
+			// Voice UI settings
+			const voiceOn = await getStorageItem<boolean>('voice_enabled');
+			if (voiceOn !== null) setVoiceEnabled(voiceOn);
 
 			// Auto-Stop settings
 			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
@@ -243,148 +250,155 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 					{/* RIGHT COLUMN: Voice & Recording */}
 					<div className='space-y-6'>
 						<div className='space-y-4'>
-							<h3 className='text-base font-semibold border-b border-border pb-2'>Voice Detection (VAD)</h3>
+							<h3 className='text-base font-semibold border-b border-border pb-2'>Voice Input</h3>
 
-						<div className='space-y-2'>
-							<div className='flex justify-between'>
-								<Label>Silence Threshold</Label>
-								<span className='text-sm text-muted-foreground'>
-									{silenceThreshold}ms
-								</span>
-							</div>
-							<input
-								type='range'
-								min='300'
-								max='1500'
-								step='50'
-								value={silenceThreshold}
-								onChange={(e) => {
-									const val = parseInt(e.target.value);
-									setSilenceThreshold(val);
-									updateVad(
-										val,
-										minSpeechDuration,
-										sensitivity
-									);
-								}}
-								className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
-							/>
-							<p className='text-xs text-muted-foreground'>
-								How long to wait after speech stops before
-								processing.
-							</p>
-						</div>
-
-						<div className='space-y-2'>
-							<div className='flex justify-between'>
-								<Label>Minimum Speech Duration</Label>
-								<span className='text-sm text-muted-foreground'>
-									{minSpeechDuration}ms
-								</span>
-							</div>
-							<input
-								type='range'
-								min='100'
-								max='1000'
-								step='50'
-								value={minSpeechDuration}
-								onChange={(e) => {
-									const val = parseInt(e.target.value);
-									setMinSpeechDuration(val);
-									updateVad(
-										silenceThreshold,
-										val,
-										sensitivity
-									);
-								}}
-								className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
-							/>
-							<p className='text-xs text-muted-foreground'>
-								Ignore sounds shorter than this (clicks, pops).
-							</p>
-						</div>
-
-						<div className='space-y-2'>
-							<Label>Microphone Sensitivity</Label>
-							<Select
-								value={sensitivity.toString()}
-								onValueChange={(val) => {
-									const s = parseFloat(val);
-									setSensitivity(s);
-									updateVad(
-										silenceThreshold,
-										minSpeechDuration,
-										s
-									);
-								}}
-							>
-								<SelectTrigger className='bg-background border-input'>
-									<SelectValue placeholder='Select sensitivity' />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value='0.5'>
-										High (Sensitive)
-									</SelectItem>
-									<SelectItem value='1.0'>
-										Medium (Default)
-									</SelectItem>
-									<SelectItem value='2.0'>
-										Low (Noisy Environment)
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						</div>
-
-						<div className='space-y-4 border-t border-border pt-4'>
-							<h3 className='text-base font-semibold border-b border-border pb-2'>Auto-Stop Recording</h3>
-
-						<div className='space-y-2'>
-							<Label className='flex items-center gap-2 cursor-pointer'>
-								<input
-									type='checkbox'
-									checked={autoStopEnabled}
-									onChange={(e) => {
-										const enabled = e.target.checked;
-										setAutoStopEnabled(enabled);
-										setStorageItem('auto_stop_enabled', enabled);
-									}}
-									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-								/>
-								Enable auto-stop on silence
-							</Label>
-							<p className='text-xs text-muted-foreground'>
-								Automatically stop recording after detecting silence.
-							</p>
-						</div>
-
-						{autoStopEnabled && (
 							<div className='space-y-2'>
-								<div className='flex justify-between'>
-									<Label>Auto-stop Timeout</Label>
-									<span className='text-sm text-muted-foreground'>
-										{(autoStopTimeoutMs / 1000).toFixed(1)}s
-									</span>
-								</div>
-								<input
-									type='range'
-									min='1000'
-									max='7000'
-									step='500'
-									value={autoStopTimeoutMs}
-									onChange={(e) => {
-										const val = parseInt(e.target.value);
-										setAutoStopTimeoutMs(val);
-										setStorageItem('auto_stop_timeout_ms', val);
-									}}
-									className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
-								/>
-								<p className='text-xs text-muted-foreground'>
-									How long to wait after silence before stopping
-									(1-7 seconds).
+								<Label className='flex items-center gap-2 cursor-pointer'>
+									<input
+										type='checkbox'
+										checked={voiceEnabled}
+										onChange={(e) => {
+											const enabled = e.target.checked;
+											setVoiceEnabled(enabled);
+											setStorageItem('voice_enabled', enabled);
+											// Notify App.tsx to update voice UI visibility
+											window.dispatchEvent(new CustomEvent('mutter:voice-settings-changed'));
+										}}
+										className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+									/>
+									Enable voice input
+								</Label>
+								<p className='text-xs text-muted-foreground ml-6'>
+									Show the microphone button for voice commands and dictation.
 								</p>
 							</div>
-						)}
+
+							{voiceEnabled && (
+								<>
+									<h4 className='text-sm font-medium text-muted-foreground pt-2'>Voice Detection (VAD)</h4>
+
+									<div className='space-y-2'>
+										<div className='flex justify-between'>
+											<Label>Silence Threshold</Label>
+											<span className='text-sm text-muted-foreground'>
+												{silenceThreshold}ms
+											</span>
+										</div>
+										<input
+											type='range'
+											min='300'
+											max='1500'
+											step='50'
+											value={silenceThreshold}
+											onChange={(e) => {
+												const val = parseInt(e.target.value);
+												setSilenceThreshold(val);
+												updateVad(val, minSpeechDuration, sensitivity);
+											}}
+											className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
+										/>
+										<p className='text-xs text-muted-foreground'>
+											How long to wait after speech stops before processing.
+										</p>
+									</div>
+
+									<div className='space-y-2'>
+										<div className='flex justify-between'>
+											<Label>Minimum Speech Duration</Label>
+											<span className='text-sm text-muted-foreground'>
+												{minSpeechDuration}ms
+											</span>
+										</div>
+										<input
+											type='range'
+											min='100'
+											max='1000'
+											step='50'
+											value={minSpeechDuration}
+											onChange={(e) => {
+												const val = parseInt(e.target.value);
+												setMinSpeechDuration(val);
+												updateVad(silenceThreshold, val, sensitivity);
+											}}
+											className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
+										/>
+										<p className='text-xs text-muted-foreground'>
+											Ignore sounds shorter than this (clicks, pops).
+										</p>
+									</div>
+
+									<div className='space-y-2'>
+										<Label>Microphone Sensitivity</Label>
+										<Select
+											value={sensitivity.toString()}
+											onValueChange={(val) => {
+												const s = parseFloat(val);
+												setSensitivity(s);
+												updateVad(silenceThreshold, minSpeechDuration, s);
+											}}
+										>
+											<SelectTrigger className='bg-background border-input'>
+												<SelectValue placeholder='Select sensitivity' />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value='0.5'>High (Sensitive)</SelectItem>
+												<SelectItem value='1.0'>Medium (Default)</SelectItem>
+												<SelectItem value='2.0'>Low (Noisy Environment)</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+
+									<div className='space-y-4 border-t border-border pt-4'>
+										<h4 className='text-sm font-medium'>Auto-Stop Recording</h4>
+
+										<div className='space-y-2'>
+											<Label className='flex items-center gap-2 cursor-pointer'>
+												<input
+													type='checkbox'
+													checked={autoStopEnabled}
+													onChange={(e) => {
+														const enabled = e.target.checked;
+														setAutoStopEnabled(enabled);
+														setStorageItem('auto_stop_enabled', enabled);
+													}}
+													className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+												/>
+												Enable auto-stop on silence
+											</Label>
+											<p className='text-xs text-muted-foreground'>
+												Automatically stop recording after detecting silence.
+											</p>
+										</div>
+
+										{autoStopEnabled && (
+											<div className='space-y-2'>
+												<div className='flex justify-between'>
+													<Label>Auto-stop Timeout</Label>
+													<span className='text-sm text-muted-foreground'>
+														{(autoStopTimeoutMs / 1000).toFixed(1)}s
+													</span>
+												</div>
+												<input
+													type='range'
+													min='1000'
+													max='7000'
+													step='500'
+													value={autoStopTimeoutMs}
+													onChange={(e) => {
+														const val = parseInt(e.target.value);
+														setAutoStopTimeoutMs(val);
+														setStorageItem('auto_stop_timeout_ms', val);
+													}}
+													className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
+												/>
+												<p className='text-xs text-muted-foreground'>
+													How long to wait after silence before stopping (1-7 seconds).
+												</p>
+											</div>
+										)}
+									</div>
+								</>
+							)}
 						</div>
 
 						{/* Expertise Settings */}

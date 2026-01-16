@@ -38,31 +38,15 @@ const commands = [
 		command: 'open file',
 	},
 	{
-		label: 'Open note by ID',
-		description: 'Open a note using its stable note_id',
-		command: 'open note by id',
-	},
-	{
-		label: 'Set note tags',
-		description: 'Edit tags for the current note (vault metadata CRDT)',
-		command: 'set note tags',
-	},
-	{
-		label: 'Configure CRDT WebSocket',
-		description: 'Connect CRDT sync via a WebSocket relay URL',
-		command: 'configure crdt websocket',
-	},
-	{
-		label: 'Clear CRDT WebSocket',
-		description: 'Disable WebSocket relay (requires reload)',
-		command: 'clear crdt websocket',
-	},
-	{
 		label: 'Settings',
 		description: 'Open app settings',
 		command: 'settings',
 	},
 ];
+
+// Note: Advanced commands (open note by ID, set note tags, CRDT config)
+// have been removed from the command palette to avoid exposing internal concepts.
+// These features are accessible via Settings or developer tools.
 
 export function Omnibox({
 	onCommand,
@@ -79,7 +63,8 @@ export function Omnibox({
 
 	useEffect(() => {
 		const down = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+			// Ctrl/Cmd+K or Ctrl/Cmd+P for command palette (P matches Obsidian)
+			if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'p')) {
 				e.preventDefault();
 				setOpen((open) => !open);
 				setSearchValue('');

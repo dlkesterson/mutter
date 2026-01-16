@@ -1,6 +1,8 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
+import { useNavigationHistory } from './hooks/useNavigationHistory';
 import Editor from './components/Editor';
 import { Omnibox } from './components/Omnibox';
 import { VoiceIndicator } from './components/VoiceIndicator';
@@ -22,6 +24,8 @@ import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { AIQueryPanel } from './components/AIQueryPanel';
 import { QueryPanel } from './components/QueryPanel';
+import { OutlinePanel } from './components/OutlinePanel';
+import { StatusBar } from './components/StatusBar';
 import { SyncStatusIndicator } from './components/sync/SyncStatusIndicator';
 import type { LLMSettings } from './services/llm-formatter';
 
@@ -49,7 +53,33 @@ function App() {
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Right panel state
-	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | null>(null);
+	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | null>(null);
+	// Track last used panel for toggle button
+	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline'>('outline');
+
+	// Update last panel ref when panel changes
+	useEffect(() => {
+		if (rightPanel) {
+			lastRightPanelRef.current = rightPanel;
+		}
+	}, [rightPanel]);
+
+	// Toggle right panel visibility
+	const toggleRightPanel = useCallback(() => {
+		setRightPanel(prev => prev ? null : lastRightPanelRef.current);
+	}, []);
+
+	// Editor content for status bar and outline
+	const [editorContent, setEditorContent] = useState<string>('');
+
+	// Navigation history
+	const {
+		canGoBack,
+		canGoForward,
+		recordNavigation,
+		goBack,
+		goForward,
+	} = useNavigationHistory();
 
 	// Default LLM settings for AI Query panel (would normally come from settings)
 	const [llmSettings] = useState<LLMSettings>({
@@ -59,21 +89,31 @@ function App() {
 		timeoutMs: 30000,
 	});
 
-	// Auto-stop settings
+	// Voice settings
+	const [voiceEnabled, setVoiceEnabled] = useState(true);
 	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
 	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
 
-	// Load auto-stop settings from storage
+	// Load voice settings from storage
 	useEffect(() => {
 		const loadSettings = async () => {
+			const voiceOn = await getStorageItem<boolean>('voice_enabled');
 			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
 			const timeout = await getStorageItem<number>('auto_stop_timeout_ms');
 
+			if (voiceOn !== null) setVoiceEnabled(voiceOn);
 			if (enabled !== null) setAutoStopEnabled(enabled);
 			if (timeout !== null) setAutoStopTimeoutMs(timeout);
 		};
 
 		loadSettings();
+
+		// Listen for voice settings changes from settings dialog
+		const handleVoiceSettingsChange = () => {
+			loadSettings();
+		};
+		window.addEventListener('mutter:voice-settings-changed', handleVoiceSettingsChange);
+		return () => window.removeEventListener('mutter:voice-settings-changed', handleVoiceSettingsChange);
 	}, []);
 
 	useEffect(() => {
@@ -162,7 +202,12 @@ function App() {
 		]);
 	};
 
-	const handleFileSelect = (path: string, permanent: boolean = false) => {
+	const handleFileSelect = (path: string, permanent: boolean = false, fromHistory: boolean = false) => {
+		// Record navigation unless coming from back/forward
+		if (!fromHistory) {
+			recordNavigation(path);
+		}
+
 		setTabs((prevTabs) => {
 			const existingTab = prevTabs.find((t) => t.path === path);
 			if (existingTab) {
@@ -176,6 +221,18 @@ function App() {
 			}
 
 			const activeTab = prevTabs.find((t) => t.id === activeTabId);
+
+			// Don't reuse pinned tabs - open in new tab instead
+			if (activeTab?.isPinned) {
+				const newTab: Tab = {
+					id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+					path,
+					title: path.split('/').pop() || 'Untitled',
+					isPreview: !permanent,
+				};
+				setActiveTabId(newTab.id);
+				return [...prevTabs, newTab];
+			}
 
 			// Reuse preview tab if available and not dirty
 			if (
@@ -206,6 +263,60 @@ function App() {
 			setActiveTabId(newTab.id);
 			return [...prevTabs, newTab];
 		});
+	};
+
+	// Open a file in a new tab (always creates new, never reuses)
+	const handleOpenInNewTab = useCallback((path: string) => {
+		recordNavigation(path);
+
+		// Check if already open - if so, just switch to it
+		const existingTab = tabs.find((t) => t.path === path);
+		if (existingTab) {
+			setActiveTabId(existingTab.id);
+			return;
+		}
+
+		// Always create a new permanent tab
+		const newTab: Tab = {
+			id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+			path,
+			title: path.split('/').pop() || 'Untitled',
+			isPreview: false, // Permanent tab
+		};
+		setTabs((prev) => [...prev, newTab]);
+		setActiveTabId(newTab.id);
+	}, [tabs, recordNavigation]);
+
+	// Handle navigation history events (from keyboard shortcuts)
+	useEffect(() => {
+		const handleNavigateHistory = (e: CustomEvent<{ path: string; direction: string }>) => {
+			handleFileSelect(e.detail.path, false, true);
+		};
+
+		window.addEventListener('mutter:navigate-history', handleNavigateHistory as EventListener);
+		return () => window.removeEventListener('mutter:navigate-history', handleNavigateHistory as EventListener);
+	}, []);
+
+	// Handle back/forward button clicks
+	const handleGoBack = useCallback(() => {
+		const path = goBack();
+		if (path) {
+			handleFileSelect(path, false, true);
+		}
+	}, [goBack]);
+
+	const handleGoForward = useCallback(() => {
+		const path = goForward();
+		if (path) {
+			handleFileSelect(path, false, true);
+		}
+	}, [goForward]);
+
+	// Handle tab pinning
+	const handleTogglePin = (id: string) => {
+		setTabs(prev => prev.map(tab =>
+			tab.id === id ? { ...tab, isPinned: !tab.isPinned } : tab
+		));
 	};
 
 	// Zoom handling
@@ -439,19 +550,37 @@ function App() {
 		}
 	}, [isInitialized]);
 
-	// Handle keyboard shortcuts for dialogs
+	// Handle keyboard shortcuts for dialogs and tabs
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			// Ctrl/Cmd + O for file navigation
+			// Ctrl/Cmd + O for file navigation (Quick Switcher)
 			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
 				e.preventDefault();
 				setOpenDialog('files');
+			}
+			// Ctrl/Cmd + W to close current tab
+			if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+				e.preventDefault();
+				if (activeTabId) {
+					// Create a synthetic mouse event for the handler
+					handleTabClose(activeTabId, { stopPropagation: () => {} } as React.MouseEvent);
+				}
+			}
+			// Ctrl/Cmd + N to create new note (dispatches event to Sidebar)
+			if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+				e.preventDefault();
+				window.dispatchEvent(new CustomEvent('mutter:create-note'));
+			}
+			// Ctrl/Cmd + , for settings (common pattern)
+			if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+				e.preventDefault();
+				setOpenDialog('settings');
 			}
 		};
 
 		window.addEventListener('keydown', handleKeyDown);
 		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, []);
+	}, [activeTabId]);
 
 	const handleVoiceCommand = async (
 		command: string,
@@ -577,12 +706,14 @@ function App() {
 			<Sidebar
 				activePath={currentFile}
 				onFileSelect={handleFileSelect}
+				onOpenInNewTab={handleOpenInNewTab}
 				onSettingsClick={() => setOpenDialog('settings')}
 				onVaultPathChange={setVaultPath}
 				onNoteRenamed={(oldPath, newPath) => {
 					vaultMeta.recordRename(oldPath, newPath);
 					handleNoteRename(oldPath, newPath);
 				}}
+				onQuickSwitcherOpen={() => setOpenDialog('files')}
 				vaultId={vaultMeta.vaultId}
 				activeNoteId={vaultMeta.activeNoteId}
 			/>
@@ -602,6 +733,17 @@ function App() {
 						onCloseOthers={handleCloseOthers}
 						onCloseToRight={handleCloseToRight}
 						onCloseAll={handleCloseAll}
+						onTogglePin={handleTogglePin}
+						onRevealInExplorer={(path) => {
+							// Dispatch event for FileTree to scroll to and highlight the file
+							window.dispatchEvent(new CustomEvent('mutter:reveal-in-explorer', {
+								detail: { path }
+							}));
+						}}
+						canGoBack={canGoBack}
+						canGoForward={canGoForward}
+						onGoBack={handleGoBack}
+						onGoForward={handleGoForward}
 					/>
 					
 					<Editor
@@ -610,6 +752,7 @@ function App() {
 						onVoiceLogEntry={addVoiceLogEntry}
 						onSystemCommand={handleSystemCommand}
 						onContentSaved={(content) => vaultMeta.recordContent(content)}
+						onContentChange={(content) => setEditorContent(content)}
 						onDirtyChange={(isDirty) => {
 							if (currentFile) {
 								handleTabDirtyChange(currentFile, isDirty);
@@ -626,6 +769,14 @@ function App() {
 						}}
 					/>
 
+					{/* Status Bar */}
+					<StatusBar
+						content={editorContent}
+						filePath={currentFile}
+						isRecording={audioState === 'listening'}
+						isDirty={activeTab?.isDirty}
+					/>
+
 					<Omnibox
 						onCommand={handleVoiceCommand}
 						onDialogOpen={setOpenDialog}
@@ -637,18 +788,31 @@ function App() {
 						onClearCrdtWebSocket={onClearCrdtWebSocket}
 					/>
 
-					<VoiceIndicator
-						state={audioState}
-						onLogClick={() => setOpenDialog('voice-log')}
-						onToggleListening={toggleListening}
-						streamingText={streamingTranscription}
-						audioSamples={recentAudioSamples}
-					/>
+					{voiceEnabled && (
+						<VoiceIndicator
+							state={audioState}
+							onLogClick={() => setOpenDialog('voice-log')}
+							onToggleListening={toggleListening}
+							streamingText={streamingTranscription}
+							audioSamples={recentAudioSamples}
+						/>
+					)}
 
 					{/* Sync Status Indicator - fixed bottom-left */}
 					<div className="fixed bottom-8 left-8 z-40">
 						<SyncStatusIndicator showLabel />
 					</div>
+
+					{/* Right Panel Toggle Button - shows when panel is closed */}
+					{!rightPanel && (
+						<button
+							onClick={toggleRightPanel}
+							className="absolute right-2 top-14 z-30 p-1.5 rounded-md bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border/40"
+							title={`Open ${lastRightPanelRef.current} panel`}
+						>
+							<PanelRightOpen size={18} />
+						</button>
+					)}
 				</main>
 			</div>
 
@@ -656,7 +820,13 @@ function App() {
 			{rightPanel && (
 				<div className="w-80 border-l border-border bg-background flex flex-col">
 					<div className="flex items-center justify-between px-3 py-2 border-b border-border">
-						<div className="flex gap-2">
+						<div className="flex gap-2 flex-wrap">
+							<button
+								className={`text-xs px-2 py-1 rounded ${rightPanel === 'outline' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+								onClick={() => setRightPanel('outline')}
+							>
+								Outline
+							</button>
 							<button
 								className={`text-xs px-2 py-1 rounded ${rightPanel === 'backlinks' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
 								onClick={() => setRightPanel('backlinks')}
@@ -685,6 +855,17 @@ function App() {
 						</button>
 					</div>
 					<div className="flex-1 overflow-auto">
+						{rightPanel === 'outline' && (
+							<OutlinePanel
+								content={editorContent}
+								onNavigate={(line, from) => {
+									// Dispatch event for Editor to scroll to line
+									window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
+										detail: { line, from }
+									}));
+								}}
+							/>
+						)}
 						{rightPanel === 'backlinks' && (
 							<BacklinksPanel
 								noteId={vaultMeta.activeNoteId}

@@ -13,15 +13,18 @@ import {
 	PanelLeftOpen,
 	Settings,
 	Plus,
-    Calendar,
+	Calendar,
+	Command,
 } from 'lucide-react';
 
 interface SidebarProps {
 	activePath: string | null;
 	onFileSelect: (path: string, permanent?: boolean) => void;
+	onOpenInNewTab?: (path: string) => void;
 	onSettingsClick: () => void;
 	onVaultPathChange?: (vaultPath: string | null) => void;
 	onNoteRenamed?: (oldPath: string, newPath: string) => void;
+	onQuickSwitcherOpen?: () => void;
 	vaultId?: string | null;
 	activeNoteId?: string | null;
 }
@@ -29,9 +32,11 @@ interface SidebarProps {
 export function Sidebar({
 	activePath,
 	onFileSelect,
+	onOpenInNewTab,
 	onSettingsClick,
 	onVaultPathChange,
 	onNoteRenamed,
+	onQuickSwitcherOpen,
 	vaultId: _vaultId,
 	activeNoteId: _activeNoteId,
 }: SidebarProps) {
@@ -94,6 +99,20 @@ export function Sidebar({
 
 		return () => {
 			unlisten.then((fn) => fn());
+		};
+	}, [vaultPath]);
+
+	// Listen for Ctrl+N keyboard shortcut from App.tsx
+	useEffect(() => {
+		const handleCreateNoteShortcut = () => {
+			if (vaultPath) {
+				handleCreateNote();
+			}
+		};
+
+		window.addEventListener('mutter:create-note', handleCreateNoteShortcut);
+		return () => {
+			window.removeEventListener('mutter:create-note', handleCreateNoteShortcut);
 		};
 	}, [vaultPath]);
 
@@ -267,6 +286,16 @@ export function Sidebar({
 									variant='ghost'
 									size='icon'
 									className='h-8 w-8'
+									onClick={onQuickSwitcherOpen}
+									title='Quick Switcher (Ctrl+O)'
+									disabled={!vaultPath}
+								>
+									<Command size={16} />
+								</Button>
+								<Button
+									variant='ghost'
+									size='icon'
+									className='h-8 w-8'
 									onClick={handleOpenDailyNote}
 									title='Open Today`s Note'
 									disabled={!vaultPath}
@@ -363,6 +392,7 @@ export function Sidebar({
 						<FileTree
 							nodes={fileTree}
 							onSelect={onFileSelect}
+							onOpenInNewTab={onOpenInNewTab}
 							onRename={handleRename}
 							onFileTreeUpdate={() => loadFileTree(vaultPath)}
 							className='h-full p-2'
