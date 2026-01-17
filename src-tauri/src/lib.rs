@@ -150,6 +150,7 @@ pub fn run() {
             get_current_context,
             download_model,
             download_model_from_hub,
+            download_whisper_model,
             is_model_downloaded,
             load_whisper_model,
             has_loaded_model,

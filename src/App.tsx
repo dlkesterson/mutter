@@ -12,6 +12,7 @@ import { SettingsDialog } from './components/dialogs/settings-dialog';
 import { WhisperModelSelector } from './components/WhisperModelSelector';
 import { StreamingTranscription } from './components/StreamingTranscription';
 import { Toaster } from './components/ui/toaster';
+import { useToast } from './hooks/use-toast';
 import { getStorageItem, setStorageItem } from './utils/storage';
 import { VoiceLogEntry } from './types';
 import { QuickCapture } from './components/QuickCapture';
@@ -88,6 +89,9 @@ function App() {
 		model: 'claude-3-sonnet-20240229',
 		timeoutMs: 30000,
 	});
+
+	// Toast notifications
+	const { toast } = useToast();
 
 	// Voice settings
 	const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -523,21 +527,35 @@ function App() {
 	useEffect(() => {
 		const checkModel = async () => {
 			try {
-				// Check if we have a saved model preference first
+				// Always check if a model is actually loaded, regardless of saved preference
+				// The saved preference might exist but the model file could be missing/corrupt
+				const hasModel = await invoke<boolean>('has_loaded_model');
+
+				if (hasModel) {
+					console.log('[Model Check] Whisper model is loaded and ready');
+					return;
+				}
+
+				// Check if we have a saved model preference to try auto-loading
 				const savedModelId = await getStorageItem<string>(
 					'selected_whisper_model'
 				);
 
-				// If we have a saved model, we don't need to open the selector
-				// The selector component itself handles auto-loading the saved model
 				if (savedModelId) {
-					return;
+					console.log(`[Model Check] Attempting to load saved model: ${savedModelId}`);
+					try {
+						await invoke('load_whisper_model', { modelName: savedModelId });
+						console.log(`[Model Check] ✓ Successfully loaded saved model: ${savedModelId}`);
+						return;
+					} catch (loadError) {
+						console.error(`[Model Check] Failed to load saved model ${savedModelId}:`, loadError);
+						// Fall through to open selector
+					}
 				}
 
-				const hasModel = await invoke<boolean>('has_loaded_model');
-				if (!hasModel) {
-					setModelSelectorOpen(true);
-				}
+				// No model loaded and either no saved preference or load failed
+				console.log('[Model Check] No model loaded, opening selector');
+				setModelSelectorOpen(true);
 			} catch (err) {
 				console.error('Failed to check model status:', err);
 				// Open selector anyway if check fails
@@ -618,6 +636,18 @@ function App() {
 			}
 		} else {
 			try {
+				// Check if Whisper model is loaded before starting recording
+				const hasModel = await invoke<boolean>('has_loaded_model');
+				if (!hasModel) {
+					toast({
+						title: 'No Whisper Model',
+						description: 'Please select a speech-to-text model in Settings first.',
+						variant: 'destructive',
+					});
+					setModelSelectorOpen(true);
+					return;
+				}
+
 				setStreamingTranscription(''); // Clear previous streaming text
 
 				// Set the auto-stop callback BEFORE starting recording to avoid race condition

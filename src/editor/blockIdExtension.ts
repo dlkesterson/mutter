@@ -1,10 +1,17 @@
 /**
  * CodeMirror Extension for Block IDs
  *
+ * Phase 2: Block IDs are now ALWAYS hidden in the editor.
+ *
  * Provides:
- * - Cursor-aware hiding of block IDs (like existing live preview)
+ * - Complete visual hiding of block IDs (^abc123 syntax)
  * - State tracking for all blocks in document
  * - Helper functions to get block at cursor
+ *
+ * Block IDs remain in the markdown file for Obsidian compatibility
+ * and transclusion/linking functionality, but are never shown to users.
+ * This solves the "data poisoning" issue identified in the research PDF
+ * while maintaining full functionality.
  */
 
 import {
@@ -20,7 +27,7 @@ import {
   extractBlocks,
   getBlockAtLine,
 } from './blockIds';
-import { cursorPosField } from './livePreview';
+// Note: cursorPosField no longer needed since we always hide IDs
 
 // Regex to match block ID at end of line
 const BLOCK_ID_REGEX = / \^[a-z0-9]{6}$/;
@@ -90,8 +97,41 @@ export function scrollToBlock(view: EditorView, blockId: string): boolean {
 }
 
 /**
- * Plugin that hides block IDs when cursor is not on that line
- * Uses the same pattern as livePreview.ts for consistency
+ * Debug flag to show block IDs (for development only)
+ * Access via window.__MUTTER_DEBUG__.showBlockIds = true
+ */
+let debugShowBlockIds = false;
+
+// Expose debug toggle
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__MUTTER_DEBUG__ =
+    (window as unknown as Record<string, unknown>).__MUTTER_DEBUG__ || {};
+  Object.defineProperty(
+    (window as unknown as Record<string, Record<string, unknown>>).__MUTTER_DEBUG__,
+    'showBlockIds',
+    {
+      get: () => debugShowBlockIds,
+      set: (value: boolean) => {
+        debugShowBlockIds = value;
+        console.log(`[BlockIds] Debug visibility: ${value ? 'ON' : 'OFF'}`);
+      },
+    }
+  );
+}
+
+/**
+ * Plugin that ALWAYS hides block IDs from the user
+ *
+ * Phase 2 change: Block IDs are now completely invisible.
+ * Previously, IDs would show when cursor was on that line.
+ * Now they are always hidden via Decoration.replace({}).
+ *
+ * The IDs remain in the markdown file for:
+ * - Obsidian compatibility
+ * - Transclusion references
+ * - Block linking
+ *
+ * But users never see or interact with them directly.
  */
 const blockIdDecorationPlugin = ViewPlugin.fromClass(
   class {
@@ -102,14 +142,20 @@ const blockIdDecorationPlugin = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged) {
+      // Only rebuild on doc changes or viewport changes
+      // Selection changes no longer matter since we always hide
+      if (update.docChanged || update.viewportChanged) {
         this.decorations = this.buildDecorations(update.view);
       }
     }
 
     buildDecorations(view: EditorView): DecorationSet {
+      // Debug mode: show all IDs
+      if (debugShowBlockIds) {
+        return Decoration.none;
+      }
+
       const decorations: { from: number; to: number; decoration: Decoration }[] = [];
-      const cursorPos = view.state.field(cursorPosField);
       const doc = view.state.doc;
 
       for (const { from, to } of view.visibleRanges) {
@@ -117,7 +163,6 @@ const blockIdDecorationPlugin = ViewPlugin.fromClass(
         while (pos <= to) {
           const line = doc.lineAt(pos);
           const text = line.text;
-          const lineStart = line.from;
           const lineEnd = line.to;
 
           // Check for block ID at end of line
@@ -126,22 +171,12 @@ const blockIdDecorationPlugin = ViewPlugin.fromClass(
             const idStart = lineEnd - match[0].length;
             const idEnd = lineEnd;
 
-            // Hide if cursor is not on this line
-            if (cursorPos < lineStart || cursorPos > lineEnd) {
-              // Completely hide the block ID
-              decorations.push({
-                from: idStart,
-                to: idEnd,
-                decoration: Decoration.replace({}),
-              });
-            } else {
-              // Cursor is on line - show ID with subtle styling
-              decorations.push({
-                from: idStart,
-                to: idEnd,
-                decoration: Decoration.mark({ class: 'cm-block-id' }),
-              });
-            }
+            // Always hide block IDs - they are internal infrastructure
+            decorations.push({
+              from: idStart,
+              to: idEnd,
+              decoration: Decoration.replace({}),
+            });
           }
 
           pos = line.to + 1;
@@ -172,19 +207,21 @@ export const blockIdExtension: Extension = [
 ];
 
 /**
- * CSS styles for block IDs (add to your theme)
+ * CSS styles for block IDs
+ *
+ * @deprecated Phase 2: Block IDs are now always hidden, so these styles are unused.
+ * Kept for backward compatibility in case any code references blockIdStyles.
  */
 export const blockIdStyles = EditorView.baseTheme({
-  '.cm-block-id': {
-    color: 'var(--text-disabled, #666)',
-    fontSize: '0.85em',
-    fontFamily: 'var(--font-mono, monospace)',
-    opacity: '0.6',
-  },
+  // Styles no longer needed since IDs are always hidden
+  // Kept as empty theme for backward compatibility
 });
 
 /**
  * Full extension with styles
+ *
+ * @deprecated Use blockIdExtension directly. Styles are no longer needed
+ * since block IDs are always hidden in Phase 2.
  */
 export const blockIdExtensionWithStyles: Extension = [
   blockIdExtension,

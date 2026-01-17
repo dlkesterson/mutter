@@ -1,6 +1,8 @@
 /**
  * Transclusion Widget Styles
  *
+ * Phase 2: Polished transclusion with no syntax leaks.
+ *
  * Styles for the CodeMirror transclusion extension.
  * Uses CSS custom properties from the app theme for consistency.
  */
@@ -42,6 +44,37 @@
   font-size: 11px;
   color: var(--text-muted, #888);
   font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+}
+
+/* Link icon in header */
+.cm-transclusion-icon {
+  color: var(--accent-primary, #00a0b4);
+  opacity: 0.7;
+}
+
+/* Block indicator - subtle hint that this is a block embed */
+.cm-transclusion-block-indicator {
+  font-size: 10px;
+  color: var(--text-disabled, #666);
+  font-style: italic;
+}
+
+/* Header hover state */
+.cm-transclusion-header:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+  border-radius: 4px;
+  margin: -4px;
+  padding: 4px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.cm-transclusion-header:hover .cm-transclusion-icon {
+  opacity: 1;
+}
+
+.cm-transclusion-header:hover .cm-transclusion-source {
+  color: var(--accent-primary, #00a0b4);
 }
 
 /* Body content */
@@ -116,4 +149,86 @@
   50% {
     opacity: 0.5;
   }
+}
+
+/* ========================================
+ * Phase 2: Markdown Rendering Styles
+ * ======================================== */
+
+/* Rendered content container */
+.cm-transclusion-rendered {
+  color: var(--text-secondary, #aaa);
+}
+
+/* Paragraphs */
+.cm-transclusion-paragraph {
+  margin-bottom: 8px;
+}
+
+.cm-transclusion-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+/* Spacer for empty lines */
+.cm-transclusion-spacer {
+  height: 8px;
+}
+
+/* Headings */
+.cm-transclusion-h1 {
+  font-size: 1.4em;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle, #333);
+}
+
+.cm-transclusion-h2 {
+  font-size: 1.25em;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin-bottom: 8px;
+}
+
+.cm-transclusion-h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--text-primary, #eee);
+  margin-bottom: 8px;
+}
+
+.cm-transclusion-h4,
+.cm-transclusion-h5,
+.cm-transclusion-h6 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text-secondary, #ccc);
+  margin-bottom: 8px;
+}
+
+/* Inline formatting */
+.cm-transclusion-rendered strong {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.cm-transclusion-rendered em {
+  font-style: italic;
+}
+
+/* Inline code */
+.cm-transclusion-code {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.9em;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--bg-surface, #222);
+  color: var(--text-primary, #fff);
+}
+
+/* Wiki links in transclusion (display only, not interactive) */
+.cm-transclusion-wikilink {
+  color: var(--accent-primary, #00a0b4);
+  opacity: 0.8;
 }

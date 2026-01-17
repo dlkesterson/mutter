@@ -1,12 +1,16 @@
 /**
  * Transclusion Extension for CodeMirror
  *
+ * Phase 2: Polished transclusion with no syntax leaks.
+ *
  * Renders ![[Note Name#blockId]] embeds as live previews of the referenced content.
  * Features:
  * - Async content loading with loading state
  * - Error handling for missing notes/blocks
  * - Edit and Jump to source actions
  * - Content cached in state to avoid reloading
+ * - Block IDs hidden from display (Phase 2)
+ * - Basic markdown rendering (headings, bold, italic)
  */
 
 import {
@@ -19,6 +23,139 @@ import {
 } from '@codemirror/view';
 import { StateField, StateEffect, Range } from '@codemirror/state';
 import { parseLinks, ParsedLink } from '@/graph/linkParser';
+
+/**
+ * Render basic markdown to DOM elements (safe, no innerHTML)
+ *
+ * Supports:
+ * - Headings (# to ######)
+ * - Bold (**text**)
+ * - Italic (*text* or _text_)
+ * - Inline code (`code`)
+ * - Wiki links [[link]] (displayed but not interactive)
+ *
+ * @param text - Raw markdown text
+ * @returns DOM element with rendered content
+ */
+function renderBasicMarkdown(text: string): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'cm-transclusion-rendered';
+
+  const lines = text.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check for heading
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingEl = document.createElement('div');
+      headingEl.className = `cm-transclusion-h${level}`;
+      renderInlineMarkdown(headingMatch[2], headingEl);
+      container.appendChild(headingEl);
+      continue;
+    }
+
+    // Regular paragraph
+    if (line.trim()) {
+      const paraEl = document.createElement('div');
+      paraEl.className = 'cm-transclusion-paragraph';
+      renderInlineMarkdown(line, paraEl);
+      container.appendChild(paraEl);
+    } else if (i > 0 && i < lines.length - 1) {
+      // Empty line between content - add spacing
+      const spacer = document.createElement('div');
+      spacer.className = 'cm-transclusion-spacer';
+      container.appendChild(spacer);
+    }
+  }
+
+  return container;
+}
+
+/**
+ * Render inline markdown (bold, italic, code, links) into a container
+ */
+function renderInlineMarkdown(text: string, container: HTMLElement): void {
+  // Regex patterns for inline elements
+  // Order matters: more specific patterns first
+  const patterns = [
+    { regex: /`([^`]+)`/g, className: 'cm-transclusion-code' },
+    { regex: /\*\*([^*]+)\*\*/g, tag: 'strong' },
+    { regex: /\*([^*]+)\*/g, tag: 'em' },
+    { regex: /_([^_]+)_/g, tag: 'em' },
+    { regex: /\[\[([^\]]+)\]\]/g, className: 'cm-transclusion-wikilink' },
+  ];
+
+  // Simple tokenization: find all matches and their positions
+  interface Token {
+    start: number;
+    end: number;
+    content: string;
+    tag?: string;
+    className?: string;
+  }
+
+  const tokens: Token[] = [];
+
+  // First pass: extract all matches
+  for (const pattern of patterns) {
+    let match;
+    pattern.regex.lastIndex = 0;
+
+    while ((match = pattern.regex.exec(text)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[1],
+        tag: pattern.tag,
+        className: pattern.className,
+      });
+    }
+  }
+
+  // Sort by start position
+  tokens.sort((a, b) => a.start - b.start);
+
+  // Remove overlapping tokens (keep earlier/longer ones)
+  const filteredTokens: Token[] = [];
+  let lastEnd = 0;
+  for (const token of tokens) {
+    if (token.start >= lastEnd) {
+      filteredTokens.push(token);
+      lastEnd = token.end;
+    }
+  }
+
+  // Build DOM
+  let pos = 0;
+  for (const token of filteredTokens) {
+    // Add text before this token
+    if (token.start > pos) {
+      container.appendChild(document.createTextNode(text.slice(pos, token.start)));
+    }
+
+    // Add the formatted element
+    if (token.tag) {
+      const el = document.createElement(token.tag);
+      el.textContent = token.content;
+      container.appendChild(el);
+    } else if (token.className) {
+      const el = document.createElement('span');
+      el.className = token.className;
+      el.textContent = token.content;
+      container.appendChild(el);
+    }
+
+    pos = token.end;
+  }
+
+  // Add remaining text
+  if (pos < text.length) {
+    container.appendChild(document.createTextNode(text.slice(pos)));
+  }
+}
 
 /**
  * Effect to update transclusion content after async load
@@ -39,8 +176,13 @@ export const setTransclusionError = StateEffect.define<{
 /**
  * Widget that renders transcluded content
  *
+ * Phase 2 improvements:
+ * - Block IDs hidden from source reference
+ * - Basic markdown rendering instead of preformatted text
+ * - Clickable header to jump to source
+ * - Clean, minimal UI
+ *
  * Uses safe DOM methods (no innerHTML) for security.
- * Content is displayed as preformatted text.
  */
 class TransclusionWidget extends WidgetType {
   constructor(
@@ -52,6 +194,15 @@ class TransclusionWidget extends WidgetType {
     private onJump: () => void
   ) {
     super();
+  }
+
+  /**
+   * Get clean display name for the source note
+   * Removes .md extension and any block ID references
+   */
+  private getCleanSourceName(): string {
+    // Remove .md extension for cleaner display
+    return this.embed.target.replace(/\.md$/, '');
   }
 
   toDOM(): HTMLElement {
@@ -75,7 +226,7 @@ class TransclusionWidget extends WidgetType {
       const errorDiv = document.createElement('div');
       errorDiv.className = 'cm-transclusion-error';
       const errorSpan = document.createElement('span');
-      errorSpan.textContent = '[!] ' + this.error;
+      errorSpan.textContent = this.error;
       errorDiv.appendChild(errorSpan);
       wrapper.appendChild(errorDiv);
       return wrapper;
@@ -86,51 +237,66 @@ class TransclusionWidget extends WidgetType {
       const contentDiv = document.createElement('div');
       contentDiv.className = 'cm-transclusion-content';
 
-      // Source reference header
+      // Source reference header - now clickable and without block ID
       const headerDiv = document.createElement('div');
       headerDiv.className = 'cm-transclusion-header';
+      headerDiv.title = 'Click to jump to source';
+      headerDiv.style.cursor = 'pointer';
+
+      // Link icon
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'cm-transclusion-icon';
+      iconSpan.textContent = '↗ ';
+      headerDiv.appendChild(iconSpan);
+
+      // Clean source name (no block ID shown)
       const sourceSpan = document.createElement('span');
       sourceSpan.className = 'cm-transclusion-source';
-      sourceSpan.textContent = this.embed.blockId
-        ? `${this.embed.target}#${this.embed.blockId}`
-        : this.embed.target;
+      sourceSpan.textContent = this.getCleanSourceName();
       headerDiv.appendChild(sourceSpan);
+
+      // Subtle block indicator (if this is a block embed, not full note)
+      if (this.embed.blockId) {
+        const blockIndicator = document.createElement('span');
+        blockIndicator.className = 'cm-transclusion-block-indicator';
+        blockIndicator.textContent = ' (block)';
+        headerDiv.appendChild(blockIndicator);
+      }
+
+      // Make header clickable to jump to source
+      headerDiv.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onJump();
+      });
+
       contentDiv.appendChild(headerDiv);
 
-      // Body content
+      // Body content - now with basic markdown rendering
       const bodyDiv = document.createElement('div');
       bodyDiv.className = 'cm-transclusion-body';
-      // Use textContent for safety - render as preformatted text
-      const pre = document.createElement('pre');
-      pre.className = 'cm-transclusion-text';
-      pre.textContent = this.content;
-      bodyDiv.appendChild(pre);
+
+      // Use basic markdown rendering instead of preformatted text
+      const renderedContent = renderBasicMarkdown(this.content);
+      bodyDiv.appendChild(renderedContent);
+
       contentDiv.appendChild(bodyDiv);
 
-      // Action buttons
+      // Action buttons - simplified, Edit button is primary
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'cm-transclusion-actions';
 
       const editBtn = document.createElement('button');
       editBtn.className = 'cm-transclusion-edit';
-      editBtn.textContent = 'Edit';
+      editBtn.textContent = 'Edit source';
+      editBtn.title = 'Open source note for editing';
       editBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         this.onEdit();
       });
 
-      const jumpBtn = document.createElement('button');
-      jumpBtn.className = 'cm-transclusion-jump';
-      jumpBtn.textContent = 'Jump to source';
-      jumpBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.onJump();
-      });
-
       actionsDiv.appendChild(editBtn);
-      actionsDiv.appendChild(jumpBtn);
       contentDiv.appendChild(actionsDiv);
       wrapper.appendChild(contentDiv);
     }
@@ -148,7 +314,7 @@ class TransclusionWidget extends WidgetType {
   }
 
   ignoreEvent(): boolean {
-    // Don't ignore events - allow clicks on buttons
+    // Don't ignore events - allow clicks on buttons and header
     return false;
   }
 }

@@ -1,15 +1,18 @@
 use ringbuf::{HeapRb, Rb};
 use std::sync::Mutex;
 
-/// Audio ring buffer to hold last 30 seconds of audio at 16kHz
+/// Audio ring buffer to hold up to 10 minutes of audio at 16kHz.
+/// Note: The frontend maintains its own unbounded buffer (audioBufferRef),
+/// but this backend buffer provides consistency for any backend-side processing.
 pub struct AudioBuffer {
     buffer: Mutex<HeapRb<f32>>,
 }
 
 impl AudioBuffer {
     pub fn new() -> Self {
-        // 30 seconds at 16kHz = 480,000 samples
-        let capacity = 16000 * 30;
+        // 10 minutes at 16kHz = 9,600,000 samples
+        // This supports the new long-form transcription feature
+        let capacity = 16000 * 60 * 10;
         Self {
             buffer: Mutex::new(HeapRb::new(capacity)),
         }

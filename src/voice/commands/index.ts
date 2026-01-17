@@ -12,6 +12,7 @@ import { registerLinkingCommands } from './linking';
 import { registerMetaCommands } from './meta';
 import { registerSupertagCommands } from './supertags';
 import { registerQueryCommands } from './query';
+import { registerGraphNavigationCommands } from './graphNavigation';
 
 /**
  * Register all built-in commands
@@ -31,6 +32,7 @@ export function registerAllCommands(): void {
   registerMetaCommands();
   registerSupertagCommands();
   registerQueryCommands();
+  registerGraphNavigationCommands();
 
   commandRegistry.markInitialized();
 }
@@ -43,3 +45,4 @@ export { linkingCommands } from './linking';
 export { metaCommands } from './meta';
 export { supertagCommands } from './supertags';
 export { queryCommands } from './query';
+export { graphNavigationCommands } from './graphNavigation';

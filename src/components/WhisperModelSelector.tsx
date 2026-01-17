@@ -20,60 +20,47 @@ interface WhisperModel {
 	name: string;
 	size: string;
 	description: string;
-	huggingface_id: string;
 	recommended?: boolean;
 	languages?: string;
 }
 
+// GGML format models from ggerganov/whisper.cpp on HuggingFace
 const WHISPER_MODELS: WhisperModel[] = [
 	{
-		id: 'distil-medium-en',
-		name: 'Distil Whisper Medium (EN)',
-		size: '~400MB',
-		description: 'Balanced accuracy and speed for English',
-		huggingface_id: 'distil-whisper/distil-medium.en',
+		id: 'ggml-tiny.en',
+		name: 'Tiny (English)',
+		size: '75 MB',
+		description: 'Fastest, lowest accuracy. Good for quick tests.',
+		languages: 'English only',
+	},
+	{
+		id: 'ggml-base.en',
+		name: 'Base (English)',
+		size: '142 MB',
+		description: 'Fast with decent accuracy. Good balance.',
 		recommended: true,
 		languages: 'English only',
 	},
 	{
-		id: 'distil-large-v3',
-		name: 'Distil Whisper Large v3',
-		size: '~800MB',
-		description: 'Best accuracy, multilingual support',
-		huggingface_id: 'distil-whisper/distil-large-v3',
+		id: 'ggml-small.en',
+		name: 'Small (English)',
+		size: '466 MB',
+		description: 'Better accuracy, moderate speed.',
+		languages: 'English only',
+	},
+	{
+		id: 'ggml-medium.en',
+		name: 'Medium (English)',
+		size: '1.5 GB',
+		description: 'High accuracy, slower inference.',
+		languages: 'English only',
+	},
+	{
+		id: 'ggml-large-v3',
+		name: 'Large v3 (Multilingual)',
+		size: '3.1 GB',
+		description: 'Highest accuracy, supports all languages. Slowest.',
 		languages: '99+ languages',
-	},
-	{
-		id: 'tiny-en',
-		name: 'Whisper Tiny (EN)',
-		size: '~75MB',
-		description: 'Fastest, lower accuracy',
-		huggingface_id: 'openai/whisper-tiny.en',
-		languages: 'English only',
-	},
-	{
-		id: 'base-en',
-		name: 'Whisper Base (EN)',
-		size: '~145MB',
-		description: 'Fast with decent accuracy',
-		huggingface_id: 'openai/whisper-base.en',
-		languages: 'English only',
-	},
-	{
-		id: 'small-en',
-		name: 'Whisper Small (EN)',
-		size: '~244MB',
-		description: 'Good balance for English',
-		huggingface_id: 'openai/whisper-small.en',
-		languages: 'English only',
-	},
-	{
-		id: 'medium-en',
-		name: 'Whisper Medium (EN)',
-		size: '~1.5GB',
-		description: 'High accuracy for English',
-		huggingface_id: 'openai/whisper-medium.en',
-		languages: 'English only',
 	},
 ];
 
@@ -165,13 +152,12 @@ export function WhisperModelSelector({
 		try {
 			toast({
 				title: 'Downloading Model',
-				description: `Downloading ${model.name}...`,
+				description: `Downloading ${model.name} (${model.size})...`,
 			});
 
-			await invoke('download_model_from_hub', {
-				modelId: model.huggingface_id,
+			// Use the new GGML download command
+			await invoke('download_whisper_model', {
 				modelName: model.id,
-				revision: 'main',
 			});
 
 			setDownloadedModels((prev) => new Set(prev).add(model.id));
@@ -235,7 +221,8 @@ export function WhisperModelSelector({
 					<DialogTitle>Select Whisper Model</DialogTitle>
 					<DialogDescription>
 						Choose a speech-to-text model. Smaller models are faster
-						but less accurate.
+						but less accurate. Models use the GGML format from
+						whisper.cpp.
 					</DialogDescription>
 				</DialogHeader>
 

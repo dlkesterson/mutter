@@ -39,7 +39,10 @@ active-win-pos-rs = "0.9.1"
 hound = "3.5"
 ringbuf = "0.3"
 
-# ML inference with Candle (with CUDA GPU support for 10x faster transcription)
+# Whisper speech-to-text via whisper.cpp (with CUDA GPU acceleration)
+whisper-rs = { version = "0.14", features = ["cuda"] }
+
+# ML inference with Candle for BERT embeddings (with CUDA GPU support)
 candle-core = { version = "0.8", features = ["cuda"] }
 candle-nn = { version = "0.8", features = ["cuda"] }
 candle-transformers = { version = "0.8", features = ["cuda"] }

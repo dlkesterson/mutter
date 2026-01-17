@@ -406,16 +406,37 @@ pub async fn transcribe_audio(
     // --- END DEBUG BLOCK ---
 
     let start = std::time::Instant::now();
-    let mut engine = state
+
+    log::info!("Acquiring Whisper engine lock...");
+    let engine = state
         .whisper_engine
         .lock()
         .map_err(|_| "Whisper engine lock poisoned".to_string())?;
+    log::info!("Lock acquired. Model loaded: {}", engine.is_loaded());
+
+    if !engine.is_loaded() {
+        log::error!("❌ Whisper model is NOT loaded! User needs to select a model in Settings.");
+        return Err("Whisper model not loaded. Please select a model in Settings → Whisper Model.".to_string());
+    }
+
+    // whisper-rs/whisper.cpp handles long audio natively via timestamp tokens!
+    // No need for manual chunking or merging.
+    log::info!("Starting Whisper transcription of {} samples ({:.1}s)...",
+        audio_buffer.len(),
+        audio_buffer.len() as f32 / 16000.0);
 
     let text = engine
         .transcribe(&audio_buffer)
-        .map_err(|e| format!("Transcription failed: {}", e))?;
+        .map_err(|e| {
+            log::error!("Transcription error: {}", e);
+            format!("Transcription failed: {}", e)
+        })?;
 
     let duration_ms = start.elapsed().as_millis() as u64;
+
+    log::info!("✅ Transcription complete in {}ms: '{}'",
+        duration_ms,
+        if text.len() > 100 { format!("{}...", &text[..100]) } else { text.clone() });
 
     Ok(TranscriptionResult { text, duration_ms })
 }
@@ -437,7 +458,7 @@ pub async fn transcribe_streaming(
         return Ok(());
     }
 
-    let mut engine = state
+    let engine = state
         .whisper_engine
         .lock()
         .map_err(|_| "Whisper engine lock poisoned".to_string())?;
@@ -978,7 +999,51 @@ pub async fn is_model_downloaded(
     Ok(manager.is_model_downloaded(&model_name))
 }
 
-/// Load a Whisper model
+/// Download a GGML Whisper model from HuggingFace
+#[tauri::command]
+pub async fn download_whisper_model(
+    model_name: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    log::info!("Downloading GGML Whisper model: {}", model_name);
+
+    let models_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?
+        .join("models");
+
+    let manager = ModelManager::new(models_dir);
+
+    // Create progress callback that emits events
+    let app_clone = app.clone();
+    let callback = Box::new(move |downloaded: u64, total: u64| {
+        let percentage = if total > 0 {
+            (downloaded as f64 / total as f64 * 100.0) as f32
+        } else {
+            0.0
+        };
+
+        let progress = DownloadProgress {
+            downloaded,
+            total,
+            percentage,
+        };
+
+        // Emit progress event (ignore errors)
+        let _ = app_clone.emit("download-progress", progress);
+    });
+
+    let path = manager
+        .download_ggml_model(&model_name, Some(callback))
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    log::info!("GGML model downloaded to: {:?}", path);
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Load a Whisper model (GGML format)
 #[tauri::command]
 pub async fn load_whisper_model(
     model_name: String,
@@ -991,19 +1056,17 @@ pub async fn load_whisper_model(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?
-        .join("models")
-        .join(&model_name);
+        .join("models");
 
-    let config_path = models_dir.join("config.json");
-    let tokenizer_path = models_dir.join("tokenizer.json");
-    let weights_path = models_dir.join("model.safetensors");
+    // GGML models are single .bin files
+    let model_path = models_dir.join(format!("{}.bin", model_name));
 
-    // Ensure mel filters are available
-    let manager = ModelManager::new(models_dir.parent().unwrap().to_path_buf());
-    let mel_filters_path = manager
-        .download_mel_filters()
-        .await
-        .map_err(|e| format!("Failed to download mel filters: {}", e))?;
+    if !model_path.exists() {
+        return Err(format!(
+            "Model {} not downloaded. Path: {:?}",
+            model_name, model_path
+        ));
+    }
 
     let mut engine = state
         .whisper_engine
@@ -1011,16 +1074,10 @@ pub async fn load_whisper_model(
         .map_err(|_| "Whisper engine lock poisoned".to_string())?;
 
     engine
-        .load_model(
-            &config_path,
-            &tokenizer_path,
-            &weights_path,
-            &mel_filters_path,
-            false,
-        )
+        .load_model(&model_path)
         .map_err(|e| format!("Failed to load model: {}", e))?;
 
-    log::info!("Model loaded successfully");
+    log::info!("Model {} loaded successfully", model_name);
     Ok(())
 }
 
