@@ -422,3 +422,6 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 **Voice commands**: Open Voice Log dialog (right sidebar) to see transcription text, matched command, and confidence scores (0.0-1.0).
 
 **CRDT state**: Check `<vault-path>/.mutter/state.json` and `.mutter/crdt/*/snapshots/`
+
+Use 'bd' for task tracking.
+

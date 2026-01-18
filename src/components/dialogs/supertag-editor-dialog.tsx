@@ -1,10 +1,11 @@
 /**
- * SupertagCreatorDialog Component
+ * SupertagEditorDialog Component
  *
- * Dialog for creating new supertag templates with typed fields.
+ * Dialog for editing existing supertag templates.
+ * Similar to SupertagCreatorDialog but pre-fills with existing data.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -35,21 +36,62 @@ const FIELD_TYPES: { value: SupertagFieldType; label: string }[] = [
   { value: 'multi-select', label: 'Multi-select' },
 ];
 
-interface SupertagCreatorDialogProps {
+interface SupertagEditorDialogProps {
   open: boolean;
   onClose: () => void;
+  definitionId: string | null;
 }
 
 function generateId(): string {
   return crypto.randomUUID().slice(0, 8);
 }
 
-export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogProps) {
-  const { create } = useSupertagDefinitions();
+export function SupertagEditorDialog({ open, onClose, definitionId }: SupertagEditorDialogProps) {
+  const { getById, update } = useSupertagDefinitions();
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [fields, setFields] = useState<FieldInput[]>([]);
   const [optionsInput, setOptionsInput] = useState<Record<string, string>>({});
+
+  // Load existing definition data when dialog opens
+  useEffect(() => {
+    if (open && definitionId) {
+      const definition = getById(definitionId);
+      if (definition) {
+        setName(definition.name);
+        setIcon(definition.icon || '');
+
+        // Convert fields to input format
+        const fieldInputs: FieldInput[] = definition.fields.map((f) => ({
+          id: generateId(),
+          name: f.name,
+          type: f.type,
+          options: f.options,
+          default: f.default,
+        }));
+        setFields(fieldInputs);
+
+        // Set up options input for select fields
+        const newOptionsInput: Record<string, string> = {};
+        fieldInputs.forEach((field) => {
+          if ((field.type === 'select' || field.type === 'multi-select') && field.options) {
+            newOptionsInput[field.id] = field.options.join(', ');
+          }
+        });
+        setOptionsInput(newOptionsInput);
+      }
+    }
+  }, [open, definitionId, getById]);
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setName('');
+      setIcon('');
+      setFields([]);
+      setOptionsInput({});
+    }
+  }, [open]);
 
   const addField = () => {
     setFields([
@@ -70,14 +112,14 @@ export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogPr
   };
 
   const handleSave = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !definitionId) return;
 
     // Process fields, parsing options from comma-separated strings
     const processedFields = fields
       .filter((f) => f.name.trim())
       .map((field) => {
         const { id, ...fieldData } = field;
-        
+
         // Parse options if this is a select field
         if (field.type === 'select' || field.type === 'multi-select') {
           const optionStr = optionsInput[id] || '';
@@ -93,25 +135,22 @@ export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogPr
         };
       });
 
-    create({
+    update(definitionId, {
       name: name.trim(),
       icon: icon || undefined,
       fields: processedFields,
     });
 
-    // Reset form
-    setName('');
-    setIcon('');
-    setFields([]);
-    setOptionsInput({});
     onClose();
   };
+
+  if (!definitionId) return null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md text-foreground">
         <DialogHeader>
-          <DialogTitle>Create Supertag Template</DialogTitle>
+          <DialogTitle>Edit Supertag Template</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -170,7 +209,7 @@ export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogPr
                       ×
                     </Button>
                   </div>
-                  
+
                   {(field.type === 'select' || field.type === 'multi-select') && (
                     <div>
                       <Label className="text-xs">Options (comma-separated)</Label>
@@ -198,7 +237,7 @@ export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogPr
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!name.trim()}>
-            Create Supertag
+            Save Changes
           </Button>
         </DialogFooter>
       </DialogContent>

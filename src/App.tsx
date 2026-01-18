@@ -33,8 +33,13 @@ import { StatusBar } from './components/StatusBar';
 import { SyncStatusIndicator } from './components/sync/SyncStatusIndicator';
 import type { LLMSettings } from './services/llm-service';
 import { useSettings, useCredentials } from '@/lib/settings';
+import { SupertagCreatorDialog } from './components/dialogs/supertag-creator-dialog';
+import { SupertagApplyDialog } from './components/dialogs/supertag-apply-dialog';
+import { SupertagEditorDialog } from './components/dialogs/supertag-editor-dialog';
+import { NoteSuperTags } from './components/supertags/NoteSuperTags';
+import { SupertagsPanel } from './components/supertags/SupertagsPanel';
 
-type DialogType = 'files' | 'voice-log' | 'settings' | null;
+type DialogType = 'files' | 'voice-log' | 'settings' | 'supertag-creator' | 'supertag-apply' | 'supertag-editor' | null;
 
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
@@ -58,14 +63,16 @@ function App() {
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Right panel state
-	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | null>(null);
+	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | 'tags' | null>(null);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(true);
 	const [rightPanelWidth, setRightPanelWidth] = useState(320);
 	const [isRightPanelResizing, setIsRightPanelResizing] = useState(false);
 	// Track last used panel for toggle button
-	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph'>('outline');
+	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | 'tags'>('outline');
 	// Graph dialog state
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
+	// Supertag editor state
+	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
 	// Update last panel ref when panel changes
 	useEffect(() => {
@@ -220,12 +227,17 @@ function App() {
 				case 'query':
 					setRightPanel('query');
 					break;
-				case 'supertag-apply':
-				case 'supertag-query':
-				case 'insert-embed':
-					// These could open dedicated dialogs in the future
-					console.log(`[App] Dialog ${dialog} not yet implemented`);
-					break;
+				case 'supertag-creator':
+				setOpenDialog('supertag-creator');
+				break;
+			case 'supertag-apply':
+				setOpenDialog('supertag-apply');
+				break;
+			case 'supertag-query':
+			case 'insert-embed':
+				// These could open dedicated dialogs in the future
+				console.log(`[App] Dialog ${dialog} not yet implemented`);
+				break;
 				default:
 					console.warn('[App] Unknown dialog:', dialog);
 			}
@@ -880,6 +892,11 @@ function App() {
 					) : isImageFile(currentFile) ? (
 						<ImageViewer filePath={currentFile} />
 					) : (
+						<>
+						{/* Supertag badges for the current note */}
+						<div className="px-4 border-b border-border bg-background/50">
+							<NoteSuperTags noteId={vaultMeta.activeNoteId} />
+						</div>
 						<Editor
 							filePath={currentFile}
 							audioState={audioState}
@@ -902,6 +919,7 @@ function App() {
 								handleFileSelect(`${normalizedVault}/${targetPath}`);
 							}}
 						/>
+						</>
 					)}
 
 					{/* Status Bar */}
@@ -955,11 +973,11 @@ function App() {
 					/>
 				)}
 				{isRightPanelCollapsed ? (
-					/* Collapsed View */
-					<div className="flex flex-col items-center py-4 gap-2 w-full">
+					/* Collapsed View - matches left sidebar styling */
+					<div className="flex flex-col items-center py-4 gap-4 w-full">
 						<button
 							onClick={toggleRightPanel}
-							className="p-2 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+							className="p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
 							title="Expand Panel"
 						>
 							<PanelRightOpen size={20} />
@@ -999,6 +1017,12 @@ function App() {
 									onClick={() => setRightPanel('graph')}
 								>
 									Graph
+								</button>
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'tags' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('tags')}
+								>
+									Tags
 								</button>
 							</div>
 							<button
@@ -1061,6 +1085,17 @@ function App() {
 									onExpand={() => setGraphDialogOpen(true)}
 								/>
 							)}
+							{rightPanel === 'tags' && (
+								<SupertagsPanel
+									noteId={vaultMeta.activeNoteId}
+									onOpenCreator={() => setOpenDialog('supertag-creator')}
+									onOpenApply={() => setOpenDialog('supertag-apply')}
+									onEditTemplate={(id) => {
+									setEditingTemplateId(id);
+									setOpenDialog('supertag-editor');
+								}}
+								/>
+							)}
 						</div>
 					</div>
 				)}
@@ -1094,6 +1129,23 @@ function App() {
 			<SettingsDialog
 				open={openDialog === 'settings'}
 				onOpenChange={(open) => !open && setOpenDialog(null)}
+			/>
+			<SupertagCreatorDialog
+				open={openDialog === 'supertag-creator'}
+				onClose={() => setOpenDialog(null)}
+			/>
+			<SupertagApplyDialog
+				open={openDialog === 'supertag-apply'}
+				onClose={() => setOpenDialog(null)}
+				noteId={vaultMeta.activeNoteId}
+			/>
+			<SupertagEditorDialog
+				open={openDialog === 'supertag-editor'}
+				onClose={() => {
+					setOpenDialog(null);
+					setEditingTemplateId(null);
+				}}
+				definitionId={editingTemplateId}
 			/>
 
 			<WhisperModelSelector

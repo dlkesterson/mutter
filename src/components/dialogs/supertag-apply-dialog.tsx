@@ -80,7 +80,7 @@ export function SupertagApplyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md text-foreground">
         <DialogHeader>
           <DialogTitle>Apply Supertag</DialogTitle>
         </DialogHeader>
@@ -97,7 +97,7 @@ export function SupertagApplyDialog({
               <div>
                 <label className="text-sm font-medium">Select Supertag</label>
                 <select
-                  className="w-full mt-1 px-3 py-2 border border-border rounded bg-background"
+                  className="w-full mt-1 px-3 py-2 border border-border rounded bg-background text-foreground"
                   value={selectedId ?? ''}
                   onChange={(e) => setSelectedId(e.target.value)}
                 >
