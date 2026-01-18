@@ -34,10 +34,10 @@ interface SidebarProps {
 const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 	{ id: 'files', icon: <Folder size={20} />, label: 'Files' },
 	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
-	{ id: 'open-vault', icon: <FolderOpen size={20} />, label: 'Open Vault' },
 ];
 
 const FOOTER_ITEMS: ActivityBarItem[] = [
+	{ id: 'open-vault', icon: <FolderOpen size={20} />, label: 'Open Vault' },
 	{ id: 'quick-switcher', icon: <Command size={20} />, label: 'Quick Switcher' },
 	{ id: 'settings', icon: <Settings size={20} />, label: 'Settings' },
 ];

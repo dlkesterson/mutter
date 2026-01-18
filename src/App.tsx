@@ -25,8 +25,7 @@ import { TabBar, Tab } from './components/TabBar';
 import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 import { BacklinksPanel } from './components/BacklinksPanel';
-import { AIQueryPanel } from './components/AIQueryPanel';
-import { QueryPanel } from './components/QueryPanel';
+import { SearchPanel } from './components/SearchPanel';
 import { OutlinePanel } from './components/OutlinePanel';
 import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
@@ -172,13 +171,12 @@ function App() {
 
 			switch (dialog) {
 				case 'ai-query':
-					setRightPanel('ai-query');
+				case 'query':
+				case 'search':
+					setRightPanel('search');
 					break;
 				case 'backlinks':
 					setRightPanel('backlinks');
-					break;
-				case 'query':
-					setRightPanel('query');
 					break;
 				case 'supertag-creator':
 				setOpenDialog('supertag-creator');
@@ -938,17 +936,8 @@ function App() {
 						}}
 					/>
 				)}
-				{rightPanel === 'query' && (
-					<QueryPanel
-						onNavigate={(relPath) => {
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-							handleFileSelect(`${normalizedVault}/${relPath}`);
-						}}
-					/>
-				)}
-				{rightPanel === 'ai-query' && (
-					<AIQueryPanel
+				{rightPanel === 'search' && (
+					<SearchPanel
 						vaultPath={vaultPath}
 						llmSettings={llmSettings}
 						onNavigate={(relPath) => {

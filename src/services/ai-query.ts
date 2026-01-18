@@ -288,7 +288,6 @@ export async function searchVault(params: {
 
   // Extract keywords for keyword matching
   const keywords = extractKeywords(query);
-  console.log(`[AI Query] Keywords extracted: ${keywords.join(', ')}`);
 
   // Score all cached notes with hybrid approach
   const scored: Array<{
@@ -341,14 +340,6 @@ export async function searchVault(params: {
   // Take top K
   const topResults = filtered.slice(0, topK);
 
-  // Log scoring for debugging
-  if (topResults.length > 0) {
-    console.log(`[AI Query] Top results:`);
-    topResults.forEach((r, i) => {
-      const relPath = manifest.id_to_path[r.noteId];
-      console.log(`  ${i + 1}. ${relPath}: semantic=${r.semanticScore.toFixed(3)}, keyword=${r.keywordScore.toFixed(3)}, combined=${r.combinedScore.toFixed(3)}`);
-    });
-  }
 
   // Map back to notes using manifest
   return topResults

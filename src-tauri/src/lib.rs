@@ -24,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
@@ -57,13 +58,24 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(file_watcher::FileWatcherState::new())))
         .manage(sync_server::SyncServerState::default())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Configure logging for both debug and release builds
+            // Logs to stdout (dev) and ~/.local/share/mutter/logs/mutter.log (user debugging)
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .level_for("webkit2gtk", log::LevelFilter::Warn)
+                    .level_for("tao", log::LevelFilter::Warn)
+                    .level_for("wry", log::LevelFilter::Warn)
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                            file_name: Some("mutter.log".into()),
+                        }),
+                    ])
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                    .max_file_size(5_000_000) // 5MB per file
+                    .build(),
+            )?;
 
             // Configure WebView for media access on Linux
             #[cfg(target_os = "linux")]

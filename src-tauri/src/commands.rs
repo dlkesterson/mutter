@@ -838,7 +838,7 @@ pub struct PerformanceTimings {
 /// Get embedding vector for text
 #[tauri::command]
 pub async fn get_embedding(text: String, state: State<'_, AppState>) -> Result<Vec<f32>, String> {
-    log::info!("Getting embedding for: {}", text);
+    log::debug!("Getting embedding for: {}", text);
 
     let engine = state.embedding_engine.lock().unwrap();
 
@@ -917,7 +917,6 @@ pub async fn initialize_embeddings(state: State<'_, AppState>) -> Result<(), Str
             }
 
             command.embedding = centroid;
-            log::info!("Generated embedding for command: {}", command.id);
         }
     }
 

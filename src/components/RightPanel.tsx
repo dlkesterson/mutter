@@ -10,19 +10,17 @@ import {
 	List,
 	Link,
 	Search,
-	Sparkles,
 	GitBranch,
 	Tag,
 } from 'lucide-react';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
-export type RightPanelTab = 'outline' | 'backlinks' | 'query' | 'ai-query' | 'graph' | 'tags';
+export type RightPanelTab = 'outline' | 'backlinks' | 'search' | 'graph' | 'tags';
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
 	outline: 'Outline',
 	backlinks: 'Backlinks',
-	query: 'Query',
-	'ai-query': 'AI Query',
+	search: 'Search',
 	graph: 'Graph',
 	tags: 'Tags',
 };
@@ -30,8 +28,7 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
 const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 	{ id: 'outline', icon: <List size={20} />, label: 'Outline' },
 	{ id: 'backlinks', icon: <Link size={20} />, label: 'Backlinks' },
-	{ id: 'query', icon: <Search size={20} />, label: 'Query' },
-	{ id: 'ai-query', icon: <Sparkles size={20} />, label: 'AI Query' },
+	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
 	{ id: 'graph', icon: <GitBranch size={20} />, label: 'Graph' },
 	{ id: 'tags', icon: <Tag size={20} />, label: 'Tags' },
 ];
@@ -55,7 +52,7 @@ export function RightPanel({
 	activeTab,
 	onTabChange,
 	children,
-	availableTabs = ['outline', 'backlinks', 'query', 'ai-query', 'graph', 'tags'],
+	availableTabs = ['outline', 'backlinks', 'search', 'graph', 'tags'],
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
