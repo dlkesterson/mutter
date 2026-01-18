@@ -7,18 +7,31 @@ interface WindowControlsProps {
 }
 
 export function WindowControls({ className }: WindowControlsProps) {
-  const appWindow = getCurrentWindow();
-
-  const handleMinimize = () => {
-    appWindow.minimize();
+  const handleMinimize = async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      await appWindow.minimize();
+    } catch (err) {
+      console.error('Failed to minimize:', err);
+    }
   };
 
-  const handleMaximize = () => {
-    appWindow.toggleMaximize();
+  const handleMaximize = async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      await appWindow.toggleMaximize();
+    } catch (err) {
+      console.error('Failed to toggle maximize:', err);
+    }
   };
 
-  const handleClose = () => {
-    appWindow.close();
+  const handleClose = async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      await appWindow.close();
+    } catch (err) {
+      console.error('Failed to close:', err);
+    }
   };
 
   return (
