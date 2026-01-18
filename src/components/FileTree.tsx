@@ -179,13 +179,13 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = ({
 				onDragLeave={handleDragLeave}
 				onDrop={handleDrop}
 				className={cn(
-					'flex items-center py-1 px-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm select-none transition-colors rounded-sm',
+					'flex items-center py-1 px-1.5 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm select-none transition-colors rounded-sm',
 					isActive && 'bg-accent text-accent-foreground font-medium',
 					isDragOver && 'bg-primary/20 border-2 border-primary border-dashed',
 					isDragging && 'opacity-50',
 					isHighlighted && 'ring-2 ring-primary bg-primary/10 animate-pulse'
 				)}
-				style={{ paddingLeft: `${depth * 12 + 8}px` }}
+				style={{ paddingLeft: `${depth * 10 + 4}px` }}
 				onClick={handleToggle}
 				onDoubleClick={handleDoubleClick}
 				onContextMenu={handleContextMenu}

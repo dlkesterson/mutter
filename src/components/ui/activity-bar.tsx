@@ -105,17 +105,17 @@ function ActivityBarButton({
       <button
         onClick={onClick}
         className={cn(
-          'relative w-10 h-10 flex items-center justify-center rounded-md transition-colors',
+          'relative w-10 h-10 flex items-center justify-center transition-colors',
           isActive
-            ? 'text-foreground bg-accent'
-            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+            ? 'text-foreground'
+            : 'text-muted-foreground hover:text-foreground'
         )}
       >
-        {/* Active indicator bar */}
+        {/* Active indicator bar - Obsidian style */}
         {isActive && (
           <div
             className={cn(
-              'absolute top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-full',
+              'absolute top-1 bottom-1 w-[3px] bg-primary rounded-full',
               activeSide === 'left' ? 'left-0' : 'right-0'
             )}
           />

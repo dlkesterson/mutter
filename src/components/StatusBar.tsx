@@ -8,6 +8,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { FileText, Type, Clock, Mic, MicOff, Cloud, CloudOff, AlertCircle } from 'lucide-react';
+import { SyncStatusIndicator } from './sync/SyncStatusIndicator';
 
 interface StatusBarProps {
     content: string;
@@ -145,7 +146,10 @@ export function StatusBar({
                     )}
                 </div>
 
-                {/* Sync status */}
+                {/* CRDT Sync status */}
+                <SyncStatusIndicator showLabel />
+
+                {/* File sync status */}
                 <div
                     className="flex items-center gap-1.5"
                     title={getSyncLabel()}

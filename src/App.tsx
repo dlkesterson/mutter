@@ -29,7 +29,6 @@ import { SearchPanel } from './components/SearchPanel';
 import { OutlinePanel } from './components/OutlinePanel';
 import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
-import { SyncStatusIndicator } from './components/sync/SyncStatusIndicator';
 import type { LLMSettings } from './services/llm-service';
 import { useSettings, useCredentials } from '@/lib/settings';
 import { SupertagCreatorDialog } from './components/dialogs/supertag-creator-dialog';
@@ -902,11 +901,6 @@ function App() {
 							rightOffset={44}
 						/>
 					)}
-
-					{/* Sync Status Indicator - fixed bottom-left */}
-					<div className="fixed bottom-8 left-8 z-40">
-						<SyncStatusIndicator showLabel />
-					</div>
 
 					</main>
 			</div>

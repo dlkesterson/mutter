@@ -324,47 +324,42 @@ export function Sidebar({
 						onMouseDown={startResizing}
 					/>
 
-					{/* Panel Header */}
-					<div className="border-b border-border/20 shrink-0">
-						{/* Title row */}
-						<div className="h-10 flex items-center justify-between px-3 gap-2">
-							<span className="font-medium text-sm truncate min-w-0 flex-1">
-								{activeTab === 'files' ? (
-									vaultPath ? (
-										vaultPath.split('/').pop()
-									) : (
-										<span className="text-muted-foreground">No Vault</span>
-									)
-								) : (
-									'Search'
-								)}
-							</span>
+					{/* Panel Header - Action buttons only (Obsidian style) */}
+					{activeTab === 'files' && (
+						<div className="border-b border-border/20 shrink-0">
+							<div className="h-9 flex items-center justify-center gap-2 px-2">
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 text-muted-foreground hover:text-foreground"
+									onClick={handleCreateNote}
+									title="New Note (Ctrl+N)"
+									disabled={!vaultPath}
+								>
+									<Plus size={15} />
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 text-muted-foreground hover:text-foreground"
+									onClick={handleOpenDailyNote}
+									title="Today's Note"
+									disabled={!vaultPath}
+								>
+									<Calendar size={15} />
+								</Button>
+							</div>
 						</div>
+					)}
 
-						{/* Action buttons row */}
-						<div className="h-9 flex items-center px-2 gap-1 border-t border-border/10">
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-7 w-7"
-								onClick={handleCreateNote}
-								title="New Note (Ctrl+N)"
-								disabled={!vaultPath}
-							>
-								<Plus size={15} />
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-7 w-7"
-								onClick={handleOpenDailyNote}
-								title="Today's Note"
-								disabled={!vaultPath}
-							>
-								<Calendar size={15} />
-							</Button>
+					{/* Search tab header */}
+					{activeTab === 'search' && (
+						<div className="border-b border-border/20 shrink-0">
+							<div className="h-9 flex items-center px-3">
+								<span className="font-medium text-sm text-muted-foreground">Search</span>
+							</div>
 						</div>
-					</div>
+					)}
 
 					{/* Search input (for search tab or file filter) */}
 					{activeTab === 'search' && (
@@ -433,11 +428,20 @@ export function Sidebar({
 								onOpenInNewTab={onOpenInNewTab}
 								onRename={handleRename}
 								onFileTreeUpdate={() => loadFileTree(vaultPath)}
-								className="h-full p-2"
+								className="h-full px-1 py-1"
 								activePath={activePath}
 							/>
 						)}
 					</div>
+
+					{/* Panel Footer - Vault name (Obsidian style) */}
+					{activeTab === 'files' && vaultPath && (
+						<div className="border-t border-border/20 shrink-0 px-3 py-2">
+							<span className="text-xs text-muted-foreground truncate block">
+								{vaultPath.split('/').pop()}
+							</span>
+						</div>
+					)}
 				</div>
 			)}
 		</div>
