@@ -5,16 +5,10 @@
  */
 
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { BaseDialog, DialogActions, SelectField } from '@/components/ui/base-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { useSupertagDefinitions } from '@/hooks/useSupertagDefinitions';
 import type { SupertagFieldType } from '@/types/supertag';
 
@@ -108,100 +102,91 @@ export function SupertagCreatorDialog({ open, onClose }: SupertagCreatorDialogPr
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md text-foreground">
-        <DialogHeader>
-          <DialogTitle>Create Supertag Template</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="col-span-3">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="project, meeting, person..."
-              />
-            </div>
-            <div>
-              <Label htmlFor="icon">Icon</Label>
-              <Input
-                id="icon"
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                placeholder="📁"
-                className="text-center"
-              />
-            </div>
+    <BaseDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Create Supertag Template"
+      size="md"
+      footer={
+        <DialogActions
+          onCancel={onClose}
+          onConfirm={handleSave}
+          confirmLabel="Create Supertag"
+          confirmDisabled={!name.trim()}
+        />
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-4 gap-4">
+          <div className="col-span-3">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="project, meeting, person..."
+            />
           </div>
-
           <div>
-            <Label>Fields</Label>
-            <div className="space-y-3 mt-2">
-              {fields.map((field) => (
-                <div key={field.id} className="space-y-2 p-3 border border-border rounded-md">
-                  <div className="flex gap-2 items-start">
-                    <Input
-                      value={field.name}
-                      onChange={(e) => updateField(field.id, { name: e.target.value })}
-                      placeholder="Field name"
-                      className="flex-1"
-                    />
-                    <select
-                      value={field.type}
-                      onChange={(e) =>
-                        updateField(field.id, { type: e.target.value as SupertagFieldType })
-                      }
-                      className="px-2 py-2 border border-border rounded text-sm bg-background text-foreground"
-                    >
-                      {FIELD_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeField(field.id)}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                  
-                  {(field.type === 'select' || field.type === 'multi-select') && (
-                    <div>
-                      <Label className="text-xs">Options (comma-separated)</Label>
-                      <Input
-                        value={optionsInput[field.id] || ''}
-                        onChange={(e) =>
-                          setOptionsInput({ ...optionsInput, [field.id]: e.target.value })
-                        }
-                        placeholder="option1, option2, option3"
-                        className="mt-1"
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" onClick={addField} className="mt-2">
-              + Add Field
-            </Button>
+            <Label htmlFor="icon">Icon</Label>
+            <Input
+              id="icon"
+              value={icon}
+              onChange={(e) => setIcon(e.target.value)}
+              placeholder="📁"
+              className="text-center"
+            />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
+        <div>
+          <Label>Fields</Label>
+          <div className="space-y-3 mt-2">
+            {fields.map((field) => (
+              <div key={field.id} className="space-y-2 p-3 border border-border rounded-md">
+                <div className="flex gap-2 items-start">
+                  <Input
+                    value={field.name}
+                    onChange={(e) => updateField(field.id, { name: e.target.value })}
+                    placeholder="Field name"
+                    className="flex-1"
+                  />
+                  <SelectField
+                    value={field.type}
+                    onChange={(v) => updateField(field.id, { type: v as SupertagFieldType })}
+                    options={FIELD_TYPES}
+                    className="w-auto"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeField(field.id)}
+                  >
+                    ×
+                  </Button>
+                </div>
+
+                {(field.type === 'select' || field.type === 'multi-select') && (
+                  <div>
+                    <Label className="text-xs">Options (comma-separated)</Label>
+                    <Input
+                      value={optionsInput[field.id] || ''}
+                      onChange={(e) =>
+                        setOptionsInput({ ...optionsInput, [field.id]: e.target.value })
+                      }
+                      placeholder="option1, option2, option3"
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" onClick={addField} className="mt-2">
+            + Add Field
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim()}>
-            Create Supertag
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </BaseDialog>
   );
 }

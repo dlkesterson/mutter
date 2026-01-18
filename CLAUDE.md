@@ -13,7 +13,7 @@ Mutter is a voice-first markdown editor with semantic command recognition, built
 ## Development Commands
 
 ### Package Manager
-This project uses **pnpm** (specified in `package.json`).
+This project uses **pnpm** (v10.18.3, specified via `packageManager` field in `package.json`).
 
 ```bash
 # Install dependencies
@@ -54,7 +54,7 @@ pnpm test:coverage
 pnpm test:ui
 ```
 
-Tests are organized in `src/__tests__/` with `unit/` and `integration/` subdirectories.
+Tests are organized in `src/__tests__/` with `unit/`, `integration/`, and `performance/` subdirectories.
 
 ### Linting & Type Checking
 
@@ -127,7 +127,7 @@ pnpm lint
 The core architecture for voice-to-command:
 
 1. **Audio Capture** (`audio.rs`): Web Audio API → ring buffer → VAD detects ~800ms silence
-2. **Transcription** (`ml.rs`): Whisper model runs locally via Candle (no cloud API)
+2. **Transcription** (`ml.rs`): Whisper model runs locally via whisper-rs (no cloud API)
 3. **Command Matching** (`registry.rs`): BERT embeddings compare to command registry
 4. **Execution**: High confidence → execute; ambiguous → disambiguation UI
 
@@ -217,7 +217,7 @@ Both sidebars use `isCollapsed` state with smooth CSS transitions.
 
 ### Design System
 
-See `DESIGN_SYSTEM.md` for full details. Key rules:
+See `docs/DESIGN_SYSTEM.md` for full details. Key rules:
 - **8px spacing grid** - all spacing must be multiples of 8
 - **Color = meaning** - color only for state changes, errors, recording (Pacific Blue #00A0B4)
 - **IBM Plex Sans/Mono** - no other fonts
@@ -341,7 +341,6 @@ pnpm tauri:build
 - Workflow created: `.forgejo/workflows/release.yml`
 - Builds: Linux (AppImage, deb), Windows (MSI), macOS (DMG)
 - **Blocker:** Forgejo runners not yet configured
-- See Forever Tools Roadmap Phase 1.2 for runner setup
 
 ### Testing Voice Commands
 
@@ -392,8 +391,9 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ## Related Documentation
 
 - `README.md` - User-facing documentation with quick start guide
-- `CONFIG_DESIGN.md` - Configuration architecture and XDG standards
-- `DESIGN_SYSTEM.md` - Design principles, typography, spacing, colors
+- `docs/USER-GUIDE.md` - Comprehensive user guide (voice commands, query DSL, shortcuts)
+- `docs/CONFIG_DESIGN.md` - Configuration architecture and XDG standards
+- `docs/DESIGN_SYSTEM.md` - Design principles, typography, spacing, colors
 - `docs/CRDT-CONVENTIONS.md` - Automerge conventions and sync strategy
 - `.forgejo/workflows/release.yml` - CI/CD workflow (pending runners)
 
@@ -422,6 +422,4 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 **Voice commands**: Open Voice Log dialog (right sidebar) to see transcription text, matched command, and confidence scores (0.0-1.0).
 
 **CRDT state**: Check `<vault-path>/.mutter/state.json` and `.mutter/crdt/*/snapshots/`
-
-Use 'bd' for task tracking.
 

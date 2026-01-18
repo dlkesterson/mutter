@@ -1,12 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from '@/components/ui/dialog';
+import { BaseDialog } from '@/components/ui/base-dialog';
 import { Search, FolderOpen } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -111,95 +106,100 @@ export function FileNavigatorDialog({
 		onOpenChange(false);
 	};
 
+	// Footer with vault path and change button
+	const footer = vaultPath ? (
+		<div className='w-full flex justify-between items-center text-xs text-muted-foreground'>
+			<span className='truncate max-w-[300px]'>
+				{vaultPath}
+			</span>
+			<Button
+				variant='ghost'
+				size='sm'
+				onClick={handleSelectVault}
+				className='h-6 text-xs'
+			>
+				Change Vault
+			</Button>
+		</div>
+	) : undefined;
+
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className='max-w-2xl h-[80vh] flex flex-col bg-background text-foreground'>
-				<DialogHeader>
-					<DialogTitle>Open File</DialogTitle>
-				</DialogHeader>
-
-				{!vaultPath ? (
-					<div className='flex flex-col items-center justify-center h-full space-y-4'>
-						<p className='text-muted-foreground'>
-							No vault selected
-						</p>
-						<Button onClick={handleSelectVault}>
-							<FolderOpen className='mr-2 h-4 w-4' />
-							Open Vault Folder
-						</Button>
+		<BaseDialog
+			open={open}
+			onOpenChange={onOpenChange}
+			title="Open File"
+			size="lg"
+			height="80vh"
+			flexContent
+			footer={footer}
+		>
+			{!vaultPath ? (
+				<div className='flex flex-col items-center justify-center h-full space-y-4'>
+					<p className='text-muted-foreground'>
+						No vault selected
+					</p>
+					<Button onClick={handleSelectVault}>
+						<FolderOpen className='mr-2 h-4 w-4' />
+						Open Vault Folder
+					</Button>
+				</div>
+			) : (
+				<div className='flex flex-col h-full space-y-4 overflow-hidden'>
+					<div className='relative shrink-0'>
+						<Search className='absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground' />
+						<input
+							type='text'
+							placeholder='Search files...'
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							className='w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:outline-none focus:border-primary'
+							autoFocus
+						/>
 					</div>
-				) : (
-					<div className='flex flex-col h-full space-y-4 overflow-hidden'>
-						<div className='relative shrink-0'>
-							<Search className='absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground' />
-							<input
-								type='text'
-								placeholder='Search files...'
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								className='w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg focus:outline-none focus:border-primary'
-								autoFocus
+
+					<div className='flex-1 overflow-y-auto min-h-0'>
+						{isLoading ? (
+							<div className='flex items-center justify-center h-full text-muted-foreground'>
+								Loading...
+							</div>
+						) : search.length > 2 ? (
+							<div className='space-y-2'>
+								{searchResults.length === 0 ? (
+									<div className='text-center py-8 text-muted-foreground'>
+										No results found
+									</div>
+								) : (
+									searchResults.map((result) => (
+										<button
+											key={result.path}
+											className='w-full text-left p-3 rounded hover:bg-muted transition-colors'
+											onClick={() =>
+												handleFileClick(result.path)
+											}
+										>
+											<div className='font-medium'>
+												{result.title}
+											</div>
+											<div className='text-sm text-muted-foreground truncate'>
+												{result.excerpt}
+											</div>
+											<div className='text-xs text-muted-foreground/50 mt-1 truncate'>
+												{result.path}
+											</div>
+										</button>
+									))
+								)}
+							</div>
+						) : (
+							<FileTree
+								nodes={fileTree}
+								onSelect={handleFileClick}
+								className='h-full'
 							/>
-						</div>
-
-						<div className='flex-1 overflow-y-auto min-h-0'>
-							{isLoading ? (
-								<div className='flex items-center justify-center h-full text-muted-foreground'>
-									Loading...
-								</div>
-							) : search.length > 2 ? (
-								<div className='space-y-2'>
-									{searchResults.length === 0 ? (
-										<div className='text-center py-8 text-muted-foreground'>
-											No results found
-										</div>
-									) : (
-										searchResults.map((result) => (
-											<button
-												key={result.path}
-												className='w-full text-left p-3 rounded hover:bg-muted transition-colors'
-												onClick={() =>
-													handleFileClick(result.path)
-												}
-											>
-												<div className='font-medium'>
-													{result.title}
-												</div>
-												<div className='text-sm text-muted-foreground truncate'>
-													{result.excerpt}
-												</div>
-												<div className='text-xs text-muted-foreground/50 mt-1 truncate'>
-													{result.path}
-												</div>
-											</button>
-										))
-									)}
-								</div>
-							) : (
-								<FileTree
-									nodes={fileTree}
-									onSelect={handleFileClick}
-									className='h-full'
-								/>
-							)}
-						</div>
-
-						<div className='pt-2 border-t text-xs text-muted-foreground flex justify-between items-center shrink-0'>
-							<span className='truncate max-w-[300px]'>
-								{vaultPath}
-							</span>
-							<Button
-								variant='ghost'
-								size='sm'
-								onClick={handleSelectVault}
-								className='h-6 text-xs'
-							>
-								Change Vault
-							</Button>
-						</div>
+						)}
 					</div>
-				)}
-			</DialogContent>
-		</Dialog>
+				</div>
+			)}
+		</BaseDialog>
 	);
 }

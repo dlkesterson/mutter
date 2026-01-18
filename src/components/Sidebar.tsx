@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -6,6 +6,13 @@ import { FileTree } from './FileTree';
 import { FileNode, SearchResult } from '@/types';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
+import {
+	CollapsiblePanel,
+	CollapsedPanelButton,
+	PanelHeader,
+	PanelContent,
+	PanelFooter,
+} from '@/components/ui/collapsible-panel';
 import {
 	Search,
 	FolderOpen,
@@ -40,11 +47,11 @@ export function Sidebar({
 	vaultId: _vaultId,
 	activeNoteId: _activeNoteId,
 }: SidebarProps) {
+	// Panel state
 	const [width, setWidth] = useState(256); // Design System: 256px sidebar width
 	const [isCollapsed, setIsCollapsed] = useState(false);
-	const [isResizing, setIsResizing] = useState(false);
-	const sidebarRef = useRef<HTMLDivElement>(null);
 
+	// Sidebar-specific state
 	const [search, setSearch] = useState('');
 	const [vaultPath, setVaultPath] = useState<string | null>(null);
 	const [fileTree, setFileTree] = useState<FileNode[]>([]);
@@ -193,18 +200,18 @@ export function Sidebar({
 		}
 	};
 
-    const handleOpenDailyNote = async () => {
-        if (!vaultPath) return;
-        try {
-            const path = await invoke<string>('open_daily_note', {
-                vaultPath,
-            });
-            await loadFileTree(vaultPath);
-            onFileSelect(path, true);
-        } catch (error) {
-            console.error('Failed to open daily note:', error);
-        }
-    };
+	const handleOpenDailyNote = async () => {
+		if (!vaultPath) return;
+		try {
+			const path = await invoke<string>('open_daily_note', {
+				vaultPath,
+			});
+			await loadFileTree(vaultPath);
+			onFileSelect(path, true);
+		} catch (error) {
+			console.error('Failed to open daily note:', error);
+		}
+	};
 
 	const handleRename = async (oldPath: string, newName: string) => {
 		if (!vaultPath) return;
@@ -223,218 +230,175 @@ export function Sidebar({
 		}
 	};
 
-	const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
-		mouseDownEvent.preventDefault();
-		setIsResizing(true);
-	}, []);
-
-	const stopResizing = useCallback(() => {
-		setIsResizing(false);
-	}, []);
-
-	const resize = useCallback(
-		(mouseMoveEvent: MouseEvent) => {
-			if (isResizing) {
-				const newWidth = mouseMoveEvent.clientX;
-				if (newWidth > 150 && newWidth < 600) {
-					setWidth(newWidth);
-				}
-			}
-		},
-		[isResizing]
-	);
-
-	useEffect(() => {
-		window.addEventListener('mousemove', resize);
-		window.addEventListener('mouseup', stopResizing);
-		return () => {
-			window.removeEventListener('mousemove', resize);
-			window.removeEventListener('mouseup', stopResizing);
-		};
-	}, [resize, stopResizing]);
-
 	return (
-		<div
-			ref={sidebarRef}
-			className='h-full flex shrink-0 relative group text-foreground transition-all duration-200 ease-out'
-			style={{ width: isCollapsed ? 48 : width }}
+		<CollapsiblePanel
+			side="left"
+			isCollapsed={isCollapsed}
+			onCollapsedChange={setIsCollapsed}
+			width={width}
+			onWidthChange={setWidth}
+			defaultWidth={256}
+			minWidth={150}
+			maxWidth={600}
+			className="bg-muted/10"
+			collapsedContent={
+				<>
+					<CollapsedPanelButton
+						onClick={() => setIsCollapsed(false)}
+						icon={<PanelLeftOpen size={20} />}
+						title="Expand Sidebar"
+					/>
+					<CollapsedPanelButton
+						onClick={onSettingsClick}
+						icon={<Settings size={20} />}
+						title="Settings"
+					/>
+				</>
+			}
 		>
-			<div className='flex-1 flex flex-col h-full border-r border-border/20 bg-muted/10 overflow-hidden'>
-				{isCollapsed ? (
-					/* Collapsed View */
-					<div className='flex flex-col items-center py-4 gap-4 animate-in fade-in duration-200'>
-						<Button
-							variant='ghost'
-							size='icon'
-							onClick={() => setIsCollapsed(false)}
-							title='Expand Sidebar'
-						>
-							<PanelLeftOpen size={20} />
-						</Button>
-						<Button
-							variant='ghost'
-							size='icon'
-							onClick={onSettingsClick}
-							title='Settings'
-						>
-							<Settings size={20} />
-						</Button>
-					</div>
-				) : (
-					/* Expanded View */
-					<>
-						{/* Header */}
-						<div className='h-12 flex items-center justify-between px-4 border-b border-border/20 shrink-0 animate-in fade-in duration-200'>
-							<span className='font-medium text-sm truncate'>
-								{vaultPath ? (
-									vaultPath.split('/').pop()
-								) : (
-									<span className='text-muted-foreground'>
-										No Vault
-									</span>
-								)}
-							</span>
-							<div className='flex items-center gap-1'>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='h-8 w-8'
-									onClick={onQuickSwitcherOpen}
-									title='Quick Switcher (Ctrl+O)'
-									disabled={!vaultPath}
-								>
-									<Command size={16} />
-								</Button>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='h-8 w-8'
-									onClick={handleOpenDailyNote}
-									title='Open Today`s Note'
-									disabled={!vaultPath}
-								>
-									<Calendar size={16} />
-								</Button>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='h-8 w-8'
-									onClick={handleCreateNote}
-									title='New Note'
-									disabled={!vaultPath}
-								>
-									<Plus size={16} />
-								</Button>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='h-8 w-8'
-									onClick={handleSelectVault}
-									title='Open Vault'
-								>
-									<FolderOpen size={16} />
-								</Button>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='h-8 w-8'
-									onClick={() => setIsCollapsed(true)}
-									title='Collapse Sidebar'
-								>
-									<PanelLeftClose size={16} />
-								</Button>
-							</div>
-						</div>
-
-						{/* Search */}
-						<div className='p-3 border-b border-border/20 shrink-0 animate-in fade-in duration-200'>
-							<div className='relative'>
-								<Search className='absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground' />
-								<input
-									type='text'
-									placeholder='Search files...'
-									value={search}
-									onChange={(e) => setSearch(e.target.value)}
-									className='w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono'
-								/>
-							</div>
-						</div>
-
-						{/* Content */}
-						<div className='flex-1 overflow-y-auto min-h-0 animate-in fade-in duration-200'>
-					{!vaultPath ? (
-						<div className='flex flex-col items-center justify-center h-full p-4 text-center space-y-4'>
-							<p className='text-sm text-muted-foreground'>
-								Select a folder to view files
-							</p>
-							<Button onClick={handleSelectVault} size='sm'>
-								Open Vault
-							</Button>
-						</div>
-					) : isLoading ? (
-						<div className='flex items-center justify-center h-full text-muted-foreground text-sm'>
-							Loading...
-						</div>
-					) : search.length > 2 ? (
-						<div className='space-y-1 p-2'>
-							{searchResults.length === 0 ? (
-								<div className='text-center py-8 text-sm text-muted-foreground'>
-									No results found
-								</div>
-							) : (
-								searchResults.map((result, index) => (
-									<button
-										key={result.path}
-										className='w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200'
-										style={{ animationDelay: `${index * 30}ms` }}
-										onClick={() =>
-											onFileSelect(result.path, false)
-										}
-									>
-										<div className='font-medium text-sm truncate'>
-											{result.title}
-										</div>
-										<div className='text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70'>
-											{result.excerpt}
-										</div>
-									</button>
-								))
-							)}
-						</div>
+			{/* Header */}
+			<PanelHeader>
+				<span className='font-medium text-sm truncate'>
+					{vaultPath ? (
+						vaultPath.split('/').pop()
 					) : (
-						<FileTree
-							nodes={fileTree}
-							onSelect={onFileSelect}
-							onOpenInNewTab={onOpenInNewTab}
-							onRename={handleRename}
-							onFileTreeUpdate={() => loadFileTree(vaultPath)}
-							className='h-full p-2'
-							activePath={activePath}
-						/>
-							)}
-						</div>
+						<span className='text-muted-foreground'>
+							No Vault
+						</span>
+					)}
+				</span>
+				<div className='flex items-center gap-1'>
+					<Button
+						variant='ghost'
+						size='icon'
+						className='h-8 w-8'
+						onClick={onQuickSwitcherOpen}
+						title='Quick Switcher (Ctrl+O)'
+						disabled={!vaultPath}
+					>
+						<Command size={16} />
+					</Button>
+					<Button
+						variant='ghost'
+						size='icon'
+						className='h-8 w-8'
+						onClick={handleOpenDailyNote}
+						title='Open Today`s Note'
+						disabled={!vaultPath}
+					>
+						<Calendar size={16} />
+					</Button>
+					<Button
+						variant='ghost'
+						size='icon'
+						className='h-8 w-8'
+						onClick={handleCreateNote}
+						title='New Note'
+						disabled={!vaultPath}
+					>
+						<Plus size={16} />
+					</Button>
+					<Button
+						variant='ghost'
+						size='icon'
+						className='h-8 w-8'
+						onClick={handleSelectVault}
+						title='Open Vault'
+					>
+						<FolderOpen size={16} />
+					</Button>
+					<Button
+						variant='ghost'
+						size='icon'
+						className='h-8 w-8'
+						onClick={() => setIsCollapsed(true)}
+						title='Collapse Sidebar'
+					>
+						<PanelLeftClose size={16} />
+					</Button>
+				</div>
+			</PanelHeader>
 
-						{/* Footer */}
-						<div className='p-2 border-t border-border/20 shrink-0 flex justify-between items-center animate-in fade-in duration-200'>
-							<Button
-								variant='ghost'
-								size='sm'
-								className='w-full justify-start gap-2 text-muted-foreground hover:text-foreground'
-								onClick={onSettingsClick}
-							>
-								<Settings size={16} />
-								<span className='text-xs'>Settings</span>
-							</Button>
-						</div>
-					</>
-				)}
+			{/* Search */}
+			<div className='p-3 border-b border-border/20 shrink-0'>
+				<div className='relative'>
+					<Search className='absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground' />
+					<input
+						type='text'
+						placeholder='Search files...'
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						className='w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono'
+					/>
+				</div>
 			</div>
 
-			{/* Resizer Handle - International Orange on hover */}
-			<div
-				className='absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100'
-				onMouseDown={startResizing}
-			/>
-		</div>
+			{/* Content */}
+			<PanelContent>
+				{!vaultPath ? (
+					<div className='flex flex-col items-center justify-center h-full p-4 text-center space-y-4'>
+						<p className='text-sm text-muted-foreground'>
+							Select a folder to view files
+						</p>
+						<Button onClick={handleSelectVault} size='sm'>
+							Open Vault
+						</Button>
+					</div>
+				) : isLoading ? (
+					<div className='flex items-center justify-center h-full text-muted-foreground text-sm'>
+						Loading...
+					</div>
+				) : search.length > 2 ? (
+					<div className='space-y-1 p-2'>
+						{searchResults.length === 0 ? (
+							<div className='text-center py-8 text-sm text-muted-foreground'>
+								No results found
+							</div>
+						) : (
+							searchResults.map((result, index) => (
+								<button
+									key={result.path}
+									className='w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200'
+									style={{ animationDelay: `${index * 30}ms` }}
+									onClick={() =>
+										onFileSelect(result.path, false)
+									}
+								>
+									<div className='font-medium text-sm truncate'>
+										{result.title}
+									</div>
+									<div className='text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70'>
+										{result.excerpt}
+									</div>
+								</button>
+							))
+						)}
+					</div>
+				) : (
+					<FileTree
+						nodes={fileTree}
+						onSelect={onFileSelect}
+						onOpenInNewTab={onOpenInNewTab}
+						onRename={handleRename}
+						onFileTreeUpdate={() => loadFileTree(vaultPath)}
+						className='h-full p-2'
+						activePath={activePath}
+					/>
+				)}
+			</PanelContent>
+
+			{/* Footer */}
+			<PanelFooter>
+				<Button
+					variant='ghost'
+					size='sm'
+					className='w-full justify-start gap-2 text-muted-foreground hover:text-foreground'
+					onClick={onSettingsClick}
+				>
+					<Settings size={16} />
+					<span className='text-xs'>Settings</span>
+				</Button>
+			</PanelFooter>
+		</CollapsiblePanel>
 	);
 }

@@ -5,14 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { BaseDialog, DialogActions, SelectField } from '@/components/ui/base-dialog';
 import { useSupertagDefinitions } from '@/hooks/useSupertagDefinitions';
 import { useNoteSuperTags } from '@/hooks/useNoteSuperTags';
 import { SupertagFieldEditor } from '@/components/supertags/SupertagFieldEditor';
@@ -79,71 +72,64 @@ export function SupertagApplyDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md text-foreground">
-        <DialogHeader>
-          <DialogTitle>Apply Supertag</DialogTitle>
-        </DialogHeader>
+    <BaseDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Apply Supertag"
+      size="md"
+      footer={
+        <DialogActions
+          onCancel={onClose}
+          onConfirm={handleApply}
+          confirmLabel="Apply"
+          confirmDisabled={!selectedId || availableDefinitions.length === 0}
+        />
+      }
+    >
+      <div className="space-y-4">
+        {availableDefinitions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {definitions.length === 0
+              ? 'No supertag templates exist. Create one first.'
+              : 'All supertags have been applied to this note.'}
+          </p>
+        ) : (
+          <>
+            <div>
+              <label className="text-sm font-medium">Select Supertag</label>
+              <SelectField
+                value={selectedId ?? ''}
+                onChange={(v) => setSelectedId(v)}
+                options={availableDefinitions.map((def) => ({
+                  value: def.id,
+                  label: def.icon ? `${def.icon} ${def.name}` : def.name,
+                }))}
+                className="mt-1"
+              />
+            </div>
 
-        <div className="space-y-4 py-4">
-          {availableDefinitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {definitions.length === 0
-                ? 'No supertag templates exist. Create one first.'
-                : 'All supertags have been applied to this note.'}
-            </p>
-          ) : (
-            <>
-              <div>
-                <label className="text-sm font-medium">Select Supertag</label>
-                <select
-                  className="w-full mt-1 px-3 py-2 border border-border rounded bg-background text-foreground"
-                  value={selectedId ?? ''}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                >
-                  {availableDefinitions.map((def) => (
-                    <option key={def.id} value={def.id}>
-                      {def.icon ? `${def.icon} ` : ''}{def.name}
-                    </option>
-                  ))}
-                </select>
+            {selectedDefinition && selectedDefinition.fields.length > 0 && (
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Field Values</label>
+                {selectedDefinition.fields.map((field) => (
+                  <div key={field.name}>
+                    <label className="text-xs text-muted-foreground block mb-1">
+                      {field.name}
+                    </label>
+                    <SupertagFieldEditor
+                      field={field}
+                      value={values[field.name]}
+                      onChange={(v) =>
+                        setValues({ ...values, [field.name]: v })
+                      }
+                    />
+                  </div>
+                ))}
               </div>
-
-              {selectedDefinition && selectedDefinition.fields.length > 0 && (
-                <div className="space-y-3">
-                  <label className="text-sm font-medium">Field Values</label>
-                  {selectedDefinition.fields.map((field) => (
-                    <div key={field.name}>
-                      <label className="text-xs text-muted-foreground block mb-1">
-                        {field.name}
-                      </label>
-                      <SupertagFieldEditor
-                        field={field}
-                        value={values[field.name]}
-                        onChange={(v) =>
-                          setValues({ ...values, [field.name]: v })
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleApply}
-            disabled={!selectedId || availableDefinitions.length === 0}
-          >
-            Apply
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            )}
+          </>
+        )}
+      </div>
+    </BaseDialog>
   );
 }

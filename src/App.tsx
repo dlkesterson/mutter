@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
-import { PanelRightOpen, PanelRightClose, FileText } from 'lucide-react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
+import { FileText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { useNavigationHistory } from './hooks/useNavigationHistory';
@@ -38,6 +38,7 @@ import { SupertagApplyDialog } from './components/dialogs/supertag-apply-dialog'
 import { SupertagEditorDialog } from './components/dialogs/supertag-editor-dialog';
 import { NoteSuperTags } from './components/supertags/NoteSuperTags';
 import { SupertagsPanel } from './components/supertags/SupertagsPanel';
+import { RightPanel, type RightPanelTab } from './components/RightPanel';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | 'supertag-creator' | 'supertag-apply' | 'supertag-editor' | null;
 
@@ -63,59 +64,13 @@ function App() {
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Right panel state
-	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | 'tags' | null>(null);
+	const [rightPanel, setRightPanel] = useState<RightPanelTab | null>(null);
 	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(true);
 	const [rightPanelWidth, setRightPanelWidth] = useState(320);
-	const [isRightPanelResizing, setIsRightPanelResizing] = useState(false);
-	// Track last used panel for toggle button
-	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | 'tags'>('outline');
 	// Graph dialog state
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
 	// Supertag editor state
 	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-
-	// Update last panel ref when panel changes
-	useEffect(() => {
-		if (rightPanel) {
-			lastRightPanelRef.current = rightPanel;
-		}
-	}, [rightPanel]);
-
-	// Toggle right panel collapsed state
-	const toggleRightPanel = useCallback(() => {
-		setIsRightPanelCollapsed(prev => !prev);
-		// When expanding, set a panel if none selected
-		if (isRightPanelCollapsed && !rightPanel) {
-			setRightPanel(lastRightPanelRef.current);
-		}
-	}, [isRightPanelCollapsed, rightPanel]);
-
-	// Right panel resize handlers
-	const stopRightPanelResizing = useCallback(() => {
-		setIsRightPanelResizing(false);
-	}, []);
-
-	const resizeRightPanel = useCallback(
-		(mouseMoveEvent: MouseEvent) => {
-			if (isRightPanelResizing) {
-				// Calculate width from right edge of window
-				const newWidth = window.innerWidth - mouseMoveEvent.clientX;
-				if (newWidth > 200 && newWidth < 600) {
-					setRightPanelWidth(newWidth);
-				}
-			}
-		},
-		[isRightPanelResizing]
-	);
-
-	useEffect(() => {
-		window.addEventListener('mousemove', resizeRightPanel);
-		window.addEventListener('mouseup', stopRightPanelResizing);
-		return () => {
-			window.removeEventListener('mousemove', resizeRightPanel);
-			window.removeEventListener('mouseup', stopRightPanelResizing);
-		};
-	}, [resizeRightPanel, stopRightPanelResizing]);
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
@@ -960,146 +915,77 @@ function App() {
 					</main>
 			</div>
 
-			{/* Right Panel - collapsible and resizable like left sidebar */}
-			<div
-				className="h-full flex shrink-0 relative group transition-all duration-200 ease-out border-l border-border bg-background"
-				style={{ width: isRightPanelCollapsed ? 48 : rightPanelWidth }}
+			{/* Right Panel */}
+			<RightPanel
+				activeTab={rightPanel}
+				onTabChange={setRightPanel}
+				isCollapsed={isRightPanelCollapsed}
+				onCollapsedChange={setIsRightPanelCollapsed}
+				width={rightPanelWidth}
+				onWidthChange={setRightPanelWidth}
 			>
-				{/* Resize handle */}
-				{!isRightPanelCollapsed && (
-					<div
-						className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100"
-						onMouseDown={() => setIsRightPanelResizing(true)}
+				{rightPanel === 'outline' && (
+					<OutlinePanel
+						content={editorContent}
+						onNavigate={(line, from) => {
+							window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
+								detail: { line, from }
+							}));
+						}}
 					/>
 				)}
-				{isRightPanelCollapsed ? (
-					/* Collapsed View - matches left sidebar styling */
-					<div className="flex flex-col items-center py-4 gap-4 w-full">
-						<button
-							onClick={toggleRightPanel}
-							className="p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-							title="Expand Panel"
-						>
-							<PanelRightOpen size={20} />
-						</button>
-					</div>
-				) : (
-					/* Expanded View */
-					<div className="flex-1 flex flex-col h-full overflow-hidden">
-						<div className="flex items-center justify-between px-3 py-2 border-b border-border">
-							<div className="flex gap-2 flex-wrap">
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'outline' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('outline')}
-								>
-									Outline
-								</button>
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'backlinks' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('backlinks')}
-								>
-									Backlinks
-								</button>
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('query')}
-								>
-									Query
-								</button>
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'ai-query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('ai-query')}
-								>
-									AI Query
-								</button>
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'graph' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('graph')}
-								>
-									Graph
-								</button>
-								<button
-									className={`text-xs px-2 py-1 rounded ${rightPanel === 'tags' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-									onClick={() => setRightPanel('tags')}
-								>
-									Tags
-								</button>
-							</div>
-							<button
-								onClick={toggleRightPanel}
-								className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-								title="Collapse Panel"
-							>
-								<PanelRightClose size={16} />
-							</button>
-						</div>
-						<div className="flex-1 overflow-auto">
-							{rightPanel === 'outline' && (
-								<OutlinePanel
-									content={editorContent}
-									onNavigate={(line, from) => {
-										// Dispatch event for Editor to scroll to line
-										window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
-											detail: { line, from }
-										}));
-									}}
-								/>
-							)}
-							{rightPanel === 'backlinks' && (
-								<BacklinksPanel
-									noteId={vaultMeta.activeNoteId}
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-										handleFileSelect(`${normalizedVault}/${relPath}`);
-									}}
-								/>
-							)}
-							{rightPanel === 'query' && (
-								<QueryPanel
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-										handleFileSelect(`${normalizedVault}/${relPath}`);
-									}}
-								/>
-							)}
-							{rightPanel === 'ai-query' && (
-								<AIQueryPanel
-									vaultPath={vaultPath}
-									llmSettings={llmSettings}
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-										handleFileSelect(`${normalizedVault}/${relPath}`);
-									}}
-								/>
-							)}
-							{rightPanel === 'graph' && (
-								<GraphPanel
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-										handleFileSelect(`${normalizedVault}/${relPath}`);
-									}}
-									onExpand={() => setGraphDialogOpen(true)}
-								/>
-							)}
-							{rightPanel === 'tags' && (
-								<SupertagsPanel
-									noteId={vaultMeta.activeNoteId}
-									onOpenCreator={() => setOpenDialog('supertag-creator')}
-									onOpenApply={() => setOpenDialog('supertag-apply')}
-									onEditTemplate={(id) => {
-									setEditingTemplateId(id);
-									setOpenDialog('supertag-editor');
-								}}
-								/>
-							)}
-						</div>
-					</div>
+				{rightPanel === 'backlinks' && (
+					<BacklinksPanel
+						noteId={vaultMeta.activeNoteId}
+						onNavigate={(relPath) => {
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+							handleFileSelect(`${normalizedVault}/${relPath}`);
+						}}
+					/>
 				)}
-			</div>
+				{rightPanel === 'query' && (
+					<QueryPanel
+						onNavigate={(relPath) => {
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+							handleFileSelect(`${normalizedVault}/${relPath}`);
+						}}
+					/>
+				)}
+				{rightPanel === 'ai-query' && (
+					<AIQueryPanel
+						vaultPath={vaultPath}
+						llmSettings={llmSettings}
+						onNavigate={(relPath) => {
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+							handleFileSelect(`${normalizedVault}/${relPath}`);
+						}}
+					/>
+				)}
+				{rightPanel === 'graph' && (
+					<GraphPanel
+						onNavigate={(relPath) => {
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+							handleFileSelect(`${normalizedVault}/${relPath}`);
+						}}
+						onExpand={() => setGraphDialogOpen(true)}
+					/>
+				)}
+				{rightPanel === 'tags' && (
+					<SupertagsPanel
+						noteId={vaultMeta.activeNoteId}
+						onOpenCreator={() => setOpenDialog('supertag-creator')}
+						onOpenApply={() => setOpenDialog('supertag-apply')}
+						onEditTemplate={(id) => {
+							setEditingTemplateId(id);
+							setOpenDialog('supertag-editor');
+						}}
+					/>
+				)}
+			</RightPanel>
 
 			{/* Dialogs */}
 			<FileNavigatorDialog
