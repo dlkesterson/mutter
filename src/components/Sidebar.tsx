@@ -9,9 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
 	CollapsiblePanel,
 	CollapsedPanelButton,
-	PanelHeader,
 	PanelContent,
-	PanelFooter,
 } from '@/components/ui/collapsible-panel';
 import {
 	Search,
@@ -22,7 +20,15 @@ import {
 	Plus,
 	Calendar,
 	Command,
+	MoreHorizontal,
 } from 'lucide-react';
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+	DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 interface SidebarProps {
 	activePath: string | null;
@@ -48,7 +54,7 @@ export function Sidebar({
 	activeNoteId: _activeNoteId,
 }: SidebarProps) {
 	// Panel state
-	const [width, setWidth] = useState(256); // Design System: 256px sidebar width
+	const [width, setWidth] = useState(256);
 	const [isCollapsed, setIsCollapsed] = useState(false);
 
 	// Sidebar-specific state
@@ -66,7 +72,6 @@ export function Sidebar({
 		if (vaultPath) {
 			loadFileTree(vaultPath);
 
-			// Start file watcher for the vault
 			invoke('start_vault_watcher', { vaultPath })
 				.then(() => {
 					console.log('File watcher started for:', vaultPath);
@@ -77,7 +82,6 @@ export function Sidebar({
 		}
 
 		return () => {
-			// Stop file watcher when vault path changes or component unmounts
 			invoke('stop_vault_watcher')
 				.catch((error) => {
 					console.error('Failed to stop file watcher:', error);
@@ -93,9 +97,6 @@ export function Sidebar({
 		}
 	}, [search, vaultPath]);
 
-	// Listen for file system structure changes and reload file tree
-	// Note: File watcher only triggers on create/delete/rename, NOT content modifications
-	// This prevents constant reloads when files are being edited or synced
 	useEffect(() => {
 		if (!vaultPath) return;
 
@@ -109,7 +110,6 @@ export function Sidebar({
 		};
 	}, [vaultPath]);
 
-	// Listen for Ctrl+N keyboard shortcut from App.tsx
 	useEffect(() => {
 		const handleCreateNoteShortcut = () => {
 			if (vaultPath) {
@@ -151,7 +151,6 @@ export function Sidebar({
 		}
 	};
 
-	// Helper to count total nodes
 	const countNodes = (nodes: FileNode[]): number => {
 		let count = nodes.length;
 		for (const node of nodes) {
@@ -230,6 +229,9 @@ export function Sidebar({
 		}
 	};
 
+	// Determine if we're in a narrow state (show overflow menu)
+	const isNarrow = width < 220;
+
 	return (
 		<CollapsiblePanel
 			side="left"
@@ -256,79 +258,128 @@ export function Sidebar({
 				</>
 			}
 		>
-			{/* Header */}
-			<PanelHeader>
-				<span className='font-medium text-sm truncate'>
-					{vaultPath ? (
-						vaultPath.split('/').pop()
-					) : (
-						<span className='text-muted-foreground'>
-							No Vault
-						</span>
-					)}
-				</span>
-				<div className='flex items-center gap-1'>
+			{/* Header - Two rows for better narrow handling */}
+			<div className="border-b border-border/20 shrink-0">
+				{/* Top row: Vault name + collapse */}
+				<div className="h-10 flex items-center justify-between px-3 gap-2">
+					<span className="font-medium text-sm truncate min-w-0 flex-1">
+						{vaultPath ? (
+							vaultPath.split('/').pop()
+						) : (
+							<span className="text-muted-foreground">No Vault</span>
+						)}
+					</span>
 					<Button
-						variant='ghost'
-						size='icon'
-						className='h-8 w-8'
-						onClick={onQuickSwitcherOpen}
-						title='Quick Switcher (Ctrl+O)'
-						disabled={!vaultPath}
-					>
-						<Command size={16} />
-					</Button>
-					<Button
-						variant='ghost'
-						size='icon'
-						className='h-8 w-8'
-						onClick={handleOpenDailyNote}
-						title='Open Today`s Note'
-						disabled={!vaultPath}
-					>
-						<Calendar size={16} />
-					</Button>
-					<Button
-						variant='ghost'
-						size='icon'
-						className='h-8 w-8'
-						onClick={handleCreateNote}
-						title='New Note'
-						disabled={!vaultPath}
-					>
-						<Plus size={16} />
-					</Button>
-					<Button
-						variant='ghost'
-						size='icon'
-						className='h-8 w-8'
-						onClick={handleSelectVault}
-						title='Open Vault'
-					>
-						<FolderOpen size={16} />
-					</Button>
-					<Button
-						variant='ghost'
-						size='icon'
-						className='h-8 w-8'
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 shrink-0"
 						onClick={() => setIsCollapsed(true)}
-						title='Collapse Sidebar'
+						title="Collapse Sidebar"
 					>
 						<PanelLeftClose size={16} />
 					</Button>
 				</div>
-			</PanelHeader>
+
+				{/* Bottom row: Action buttons */}
+				<div className="h-9 flex items-center px-2 gap-1 border-t border-border/10">
+					{/* Always visible: Quick Switcher */}
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7"
+						onClick={onQuickSwitcherOpen}
+						title="Quick Switcher (Ctrl+O)"
+						disabled={!vaultPath}
+					>
+						<Command size={15} />
+					</Button>
+
+					{/* Always visible: New Note */}
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7"
+						onClick={handleCreateNote}
+						title="New Note (Ctrl+N)"
+						disabled={!vaultPath}
+					>
+						<Plus size={15} />
+					</Button>
+
+					{/* Conditionally visible based on width */}
+					{!isNarrow ? (
+						<>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7"
+								onClick={handleOpenDailyNote}
+								title="Today's Note"
+								disabled={!vaultPath}
+							>
+								<Calendar size={15} />
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7"
+								onClick={handleSelectVault}
+								title="Open Vault"
+							>
+								<FolderOpen size={15} />
+							</Button>
+						</>
+					) : (
+						/* Overflow menu for narrow state */
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button variant="ghost" size="icon" className="h-7 w-7">
+									<MoreHorizontal size={15} />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="start" className="w-48">
+								<DropdownMenuItem
+									onClick={handleOpenDailyNote}
+									disabled={!vaultPath}
+								>
+									<Calendar size={14} className="mr-2" />
+									Today's Note
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem onClick={handleSelectVault}>
+									<FolderOpen size={14} className="mr-2" />
+									Open Vault
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					)}
+
+					{/* Spacer */}
+					<div className="flex-1" />
+
+					{/* Settings always visible at end */}
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7"
+						onClick={onSettingsClick}
+						title="Settings"
+					>
+						<Settings size={15} />
+					</Button>
+				</div>
+			</div>
 
 			{/* Search */}
-			<div className='p-3 border-b border-border/20 shrink-0'>
-				<div className='relative'>
-					<Search className='absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground' />
+			<div className="p-2 border-b border-border/20 shrink-0">
+				<div className="relative">
+					<Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
 					<input
-						type='text'
-						placeholder='Search files...'
+						type="text"
+						placeholder="Search files..."
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
-						className='w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono'
+						className="w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono"
 					/>
 				</div>
 			</div>
@@ -336,38 +387,36 @@ export function Sidebar({
 			{/* Content */}
 			<PanelContent>
 				{!vaultPath ? (
-					<div className='flex flex-col items-center justify-center h-full p-4 text-center space-y-4'>
-						<p className='text-sm text-muted-foreground'>
+					<div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-4">
+						<p className="text-sm text-muted-foreground">
 							Select a folder to view files
 						</p>
-						<Button onClick={handleSelectVault} size='sm'>
+						<Button onClick={handleSelectVault} size="sm">
 							Open Vault
 						</Button>
 					</div>
 				) : isLoading ? (
-					<div className='flex items-center justify-center h-full text-muted-foreground text-sm'>
+					<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
 						Loading...
 					</div>
 				) : search.length > 2 ? (
-					<div className='space-y-1 p-2'>
+					<div className="space-y-1 p-2">
 						{searchResults.length === 0 ? (
-							<div className='text-center py-8 text-sm text-muted-foreground'>
+							<div className="text-center py-8 text-sm text-muted-foreground">
 								No results found
 							</div>
 						) : (
 							searchResults.map((result, index) => (
 								<button
 									key={result.path}
-									className='w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200'
+									className="w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200"
 									style={{ animationDelay: `${index * 30}ms` }}
-									onClick={() =>
-										onFileSelect(result.path, false)
-									}
+									onClick={() => onFileSelect(result.path, false)}
 								>
-									<div className='font-medium text-sm truncate'>
+									<div className="font-medium text-sm truncate">
 										{result.title}
 									</div>
-									<div className='text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70'>
+									<div className="text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70">
 										{result.excerpt}
 									</div>
 								</button>
@@ -381,24 +430,13 @@ export function Sidebar({
 						onOpenInNewTab={onOpenInNewTab}
 						onRename={handleRename}
 						onFileTreeUpdate={() => loadFileTree(vaultPath)}
-						className='h-full p-2'
+						className="h-full p-2"
 						activePath={activePath}
 					/>
 				)}
 			</PanelContent>
 
-			{/* Footer */}
-			<PanelFooter>
-				<Button
-					variant='ghost'
-					size='sm'
-					className='w-full justify-start gap-2 text-muted-foreground hover:text-foreground'
-					onClick={onSettingsClick}
-				>
-					<Settings size={16} />
-					<span className='text-xs'>Settings</span>
-				</Button>
-			</PanelFooter>
+			{/* Footer removed - Settings button now in action bar */}
 		</CollapsiblePanel>
 	);
 }

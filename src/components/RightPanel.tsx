@@ -3,6 +3,11 @@
  *
  * The collapsible right panel containing Outline, Backlinks, Query, AI Query, Graph, and Tags tabs.
  * Uses the shared CollapsiblePanel for consistent behavior with the left sidebar.
+ *
+ * Improvements:
+ * - Tabs in a scrollable row that doesn't wrap
+ * - Collapse button on a separate line from tabs
+ * - Consistent spacing regardless of panel width
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -21,6 +26,16 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
   query: 'Query',
   'ai-query': 'AI Query',
   graph: 'Graph',
+  tags: 'Tags',
+};
+
+// Short labels for narrow widths
+const TAB_LABELS_SHORT: Record<RightPanelTab, string> = {
+  outline: 'Out',
+  backlinks: 'Back',
+  query: 'Qry',
+  'ai-query': 'AI',
+  graph: 'Grph',
   tags: 'Tags',
 };
 
@@ -71,6 +86,10 @@ export function RightPanel({
     }
   };
 
+  // Use short labels when narrow
+  const useShortLabels = width < 280;
+  const labels = useShortLabels ? TAB_LABELS_SHORT : TAB_LABELS;
+
   return (
     <CollapsiblePanel
       side="right"
@@ -88,31 +107,41 @@ export function RightPanel({
         />
       }
     >
-      {/* Tab Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <div className="flex gap-1 flex-wrap">
-          {availableTabs.map((tab) => (
-            <button
-              key={tab}
-              className={cn(
-                'text-xs px-2 py-1 rounded transition-colors',
-                activeTab === tab
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-              )}
-              onClick={() => onTabChange(tab)}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
+      {/* Header - Two rows: collapse button row + tabs row */}
+      <div className="border-b border-border shrink-0">
+        {/* Top row: Title + collapse button */}
+        <div className="h-9 flex items-center justify-between px-3">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {activeTab ? labels[activeTab] : 'Panel'}
+          </span>
+          <button
+            onClick={handleToggle}
+            className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            title="Collapse Panel"
+          >
+            <PanelRightClose size={16} />
+          </button>
         </div>
-        <button
-          onClick={handleToggle}
-          className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-          title="Collapse Panel"
-        >
-          <PanelRightClose size={16} />
-        </button>
+
+        {/* Bottom row: Tabs - horizontal scrollable */}
+        <div className="h-9 flex items-center px-2 border-t border-border/50 overflow-x-auto no-scrollbar">
+          <div className="flex gap-0.5">
+            {availableTabs.map((tab) => (
+              <button
+                key={tab}
+                className={cn(
+                  'px-2 py-1 text-xs rounded transition-colors whitespace-nowrap',
+                  activeTab === tab
+                    ? 'bg-accent text-accent-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                )}
+                onClick={() => onTabChange(tab)}
+              >
+                {labels[tab]}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Tab Content */}
