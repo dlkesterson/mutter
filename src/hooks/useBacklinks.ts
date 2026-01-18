@@ -1,14 +1,13 @@
 /**
  * useBacklinks Hook
  *
- * Provides backlink information for a note.
- * Uses the CRDT backlink_index for O(1) lookups.
+ * Provides backlink information for a note using the GraphCacheDoc.
+ * Uses the pre-computed backlink_index for O(1) lookups.
  */
 
 import { useMemo } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
-import { getBacklinks } from '@/crdt/vaultMetadataDoc';
-import type { VaultNote, GraphEdge } from '@/crdt/vaultMetadataDoc';
+import type { GraphEdge } from '@/crdt/graphCacheDoc';
 
 /**
  * Backlink information with source note metadata
@@ -16,8 +15,10 @@ import type { VaultNote, GraphEdge } from '@/crdt/vaultMetadataDoc';
 export interface BacklinkInfo {
   /** The graph edge */
   edge: GraphEdge;
-  /** Source note that contains the link */
-  sourceNote: VaultNote;
+  /** Source note ID */
+  sourceNoteId: string;
+  /** Source note path (if available) */
+  sourcePath: string | null;
   /** Preview context around the link (optional) */
   context?: string;
 }
@@ -41,31 +42,33 @@ export interface UseBacklinksResult {
  * @returns Backlinks, count, and loading state
  */
 export function useBacklinks(noteId: string | null): UseBacklinksResult {
-  const { doc, ready } = useVaultMetadata();
+  const { ready, graphCache, manifest } = useVaultMetadata();
 
   const backlinks = useMemo(() => {
-    if (!ready || !doc || !noteId) {
+    if (!ready || !noteId || !graphCache) {
       return [];
     }
 
-    // Get edges pointing to this note
-    const edges = getBacklinks({ doc, noteId });
+    // Get source note IDs from backlink index
+    const sourceIds = graphCache.backlink_index[noteId] ?? [];
+    if (sourceIds.length === 0) {
+      return [];
+    }
 
-    // Map to backlink info with source note
-    return edges
-      .map((edge) => {
-        const sourceNote = doc.notes[edge.sourceNoteId];
-        if (!sourceNote) return null;
-
-        return {
+    // Find edges that point to this note
+    const result: BacklinkInfo[] = [];
+    for (const edge of Object.values(graphCache.edges)) {
+      if (edge.targetNoteId === noteId) {
+        result.push({
           edge,
-          sourceNote,
-          // TODO: Load context from file content
-          // Would need to read the file and extract text around the link
-        };
-      })
-      .filter((bl): bl is BacklinkInfo => bl !== null);
-  }, [doc, noteId, ready]);
+          sourceNoteId: edge.sourceNoteId,
+          sourcePath: manifest?.id_to_path[edge.sourceNoteId] ?? null,
+        });
+      }
+    }
+
+    return result;
+  }, [graphCache, manifest, noteId, ready]);
 
   return {
     backlinks,
@@ -89,7 +92,7 @@ export function useBacklinksGrouped(noteId: string | null): {
     const map = new Map<string, BacklinkInfo[]>();
 
     for (const bl of backlinks) {
-      const key = bl.sourceNote.id;
+      const key = bl.sourceNoteId;
       const existing = map.get(key) || [];
       existing.push(bl);
       map.set(key, existing);

@@ -122,6 +122,7 @@ pub fn run() {
             device::get_mutter_device_id_cmd,
             vault_state::get_or_create_vault_state_cmd,
             vault_state::set_vault_metadata_doc_url_cmd,
+            vault_state::set_manifest_doc_url_cmd,
             vault_crdt_fs::write_vault_crdt_snapshot_cmd,
             vault_crdt_fs::list_vault_crdt_snapshots_cmd,
             vault_crdt_fs::read_vault_crdt_snapshot_cmd,

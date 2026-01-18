@@ -128,16 +128,29 @@ export function Sidebar({
 
 	const loadFileTree = async (path: string) => {
 		setIsLoading(true);
+		console.time('[Sidebar] loadFileTree');
 		try {
 			const nodes = await invoke<FileNode[]>('get_file_tree', {
 				vaultPath: path,
 			});
+			console.timeEnd('[Sidebar] loadFileTree');
+			console.log(`[Sidebar] File tree loaded: ${countNodes(nodes)} nodes`);
 			setFileTree(nodes);
 		} catch (error) {
+			console.timeEnd('[Sidebar] loadFileTree');
 			console.error('Failed to load file tree:', error);
 		} finally {
 			setIsLoading(false);
 		}
+	};
+
+	// Helper to count total nodes
+	const countNodes = (nodes: FileNode[]): number => {
+		let count = nodes.length;
+		for (const node of nodes) {
+			if (node.children) count += countNodes(node.children);
+		}
+		return count;
 	};
 
 	const performSearch = async (query: string) => {

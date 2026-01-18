@@ -107,9 +107,12 @@ pnpm lint
 **Frontend (src/):**
 - `components/` - React components (Editor, Sidebar, TabBar, voice UI, dialogs)
 - `components/ui/` - shadcn/ui component library
-- `editor/` - CodeMirror extensions (livePreview.ts, theme.ts, commands.ts, autoPairs.ts)
-- `hooks/` - Custom React hooks (useAudioRecorder.ts, useVaultMetadataCrdt.ts)
+- `components/graph/` - Graph visualization (react-force-graph-2d)
+- `editor/` - CodeMirror extensions (livePreview.ts, theme.ts, commands.ts, autoPairs.ts, transclusionExtension.ts, blockIdExtension.ts)
+- `hooks/` - Custom React hooks (useAudioRecorder.ts, useVaultMetadataCrdt.ts, useGraphData.ts)
 - `voice/` - Voice command system (108 commands across 7 categories)
+- `graph/` - Link parsing and graph building utilities
+- `context/` - React contexts (VaultMetadataContext, EditorContextProvider)
 
 **Backend (src-tauri/src/):**
 - `ml.rs` - Whisper (whisper-rs) + BERT (Candle) ML inference
@@ -137,6 +140,22 @@ Voice → Whisper transcription → BERT embedding → cosine similarity → exe
 
 `src/editor/livePreview.ts` uses CodeMirror 6 decorations to hide markdown syntax when cursor is outside that line. Syntax becomes visible only when editing.
 
+### CodeMirror Extensions
+
+The editor loads multiple ViewPlugins that rebuild decorations on document/viewport changes:
+
+| Extension | File | Purpose |
+|-----------|------|---------|
+| `livePreviewPlugin` | `livePreview.ts` | Hides markdown syntax (bold, italic, links) when cursor not on line |
+| `blockIdDecorationPlugin` | `blockIdExtension.ts` | Always hides block IDs (`^abc123`) from display |
+| `transclusionExtension` | `transclusionExtension.ts` | Renders `![[Note#block]]` embeds as live widgets |
+
+**Transclusion System:**
+- Embeds (`![[Note]]` or `![[Note#blockId]]`) are replaced with live content widgets
+- Content loaded asynchronously with loading/error states
+- Async dispatches wrapped in try-catch to handle view destruction during unmount
+- Uses `StateEffect` pattern for updating content after load
+
 ### Stream Mode (Experimental)
 
 AI-assisted post-processing of transcriptions. After Whisper completes, optionally sends text to Claude/OpenAI/Ollama to remove fillers and add structure. Configure in Settings → Stream Mode.
@@ -144,6 +163,45 @@ AI-assisted post-processing of transcriptions. After Whisper completes, optional
 ### File System Watcher
 
 `file_watcher.rs` watches vault for external changes. **Important**: Deliberately ignores content modifications to prevent reload loops during editing. Only reacts to create/delete/rename operations.
+
+### Graph View Architecture
+
+The graph view uses `react-force-graph-2d` to visualize note relationships:
+
+```
+VaultMetadataDoc (CRDT) → useGraphData hook → GraphView component
+```
+
+**Key files:**
+- `src/hooks/useGraphData.ts` - Transforms CRDT notes/edges into graph format (uses `useMemo` for performance)
+- `src/components/graph/GraphView.tsx` - Force-graph wrapper with `React.memo` to prevent resize jank
+- `src/components/graph/GraphPanel.tsx` - Right sidebar panel with debounced resize handling
+- `src/components/graph/graphConfig.ts` - Colors, forces, and performance thresholds
+
+**Performance considerations:**
+- Graph dimensions are debounced (100ms) via ResizeObserver
+- `GraphView` skips re-renders for dimension changes < 10px
+- Local graph (depth-limited BFS) used in panel; full graph only in dialog
+
+### UI Layout Architecture
+
+The main app layout in `App.tsx`:
+
+```
+┌─────────┬──────────────────────────┬─────────┐
+│ Sidebar │     Main Content         │ Right   │
+│ (left)  │  ┌────────────────────┐  │ Panel   │
+│         │  │ TabBar             │  │         │
+│ Collap- │  ├────────────────────┤  │ Collap- │
+│ sible   │  │ Editor/ImageViewer │  │ sible   │
+│ 48-256px│  │ or Empty State     │  │ 48-320px│
+│         │  ├────────────────────┤  │         │
+│         │  │ StatusBar          │  │         │
+│         │  └────────────────────┘  │         │
+└─────────┴──────────────────────────┴─────────┘
+```
+
+Both sidebars use `isCollapsed` state with smooth CSS transitions.
 
 ## Key Technical Details
 
@@ -173,12 +231,13 @@ See `DESIGN_SYSTEM.md` for full details. Key rules:
 ```json
 "pnpm": {
   "overrides": {
-    "@automerge/automerge": "3.2.1"
+    "@automerge/automerge": "3.2.1",
+    "@lezer/common": "1.5.0"
   }
 }
 ```
 
-This ensures CRDT compatibility across all dependencies.
+This ensures CRDT compatibility and prevents CodeMirror plugin crashes from version mismatches.
 
 ### Whisper Model Variants (GGML Format)
 
@@ -341,15 +400,17 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ## Common Pitfalls
 
 1. **Automerge version mismatch**: Always use 3.2.1 (pinned in pnpm.overrides)
-2. **Model not downloaded**: Download model in Settings before using voice
-3. **VAD too sensitive**: Adjust silence threshold if commands cut off early
-4. **Selection required**: Some commands (bold, italic) require text selection first
-5. **Microphone permissions**: Browser/OS must grant microphone access
-6. **File watcher flooding**: The watcher deliberately ignores content modifications to prevent constant reloads while editing
-7. **CUDA build errors**: If GPU acceleration fails to build, remove `features = ["cuda"]` from Cargo.toml dependencies
-8. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
-9. **Tab state loss**: Tab state is ephemeral; closing a tab loses unsaved changes unless auto-saved
-10. **Design system violations**: Use 8px spacing multiples; arbitrary spacing breaks the grid
+2. **@lezer/common version mismatch**: Pinned to 1.5.0 to prevent CodeMirror `'tags3'` or `'all'` crashes
+3. **Model not downloaded**: Download model in Settings before using voice
+4. **VAD too sensitive**: Adjust silence threshold if commands cut off early
+5. **Selection required**: Some commands (bold, italic) require text selection first
+6. **Microphone permissions**: Browser/OS must grant microphone access
+7. **File watcher flooding**: The watcher deliberately ignores content modifications to prevent constant reloads while editing
+8. **CUDA build errors**: If GPU acceleration fails to build, remove `features = ["cuda"]` from Cargo.toml dependencies
+9. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
+10. **Tab state loss**: Tab state is ephemeral; closing a tab loses unsaved changes unless auto-saved
+11. **Design system violations**: Use 8px spacing multiples; arbitrary spacing breaks the grid
+12. **Auto-save loops**: Editor auto-save effect must check `content !== savedContent` to prevent CRDT spam
 
 
 ## Debugging

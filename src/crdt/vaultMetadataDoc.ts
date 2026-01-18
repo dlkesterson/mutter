@@ -381,9 +381,12 @@ export function updateNoteBlocks(params: {
       note.blocks[block.id] = {
         id: block.id,
         type: block.type,
-        level: block.level,
         text: block.text,
       };
+      // Only set level for headings (Automerge rejects undefined values)
+      if (block.level !== undefined) {
+        note.blocks[block.id].level = block.level;
+      }
       note.block_order.push(block.id);
     }
 

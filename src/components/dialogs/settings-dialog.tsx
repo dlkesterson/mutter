@@ -9,6 +9,7 @@ import {
 	DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
 	Select,
 	SelectContent,
@@ -20,6 +21,7 @@ import { useTheme } from '@/components/ThemeProvider';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { SyncSettingsPanel } from '@/components/sync/SyncSettingsPanel';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useSettings, useCredentials } from '@/lib/settings';
 import {
   ExpertiseLevel,
   EXPERTISE_THRESHOLDS,
@@ -37,6 +39,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [fontSize, setFontSize] = useState('16');
 	const { profile, setExpertiseLevel } = useUserProfile();
 
+	// AI Settings from config context
+	const { settings, updateSettings } = useSettings();
+	const { credentials, updateCredentials } = useCredentials();
+
 	// VAD Settings
 	const [silenceThreshold, setSilenceThreshold] = useState(800);
 	const [minSpeechDuration, setMinSpeechDuration] = useState(300);
@@ -48,22 +54,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	// Auto-Stop Settings
 	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
 	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
-
-	// Stream Mode Settings
-	const [streamModeEnabled, setStreamModeEnabled] = useState(false);
-	const [streamModeProvider, setStreamModeProvider] = useState<
-		'claude' | 'openai' | 'ollama'
-	>('claude');
-	const [claudeApiKey, setClaudeApiKey] = useState('');
-	const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20251029');
-	const [openaiApiKey, setOpenaiApiKey] = useState('');
-	const [openaiModel, setOpenaiModel] = useState('gpt-4-turbo-preview');
-	const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-	const [ollamaModel, setOllamaModel] = useState('qwen2.5:3b');
-	const [removeFillers, setRemoveFillers] = useState(true);
-	const [addStructure, setAddStructure] = useState(true);
-	const [matchStyle, setMatchStyle] = useState(true);
-	const [streamModeTimeout, setStreamModeTimeout] = useState(15000);
 
 	// Load settings from storage
 	useEffect(() => {
@@ -82,35 +72,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 			if (enabled !== null) setAutoStopEnabled(enabled);
 			if (timeout !== null) setAutoStopTimeoutMs(timeout);
-
-			// Stream Mode settings
-			const streamEnabled = await getStorageItem<boolean>('stream_mode_enabled');
-			const provider = await getStorageItem<'claude' | 'openai' | 'ollama'>(
-				'stream_mode_provider'
-			);
-			const claudeKey = await getStorageItem<string>('claude_api_key');
-			const claudeMdl = await getStorageItem<string>('claude_model');
-			const openaiKey = await getStorageItem<string>('openai_api_key');
-			const openaiMdl = await getStorageItem<string>('openai_model');
-			const ollamaUrlVal = await getStorageItem<string>('ollama_url');
-			const ollamaMdl = await getStorageItem<string>('ollama_model');
-			const removeF = await getStorageItem<boolean>('stream_mode_remove_fillers');
-			const addStr = await getStorageItem<boolean>('stream_mode_add_structure');
-			const matchSty = await getStorageItem<boolean>('stream_mode_match_style');
-			const streamTimeout = await getStorageItem<number>('stream_mode_timeout_ms');
-
-			if (streamEnabled !== null) setStreamModeEnabled(streamEnabled);
-			if (provider !== null) setStreamModeProvider(provider);
-			if (claudeKey !== null) setClaudeApiKey(claudeKey);
-			if (claudeMdl !== null) setClaudeModel(claudeMdl);
-			if (openaiKey !== null) setOpenaiApiKey(openaiKey);
-			if (openaiMdl !== null) setOpenaiModel(openaiMdl);
-			if (ollamaUrlVal !== null) setOllamaUrl(ollamaUrlVal);
-			if (ollamaMdl !== null) setOllamaModel(ollamaMdl);
-			if (removeF !== null) setRemoveFillers(removeF);
-			if (addStr !== null) setAddStructure(addStr);
-			if (matchSty !== null) setMatchStyle(matchSty);
-			if (streamTimeout !== null) setStreamModeTimeout(streamTimeout);
 		};
 
 		loadSettings();
@@ -134,7 +95,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className='max-w-4xl max-h-[85vh] overflow-y-auto bg-background text-foreground border-border'>
+			<DialogContent className='w-[80vw] max-w-[1200px] max-h-[85vh] overflow-y-auto bg-background text-foreground border-border'>
 				<DialogHeader>
 					<DialogTitle className='text-xl font-semibold'>Settings</DialogTitle>
 				</DialogHeader>
@@ -455,258 +416,308 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 					</div>
 				</div>
 
-				{/* FULL-WIDTH BOTTOM SECTION: Advanced Settings */}
-				<div className='space-y-6 border-t border-border pt-6'>
-					<div className='space-y-4'>
-						<h3 className='text-base font-semibold border-b border-border pb-2'>Stream Mode (LLM Formatting)</h3>
+				{/* FULL-WIDTH SECTION: AI Settings */}
+				<div className='border-t border-border pt-6'>
+					<h3 className='text-base font-semibold border-b border-border pb-2 mb-4'>AI Settings</h3>
 
-						<div className='space-y-2'>
-							<Label className='flex items-center gap-2 cursor-pointer'>
-								<input
-									type='checkbox'
-									checked={streamModeEnabled}
-									onChange={(e) => {
-										const enabled = e.target.checked;
-										setStreamModeEnabled(enabled);
-										setStorageItem('stream_mode_enabled', enabled);
-									}}
-									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-								/>
-								Enable Stream Mode
-							</Label>
-							<p className='text-xs text-muted-foreground'>
-								Use LLM to format voice transcriptions into clean markdown.
-							</p>
-						</div>
-
-						{streamModeEnabled && (
-							<>
+					{settings && (
+						<div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
+							{/* Provider Selection */}
+							<div className='space-y-4'>
 								<div className='space-y-2'>
-									<Label htmlFor='llm-provider'>LLM Provider</Label>
+									<Label htmlFor='ai-provider'>AI Provider</Label>
 									<Select
-										value={streamModeProvider}
-										onValueChange={(val: any) => {
-											setStreamModeProvider(val);
-											setStorageItem('stream_mode_provider', val);
+										value={settings.stream_mode.provider}
+										onValueChange={(val: 'claude' | 'openai' | 'ollama') => {
+											updateSettings((prev) => ({
+												...prev,
+												stream_mode: { ...prev.stream_mode, provider: val },
+											}));
 										}}
 									>
-										<SelectTrigger
-											id='llm-provider'
-											className='bg-background border-input'
-										>
+										<SelectTrigger id='ai-provider' className='bg-background border-input'>
 											<SelectValue placeholder='Select provider' />
 										</SelectTrigger>
 										<SelectContent>
-											<SelectItem value='claude'>Claude API (Anthropic)</SelectItem>
-											<SelectItem value='openai'>OpenAI API</SelectItem>
-											<SelectItem value='ollama'>Local Ollama</SelectItem>
+											<SelectItem value='ollama'>Ollama (Local)</SelectItem>
+											<SelectItem value='claude'>Claude (Anthropic)</SelectItem>
+											<SelectItem value='openai'>OpenAI</SelectItem>
 										</SelectContent>
 									</Select>
+									<p className='text-xs text-muted-foreground'>
+										Choose the AI provider for query answering and stream mode.
+									</p>
 								</div>
 
-								{streamModeProvider === 'claude' && (
-									<>
+								{/* Ollama Settings */}
+								{settings.stream_mode.provider === 'ollama' && (
+									<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
 										<div className='space-y-2'>
-											<Label htmlFor='claude-key'>Claude API Key</Label>
-											<input
-												id='claude-key'
-												type='password'
-												value={claudeApiKey}
-												onChange={(e) => {
-													setClaudeApiKey(e.target.value);
-													setStorageItem('claude_api_key', e.target.value);
-												}}
-												placeholder='sk-ant-...'
-												className='w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-ring'
-											/>
-										</div>
-										<div className='space-y-2'>
-											<Label htmlFor='claude-model'>Claude Model</Label>
-											<Select
-												value={claudeModel}
-												onValueChange={(val) => {
-													setClaudeModel(val);
-													setStorageItem('claude_model', val);
-												}}
-											>
-												<SelectTrigger
-													id='claude-model'
-													className='bg-background border-input'
-												>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value='claude-sonnet-4-5-20251029'>
-														Claude Sonnet 4.5
-													</SelectItem>
-													<SelectItem value='claude-opus-4-5-20251101'>
-														Claude Opus 4.5
-													</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
-									</>
-								)}
-
-								{streamModeProvider === 'openai' && (
-									<>
-										<div className='space-y-2'>
-											<Label htmlFor='openai-key'>OpenAI API Key</Label>
-											<input
-												id='openai-key'
-												type='password'
-												value={openaiApiKey}
-												onChange={(e) => {
-													setOpenaiApiKey(e.target.value);
-													setStorageItem('openai_api_key', e.target.value);
-												}}
-												placeholder='sk-...'
-												className='w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-ring'
-											/>
-										</div>
-										<div className='space-y-2'>
-											<Label htmlFor='openai-model'>OpenAI Model</Label>
-											<Select
-												value={openaiModel}
-												onValueChange={(val) => {
-													setOpenaiModel(val);
-													setStorageItem('openai_model', val);
-												}}
-											>
-												<SelectTrigger
-													id='openai-model'
-													className='bg-background border-input'
-												>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value='gpt-4-turbo-preview'>
-														GPT-4 Turbo
-													</SelectItem>
-													<SelectItem value='gpt-4'>GPT-4</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
-									</>
-								)}
-
-								{streamModeProvider === 'ollama' && (
-									<>
-										<div className='space-y-2'>
-											<Label htmlFor='ollama-url'>Ollama Server URL</Label>
-											<input
+											<Label htmlFor='ollama-url'>Ollama URL</Label>
+											<Input
 												id='ollama-url'
-												type='text'
-												value={ollamaUrl}
+												value={settings.ai_providers.ollama.url}
 												onChange={(e) => {
-													setOllamaUrl(e.target.value);
-													setStorageItem('ollama_url', e.target.value);
+													updateSettings((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															ollama: { ...prev.ai_providers.ollama, url: e.target.value },
+														},
+													}));
 												}}
 												placeholder='http://localhost:11434'
-												className='w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-ring'
+												className='bg-background'
 											/>
 										</div>
 										<div className='space-y-2'>
-											<Label htmlFor='ollama-model'>Ollama Model</Label>
+											<Label htmlFor='ollama-model'>Model</Label>
+											<Input
+												id='ollama-model'
+												value={settings.ai_providers.ollama.model}
+												onChange={(e) => {
+													updateSettings((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															ollama: { ...prev.ai_providers.ollama, model: e.target.value },
+														},
+													}));
+												}}
+												placeholder='qwen2.5:3b'
+												className='bg-background'
+											/>
+											<p className='text-xs text-muted-foreground'>
+												E.g., llama3.2, qwen2.5:3b, mistral, codellama
+											</p>
+										</div>
+									</div>
+								)}
+
+								{/* Claude Settings */}
+								{settings.stream_mode.provider === 'claude' && credentials && (
+									<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
+										<div className='space-y-2'>
+											<Label htmlFor='claude-key'>API Key</Label>
+											<Input
+												id='claude-key'
+												type='password'
+												value={credentials.ai_providers.claude.api_key || ''}
+												onChange={(e) => {
+													updateCredentials((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															claude: { api_key: e.target.value || null },
+														},
+													}));
+												}}
+												placeholder='sk-ant-...'
+												className='bg-background font-mono text-sm'
+											/>
+											<p className='text-xs text-muted-foreground'>
+												Get your API key from{' '}
+												<a href='https://console.anthropic.com' target='_blank' rel='noopener noreferrer' className='text-primary hover:underline'>
+													console.anthropic.com
+												</a>
+											</p>
+										</div>
+										<div className='space-y-2'>
+											<Label htmlFor='claude-model'>Model</Label>
 											<Select
-												value={ollamaModel}
+												value={settings.ai_providers.claude.model}
 												onValueChange={(val) => {
-													setOllamaModel(val);
-													setStorageItem('ollama_model', val);
+													updateSettings((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															claude: { model: val },
+														},
+													}));
 												}}
 											>
-												<SelectTrigger
-													id='ollama-model'
-													className='bg-background border-input'
-												>
+												<SelectTrigger id='claude-model' className='bg-background border-input'>
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
-													<SelectItem value='qwen2.5:3b'>Qwen 2.5 3B (Recommended - Low VRAM)</SelectItem>
-													<SelectItem value='qwen2.5:7b'>Qwen 2.5 7B</SelectItem>
-													<SelectItem value='qwen2.5:14b'>Qwen 2.5 14B (Larger)</SelectItem>
-													<SelectItem value='deepseek-r1:8b'>DeepSeek R1 8B</SelectItem>
-													<SelectItem value='llama3.1:8b'>Llama 3.1 8B</SelectItem>
-													<SelectItem value='mistral'>Mistral 7B</SelectItem>
+													<SelectItem value='claude-sonnet-4-5-20251029'>Claude Sonnet 4.5</SelectItem>
+													<SelectItem value='claude-3-5-sonnet-20241022'>Claude 3.5 Sonnet</SelectItem>
+													<SelectItem value='claude-3-haiku-20240307'>Claude 3 Haiku</SelectItem>
 												</SelectContent>
 											</Select>
 										</div>
-									</>
+									</div>
 								)}
 
-								<div className='space-y-2'>
-									<Label className='font-medium'>Formatting Options</Label>
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={removeFillers}
-											onChange={(e) => {
-												setRemoveFillers(e.target.checked);
-												setStorageItem(
-													'stream_mode_remove_fillers',
-													e.target.checked
-												);
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Remove filler words (um, uh, like)
-									</Label>
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={addStructure}
-											onChange={(e) => {
-												setAddStructure(e.target.checked);
-												setStorageItem(
-													'stream_mode_add_structure',
-													e.target.checked
-												);
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Add intelligent structure (headers, bullets)
-									</Label>
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={matchStyle}
-											onChange={(e) => {
-												setMatchStyle(e.target.checked);
-												setStorageItem('stream_mode_match_style', e.target.checked);
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Match document style (context-aware)
-									</Label>
-								</div>
+								{/* OpenAI Settings */}
+								{settings.stream_mode.provider === 'openai' && credentials && (
+									<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
+										<div className='space-y-2'>
+											<Label htmlFor='openai-key'>API Key</Label>
+											<Input
+												id='openai-key'
+												type='password'
+												value={credentials.ai_providers.openai.api_key || ''}
+												onChange={(e) => {
+													updateCredentials((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															openai: { api_key: e.target.value || null },
+														},
+													}));
+												}}
+												placeholder='sk-...'
+												className='bg-background font-mono text-sm'
+											/>
+											<p className='text-xs text-muted-foreground'>
+												Get your API key from{' '}
+												<a href='https://platform.openai.com/api-keys' target='_blank' rel='noopener noreferrer' className='text-primary hover:underline'>
+													platform.openai.com
+												</a>
+											</p>
+										</div>
+										<div className='space-y-2'>
+											<Label htmlFor='openai-model'>Model</Label>
+											<Select
+												value={settings.ai_providers.openai.model}
+												onValueChange={(val) => {
+													updateSettings((prev) => ({
+														...prev,
+														ai_providers: {
+															...prev.ai_providers,
+															openai: { model: val },
+														},
+													}));
+												}}
+											>
+												<SelectTrigger id='openai-model' className='bg-background border-input'>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value='gpt-4-turbo-preview'>GPT-4 Turbo</SelectItem>
+													<SelectItem value='gpt-4o'>GPT-4o</SelectItem>
+													<SelectItem value='gpt-4o-mini'>GPT-4o Mini</SelectItem>
+													<SelectItem value='gpt-3.5-turbo'>GPT-3.5 Turbo</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+									</div>
+								)}
+							</div>
 
+							{/* Timeout & Stream Mode Options */}
+							<div className='space-y-4'>
+								{/* LLM Timeout - Always visible */}
 								<div className='space-y-2'>
 									<div className='flex justify-between'>
-										<Label>Formatting Timeout</Label>
+										<Label>LLM Timeout</Label>
 										<span className='text-sm text-muted-foreground'>
-											{(streamModeTimeout / 1000).toFixed(1)}s
+											{(settings.stream_mode.timeout_ms / 1000).toFixed(0)}s
 										</span>
 									</div>
 									<input
 										type='range'
-										min='5000'
-										max='30000'
-										step='1000'
-										value={streamModeTimeout}
+										min='15000'
+										max='120000'
+										step='5000'
+										value={settings.stream_mode.timeout_ms}
 										onChange={(e) => {
-											const val = parseInt(e.target.value);
-											setStreamModeTimeout(val);
-											setStorageItem('stream_mode_timeout_ms', val);
+											updateSettings((prev) => ({
+												...prev,
+												stream_mode: { ...prev.stream_mode, timeout_ms: parseInt(e.target.value) },
+											}));
 										}}
 										className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
 									/>
 									<p className='text-xs text-muted-foreground'>
-										Maximum time to wait for LLM response (5-30 seconds).
+										Time to wait for LLM response (AI Query, Stream Mode). Local models may need longer.
 									</p>
 								</div>
-							</>
-						)}
-					</div>
+
+								{/* Stream Mode Toggle */}
+								<div className='space-y-2 pt-2 border-t border-border'>
+									<Label className='flex items-center gap-2 cursor-pointer'>
+										<input
+											type='checkbox'
+											checked={settings.stream_mode.enabled}
+											onChange={(e) => {
+												updateSettings((prev) => ({
+													...prev,
+													stream_mode: { ...prev.stream_mode, enabled: e.target.checked },
+												}));
+											}}
+											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+										/>
+										Enable Stream Mode
+									</Label>
+									<p className='text-xs text-muted-foreground ml-6'>
+										Post-process voice transcriptions with AI to clean up and format text.
+									</p>
+								</div>
+
+								{settings.stream_mode.enabled && (
+									<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
+										<h4 className='text-sm font-medium'>Formatting Options</h4>
+
+										<Label className='flex items-center gap-2 cursor-pointer'>
+											<input
+												type='checkbox'
+												checked={settings.stream_mode.formatting.remove_fillers}
+												onChange={(e) => {
+													updateSettings((prev) => ({
+														...prev,
+														stream_mode: {
+															...prev.stream_mode,
+															formatting: { ...prev.stream_mode.formatting, remove_fillers: e.target.checked },
+														},
+													}));
+												}}
+												className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+											/>
+											Remove filler words
+										</Label>
+
+										<Label className='flex items-center gap-2 cursor-pointer'>
+											<input
+												type='checkbox'
+												checked={settings.stream_mode.formatting.add_structure}
+												onChange={(e) => {
+													updateSettings((prev) => ({
+														...prev,
+														stream_mode: {
+															...prev.stream_mode,
+															formatting: { ...prev.stream_mode.formatting, add_structure: e.target.checked },
+														},
+													}));
+												}}
+												className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+											/>
+											Add structure (lists, paragraphs)
+										</Label>
+
+										<Label className='flex items-center gap-2 cursor-pointer'>
+											<input
+												type='checkbox'
+												checked={settings.stream_mode.formatting.match_style}
+												onChange={(e) => {
+													updateSettings((prev) => ({
+														...prev,
+														stream_mode: {
+															...prev.stream_mode,
+															formatting: { ...prev.stream_mode.formatting, match_style: e.target.checked },
+														},
+													}));
+												}}
+												className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
+											/>
+											Match document style
+										</Label>
+									</div>
+								)}
+							</div>
+						</div>
+					)}
 				</div>
 
 				{/* FULL-WIDTH SECTION: Sync Settings */}

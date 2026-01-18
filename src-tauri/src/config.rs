@@ -195,7 +195,7 @@ fn default_stream_provider() -> String {
 }
 
 fn default_stream_timeout() -> u32 {
-    15000
+    60000
 }
 
 fn default_claude_model() -> String {
@@ -263,7 +263,7 @@ impl Default for StreamModeSettings {
         Self {
             enabled: false,
             provider: "ollama".to_string(),
-            timeout_ms: 15000,
+            timeout_ms: 60000,
             formatting: StreamModeFormatting::default(),
         }
     }

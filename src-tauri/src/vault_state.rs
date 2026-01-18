@@ -30,8 +30,12 @@ fn state_path(vault_root: &Path) -> PathBuf {
 pub struct VaultState {
     pub vault_id: String,
     pub created_at: String,
+    /// Legacy: monolithic VaultMetadataDoc URL (pre-split)
     #[serde(default)]
     pub vault_metadata_doc_url: Option<String>,
+    /// New: lightweight ManifestDoc URL (post-split)
+    #[serde(default)]
+    pub manifest_doc_url: Option<String>,
 }
 
 fn now_iso() -> String {
@@ -81,6 +85,7 @@ pub fn get_or_create_vault_state_cmd(vault_path: String) -> Result<VaultState, S
         vault_id: Uuid::new_v4().to_string(),
         created_at: now_iso(),
         vault_metadata_doc_url: None,
+        manifest_doc_url: None,
     };
     save_state(&path, &state)?;
     Ok(state)
@@ -97,9 +102,29 @@ pub fn set_vault_metadata_doc_url_cmd(vault_path: String, doc_url: Option<String
             vault_id: Uuid::new_v4().to_string(),
             created_at: now_iso(),
             vault_metadata_doc_url: None,
+            manifest_doc_url: None,
         }
     };
     state.vault_metadata_doc_url = doc_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    save_state(&path, &state)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_manifest_doc_url_cmd(vault_path: String, doc_url: Option<String>) -> Result<(), String> {
+    let root = require_vault_root(&vault_path)?;
+    let path = state_path(&root);
+    let mut state = if path.exists() {
+        load_state(&path)?
+    } else {
+        VaultState {
+            vault_id: Uuid::new_v4().to_string(),
+            created_at: now_iso(),
+            vault_metadata_doc_url: None,
+            manifest_doc_url: None,
+        }
+    };
+    state.manifest_doc_url = doc_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     save_state(&path, &state)?;
     Ok(())
 }

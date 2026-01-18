@@ -1,25 +1,36 @@
 /**
  * Vault Metadata Context
  *
- * Provides access to the CRDT vault metadata document
+ * Provides access to the CRDT vault metadata (split document format)
  * throughout the component tree.
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { DocHandle } from '@automerge/react';
-import type { VaultMetadataDoc } from '@/crdt/vaultMetadataDoc';
+import type { ManifestDoc } from '@/crdt/manifestDoc';
+import type { NoteDoc } from '@/crdt/noteDoc';
+import type { GraphCacheDoc } from '@/crdt/graphCacheDoc';
+import type { NoteDocManager } from '@/crdt/noteDocManager';
+import type { CrdtLoadingPhase } from '@/hooks/useVaultMetadataCrdt';
+import type { MigrationProgress } from '@/crdt/migration';
 
 interface VaultMetadataContextValue {
-  /** Whether the CRDT is ready */
   ready: boolean;
-  /** Current CRDT document snapshot (null if not ready) */
-  doc: VaultMetadataDoc | null;
-  /** CRDT handle for mutations */
-  handle: DocHandle<VaultMetadataDoc> | null;
-  /** Current active note ID */
+  vaultId: string | null;
   activeNoteId: string | null;
-  /** Vault path */
   vaultPath: string | null;
+  normalizedVaultPath: string | null;
+  loadingPhase: CrdtLoadingPhase;
+  manifest: ManifestDoc | null;
+  manifestHandle: DocHandle<ManifestDoc> | null;
+  noteManager: NoteDocManager | null;
+  activeNoteDoc: NoteDoc | null;
+  /** Handle to the active note's document (for mutations) */
+  activeNoteHandle: DocHandle<NoteDoc> | null;
+  noteCount: number;
+  migrationProgress: MigrationProgress | null;
+  graphCache: GraphCacheDoc | null;
+  graphCacheHandle: DocHandle<GraphCacheDoc> | null;
 }
 
 const VaultMetadataContext = createContext<VaultMetadataContextValue | null>(null);
@@ -27,56 +38,88 @@ const VaultMetadataContext = createContext<VaultMetadataContextValue | null>(nul
 interface VaultMetadataProviderProps {
   children: ReactNode;
   ready: boolean;
-  doc: VaultMetadataDoc | null;
-  handle: DocHandle<VaultMetadataDoc> | null;
+  vaultId: string | null;
   activeNoteId: string | null;
   vaultPath: string | null;
+  normalizedVaultPath: string | null;
+  loadingPhase: CrdtLoadingPhase;
+  manifest: ManifestDoc | null;
+  manifestHandle: DocHandle<ManifestDoc> | null;
+  noteManager: NoteDocManager | null;
+  activeNoteDoc: NoteDoc | null;
+  activeNoteHandle: DocHandle<NoteDoc> | null;
+  noteCount: number;
+  migrationProgress: MigrationProgress | null;
+  graphCache: GraphCacheDoc | null;
+  graphCacheHandle: DocHandle<GraphCacheDoc> | null;
 }
 
-/**
- * Provider component for vault metadata
- * Should be rendered near the top of the app, below the useVaultMetadataCrdt hook
- */
 export function VaultMetadataProvider({
   children,
   ready,
-  doc,
-  handle,
+  vaultId,
   activeNoteId,
   vaultPath,
+  normalizedVaultPath,
+  loadingPhase,
+  manifest,
+  manifestHandle,
+  noteManager,
+  activeNoteDoc,
+  activeNoteHandle,
+  noteCount,
+  migrationProgress,
+  graphCache,
+  graphCacheHandle,
 }: VaultMetadataProviderProps) {
+  const contextValue = useMemo<VaultMetadataContextValue>(
+    () => ({
+      ready,
+      vaultId,
+      activeNoteId,
+      vaultPath,
+      normalizedVaultPath,
+      loadingPhase,
+      manifest,
+      manifestHandle,
+      noteManager,
+      activeNoteDoc,
+      activeNoteHandle,
+      noteCount,
+      migrationProgress,
+      graphCache,
+      graphCacheHandle,
+    }),
+    [ready, vaultId, activeNoteId, vaultPath, normalizedVaultPath, loadingPhase, manifest, manifestHandle, noteManager, activeNoteDoc, activeNoteHandle, noteCount, migrationProgress, graphCache, graphCacheHandle]
+  );
+
   return (
-    <VaultMetadataContext.Provider
-      value={{ ready, doc, handle, activeNoteId, vaultPath }}
-    >
+    <VaultMetadataContext.Provider value={contextValue}>
       {children}
     </VaultMetadataContext.Provider>
   );
 }
 
-/**
- * Hook to access vault metadata from context
- * Must be used within VaultMetadataProvider
- */
 export function useVaultMetadata(): VaultMetadataContextValue {
   const ctx = useContext(VaultMetadataContext);
   if (!ctx) {
-    // Return safe defaults if not in provider (for standalone usage)
     return {
       ready: false,
-      doc: null,
-      handle: null,
+      vaultId: null,
       activeNoteId: null,
       vaultPath: null,
+      normalizedVaultPath: null,
+      loadingPhase: 'idle',
+      manifest: null,
+      manifestHandle: null,
+      noteManager: null,
+      activeNoteDoc: null,
+      activeNoteHandle: null,
+      noteCount: 0,
+      migrationProgress: null,
+      graphCache: null,
+      graphCacheHandle: null,
     };
   }
   return ctx;
-}
-
-/**
- * Hook to get just the doc (convenience)
- */
-export function useVaultDoc(): VaultMetadataDoc | null {
-  const { doc } = useVaultMetadata();
-  return doc;
 }

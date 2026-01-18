@@ -1,10 +1,12 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
-import { PanelRightOpen } from 'lucide-react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { PanelRightOpen, PanelRightClose, FileText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import Editor from './components/Editor';
+import { ImageViewer } from './components/ImageViewer';
 import { Omnibox } from './components/Omnibox';
+import { isImageFile } from './utils/fileTypes';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { FileNavigatorDialog } from './components/dialogs/file-navigator-dialog';
 import { VoiceLogDialog } from './components/dialogs/voice-log-dialog';
@@ -26,9 +28,11 @@ import { BacklinksPanel } from './components/BacklinksPanel';
 import { AIQueryPanel } from './components/AIQueryPanel';
 import { QueryPanel } from './components/QueryPanel';
 import { OutlinePanel } from './components/OutlinePanel';
+import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
 import { SyncStatusIndicator } from './components/sync/SyncStatusIndicator';
-import type { LLMSettings } from './services/llm-formatter';
+import type { LLMSettings } from './services/llm-service';
+import { useSettings, useCredentials } from '@/lib/settings';
 
 type DialogType = 'files' | 'voice-log' | 'settings' | null;
 
@@ -54,9 +58,14 @@ function App() {
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Right panel state
-	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | null>(null);
+	const [rightPanel, setRightPanel] = useState<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph' | null>(null);
+	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(true);
+	const [rightPanelWidth, setRightPanelWidth] = useState(320);
+	const [isRightPanelResizing, setIsRightPanelResizing] = useState(false);
 	// Track last used panel for toggle button
-	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline'>('outline');
+	const lastRightPanelRef = useRef<'backlinks' | 'ai-query' | 'query' | 'outline' | 'graph'>('outline');
+	// Graph dialog state
+	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
 
 	// Update last panel ref when panel changes
 	useEffect(() => {
@@ -65,10 +74,41 @@ function App() {
 		}
 	}, [rightPanel]);
 
-	// Toggle right panel visibility
+	// Toggle right panel collapsed state
 	const toggleRightPanel = useCallback(() => {
-		setRightPanel(prev => prev ? null : lastRightPanelRef.current);
+		setIsRightPanelCollapsed(prev => !prev);
+		// When expanding, set a panel if none selected
+		if (isRightPanelCollapsed && !rightPanel) {
+			setRightPanel(lastRightPanelRef.current);
+		}
+	}, [isRightPanelCollapsed, rightPanel]);
+
+	// Right panel resize handlers
+	const stopRightPanelResizing = useCallback(() => {
+		setIsRightPanelResizing(false);
 	}, []);
+
+	const resizeRightPanel = useCallback(
+		(mouseMoveEvent: MouseEvent) => {
+			if (isRightPanelResizing) {
+				// Calculate width from right edge of window
+				const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+				if (newWidth > 200 && newWidth < 600) {
+					setRightPanelWidth(newWidth);
+				}
+			}
+		},
+		[isRightPanelResizing]
+	);
+
+	useEffect(() => {
+		window.addEventListener('mousemove', resizeRightPanel);
+		window.addEventListener('mouseup', stopRightPanelResizing);
+		return () => {
+			window.removeEventListener('mousemove', resizeRightPanel);
+			window.removeEventListener('mouseup', stopRightPanelResizing);
+		};
+	}, [resizeRightPanel, stopRightPanelResizing]);
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
@@ -82,13 +122,44 @@ function App() {
 		goForward,
 	} = useNavigationHistory();
 
-	// Default LLM settings for AI Query panel (would normally come from settings)
-	const [llmSettings] = useState<LLMSettings>({
-		provider: 'claude',
-		apiKey: '',
-		model: 'claude-3-sonnet-20240229',
-		timeoutMs: 30000,
-	});
+	// LLM settings derived from config context
+	const { settings } = useSettings();
+	const { credentials } = useCredentials();
+	const llmSettings: LLMSettings = useMemo(() => {
+		// Default fallback when settings not yet loaded
+		if (!settings) {
+			return {
+				provider: 'ollama',
+				apiKey: '',
+				model: 'qwen2.5:3b',
+				ollamaUrl: 'http://localhost:11434',
+				timeoutMs: 30000,
+			};
+		}
+
+		const provider = settings.stream_mode.provider;
+		let apiKey = '';
+		let model = '';
+
+		if (provider === 'claude') {
+			apiKey = credentials?.ai_providers.claude.api_key || '';
+			model = settings.ai_providers.claude.model;
+		} else if (provider === 'openai') {
+			apiKey = credentials?.ai_providers.openai.api_key || '';
+			model = settings.ai_providers.openai.model;
+		} else {
+			// Ollama doesn't need an API key
+			model = settings.ai_providers.ollama.model;
+		}
+
+		return {
+			provider,
+			apiKey,
+			model,
+			ollamaUrl: settings.ai_providers.ollama.url,
+			timeoutMs: settings.stream_mode.timeout_ms,
+		};
+	}, [settings, credentials]);
 
 	// Toast notifications
 	const { toast } = useToast();
@@ -183,6 +254,9 @@ function App() {
 		},
 		autoStopOnSilence: autoStopEnabled,
 		silenceTimeoutMs: autoStopTimeoutMs,
+		// Enable live streaming transcription (shows words every 4 seconds while recording)
+		enableStreaming: true,
+		streamingIntervalMs: 4000,
 	});
 
 	if (isQuickCapture) {
@@ -430,9 +504,14 @@ function App() {
 	useEffect(() => {
 		// Initialize embeddings on startup
 		const initialize = async () => {
+			console.time('[App] initialize total');
 			try {
+				console.time('[App] load_embedding_model');
 				await invoke('load_embedding_model');
+				console.timeEnd('[App] load_embedding_model');
+				console.time('[App] initialize_embeddings');
 				await invoke('initialize_embeddings');
+				console.timeEnd('[App] initialize_embeddings');
 
 				// Register global hotkey
 				try {
@@ -444,17 +523,21 @@ function App() {
 				}
 
 				setIsInitialized(true);
+				console.timeEnd('[App] initialize total');
 
 				// Restore last opened file
+				console.time('[App] restore last file');
 				const lastFile = await getStorageItem<string>(
 					'last_opened_file'
 				);
 				if (lastFile) {
 					handleFileSelect(lastFile);
 				}
-				
+				console.timeEnd('[App] restore last file');
+
 				// TODO: Restore full tab session if we decide to persist it
 			} catch (error) {
+				console.timeEnd('[App] initialize total');
 				console.error('Failed to initialize embeddings:', error);
 				// Still allow the app to run
 				setIsInitialized(true);
@@ -727,10 +810,20 @@ function App() {
 		<EditorContextProvider>
 		<VaultMetadataProvider
 			ready={vaultMeta.ready}
-			doc={vaultMeta.doc}
-			handle={vaultMeta.handle}
+			vaultId={vaultMeta.vaultId}
 			activeNoteId={vaultMeta.activeNoteId}
 			vaultPath={vaultPath}
+			normalizedVaultPath={vaultMeta.normalizedVaultPath}
+			loadingPhase={vaultMeta.loadingPhase}
+			manifest={vaultMeta.manifest}
+			manifestHandle={vaultMeta.manifestHandle}
+			noteManager={vaultMeta.noteManager}
+			activeNoteDoc={vaultMeta.activeNoteDoc}
+			activeNoteHandle={vaultMeta.activeNoteHandle}
+			noteCount={vaultMeta.noteCount}
+			migrationProgress={vaultMeta.migrationProgress}
+			graphCache={vaultMeta.graphCache}
+			graphCacheHandle={vaultMeta.graphCacheHandle}
 		>
 		<div className='flex h-screen w-screen overflow-hidden bg-background text-foreground'>
 			<Sidebar
@@ -776,28 +869,40 @@ function App() {
 						onGoForward={handleGoForward}
 					/>
 					
-					<Editor
-						filePath={currentFile}
-						audioState={audioState}
-						onVoiceLogEntry={addVoiceLogEntry}
-						onSystemCommand={handleSystemCommand}
-						onContentSaved={(content) => vaultMeta.recordContent(content)}
-						onContentChange={(content) => setEditorContent(content)}
-						onDirtyChange={(isDirty) => {
-							if (currentFile) {
-								handleTabDirtyChange(currentFile, isDirty);
-							}
-						}}
-						noteId={vaultMeta.activeNoteId}
-						vaultPath={vaultPath}
-						onNavigate={(target, _blockId) => {
-							// Navigate to the target note from transclusion
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-							const targetPath = target.endsWith('.md') ? target : target + '.md';
-							handleFileSelect(`${normalizedVault}/${targetPath}`);
-						}}
-					/>
+					{/* Conditional rendering based on file type */}
+					{!currentFile ? (
+						/* Empty state when no file is open */
+						<div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+							<FileText size={48} className="mb-4 opacity-30" />
+							<p className="text-sm">No file open</p>
+							<p className="text-xs mt-1 opacity-60">Select a file from the sidebar or press Ctrl+P</p>
+						</div>
+					) : isImageFile(currentFile) ? (
+						<ImageViewer filePath={currentFile} />
+					) : (
+						<Editor
+							filePath={currentFile}
+							audioState={audioState}
+							onVoiceLogEntry={addVoiceLogEntry}
+							onSystemCommand={handleSystemCommand}
+							onContentSaved={(content) => vaultMeta.recordContent(content)}
+							onContentChange={(content) => setEditorContent(content)}
+							onDirtyChange={(isDirty) => {
+								if (currentFile) {
+									handleTabDirtyChange(currentFile, isDirty);
+								}
+							}}
+							noteId={vaultMeta.activeNoteId}
+							vaultPath={vaultPath}
+							onNavigate={(target, _blockId) => {
+								// Navigate to the target note from transclusion
+								if (!vaultPath) return;
+								const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+								const targetPath = target.endsWith('.md') ? target : target + '.md';
+								handleFileSelect(`${normalizedVault}/${targetPath}`);
+							}}
+						/>
+					)}
 
 					{/* Status Bar */}
 					<StatusBar
@@ -825,6 +930,7 @@ function App() {
 							onToggleListening={toggleListening}
 							streamingText={streamingTranscription}
 							audioSamples={recentAudioSamples}
+							rightOffset={isRightPanelCollapsed ? 48 : rightPanelWidth}
 						/>
 					)}
 
@@ -833,102 +939,132 @@ function App() {
 						<SyncStatusIndicator showLabel />
 					</div>
 
-					{/* Right Panel Toggle Button - shows when panel is closed */}
-					{!rightPanel && (
-						<button
-							onClick={toggleRightPanel}
-							className="absolute right-2 top-14 z-30 p-1.5 rounded-md bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border/40"
-							title={`Open ${lastRightPanelRef.current} panel`}
-						>
-							<PanelRightOpen size={18} />
-						</button>
-					)}
-				</main>
+					</main>
 			</div>
 
-			{/* Right Panel */}
-			{rightPanel && (
-				<div className="w-80 border-l border-border bg-background flex flex-col">
-					<div className="flex items-center justify-between px-3 py-2 border-b border-border">
-						<div className="flex gap-2 flex-wrap">
-							<button
-								className={`text-xs px-2 py-1 rounded ${rightPanel === 'outline' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-								onClick={() => setRightPanel('outline')}
-							>
-								Outline
-							</button>
-							<button
-								className={`text-xs px-2 py-1 rounded ${rightPanel === 'backlinks' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-								onClick={() => setRightPanel('backlinks')}
-							>
-								Backlinks
-							</button>
-							<button
-								className={`text-xs px-2 py-1 rounded ${rightPanel === 'query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-								onClick={() => setRightPanel('query')}
-							>
-								Query
-							</button>
-							<button
-								className={`text-xs px-2 py-1 rounded ${rightPanel === 'ai-query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-								onClick={() => setRightPanel('ai-query')}
-							>
-								AI Query
-							</button>
-						</div>
+			{/* Right Panel - collapsible and resizable like left sidebar */}
+			<div
+				className="h-full flex shrink-0 relative group transition-all duration-200 ease-out border-l border-border bg-background"
+				style={{ width: isRightPanelCollapsed ? 48 : rightPanelWidth }}
+			>
+				{/* Resize handle */}
+				{!isRightPanelCollapsed && (
+					<div
+						className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100"
+						onMouseDown={() => setIsRightPanelResizing(true)}
+					/>
+				)}
+				{isRightPanelCollapsed ? (
+					/* Collapsed View */
+					<div className="flex flex-col items-center py-4 gap-2 w-full">
 						<button
-							className="text-muted-foreground hover:text-foreground"
-							onClick={() => setRightPanel(null)}
-							title="Close panel"
+							onClick={toggleRightPanel}
+							className="p-2 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+							title="Expand Panel"
 						>
-							<span className="text-lg">&times;</span>
+							<PanelRightOpen size={20} />
 						</button>
 					</div>
-					<div className="flex-1 overflow-auto">
-						{rightPanel === 'outline' && (
-							<OutlinePanel
-								content={editorContent}
-								onNavigate={(line, from) => {
-									// Dispatch event for Editor to scroll to line
-									window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
-										detail: { line, from }
-									}));
-								}}
-							/>
-						)}
-						{rightPanel === 'backlinks' && (
-							<BacklinksPanel
-								noteId={vaultMeta.activeNoteId}
-								onNavigate={(relPath) => {
-									if (!vaultPath) return;
-									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-									handleFileSelect(`${normalizedVault}/${relPath}`);
-								}}
-							/>
-						)}
-						{rightPanel === 'query' && (
-							<QueryPanel
-								onNavigate={(relPath) => {
-									if (!vaultPath) return;
-									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-									handleFileSelect(`${normalizedVault}/${relPath}`);
-								}}
-							/>
-						)}
-						{rightPanel === 'ai-query' && (
-							<AIQueryPanel
-								vaultPath={vaultPath}
-								llmSettings={llmSettings}
-								onNavigate={(relPath) => {
-									if (!vaultPath) return;
-									const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-									handleFileSelect(`${normalizedVault}/${relPath}`);
-								}}
-							/>
-						)}
+				) : (
+					/* Expanded View */
+					<div className="flex-1 flex flex-col h-full overflow-hidden">
+						<div className="flex items-center justify-between px-3 py-2 border-b border-border">
+							<div className="flex gap-2 flex-wrap">
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'outline' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('outline')}
+								>
+									Outline
+								</button>
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'backlinks' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('backlinks')}
+								>
+									Backlinks
+								</button>
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('query')}
+								>
+									Query
+								</button>
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'ai-query' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('ai-query')}
+								>
+									AI Query
+								</button>
+								<button
+									className={`text-xs px-2 py-1 rounded ${rightPanel === 'graph' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+									onClick={() => setRightPanel('graph')}
+								>
+									Graph
+								</button>
+							</div>
+							<button
+								onClick={toggleRightPanel}
+								className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+								title="Collapse Panel"
+							>
+								<PanelRightClose size={16} />
+							</button>
+						</div>
+						<div className="flex-1 overflow-auto">
+							{rightPanel === 'outline' && (
+								<OutlinePanel
+									content={editorContent}
+									onNavigate={(line, from) => {
+										// Dispatch event for Editor to scroll to line
+										window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
+											detail: { line, from }
+										}));
+									}}
+								/>
+							)}
+							{rightPanel === 'backlinks' && (
+								<BacklinksPanel
+									noteId={vaultMeta.activeNoteId}
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+										handleFileSelect(`${normalizedVault}/${relPath}`);
+									}}
+								/>
+							)}
+							{rightPanel === 'query' && (
+								<QueryPanel
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+										handleFileSelect(`${normalizedVault}/${relPath}`);
+									}}
+								/>
+							)}
+							{rightPanel === 'ai-query' && (
+								<AIQueryPanel
+									vaultPath={vaultPath}
+									llmSettings={llmSettings}
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+										handleFileSelect(`${normalizedVault}/${relPath}`);
+									}}
+								/>
+							)}
+							{rightPanel === 'graph' && (
+								<GraphPanel
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+										handleFileSelect(`${normalizedVault}/${relPath}`);
+									}}
+									onExpand={() => setGraphDialogOpen(true)}
+								/>
+							)}
+						</div>
 					</div>
-				</div>
-			)}
+				)}
+			</div>
 
 			{/* Dialogs */}
 			<FileNavigatorDialog
@@ -963,6 +1099,15 @@ function App() {
 			<WhisperModelSelector
 				open={modelSelectorOpen}
 				onOpenChange={setModelSelectorOpen}
+			/>
+			<GraphDialog
+				open={graphDialogOpen}
+				onOpenChange={setGraphDialogOpen}
+				onNavigate={(relPath) => {
+					if (!vaultPath) return;
+					const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+					handleFileSelect(`${normalizedVault}/${relPath}`);
+				}}
 			/>
 			<Toaster />
 

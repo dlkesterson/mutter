@@ -2,17 +2,20 @@
  * useNoteSuperTags Hook
  *
  * Manages supertag instances applied to a specific note.
- * Uses VaultMetadataContext for CRDT access.
+ * Uses activeNoteHandle for mutations via NoteDoc functions.
  */
 
 import { useMemo, useCallback } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import {
-  getNoteSupertagInstances,
   applySupertagToNote,
   removeSupertagFromNote,
-  type SupertagInstance,
-} from '@/crdt/vaultMetadataDoc';
+  getSupertagInstances,
+} from '@/crdt/noteDoc';
+import type { SupertagInstance } from '@/crdt/vaultMetadataDoc';
+
+// Re-export type for consumers
+export type { SupertagInstance };
 
 export interface UseNoteSuperTagsResult {
   /** Supertag instances applied to this note */
@@ -29,42 +32,61 @@ export interface UseNoteSuperTagsResult {
 
 /**
  * Hook for managing supertags applied to a note
- * 
+ *
  * @param noteId - ID of the note (or null)
  * @returns Applied supertags and operations
  */
 export function useNoteSuperTags(noteId: string | null): UseNoteSuperTagsResult {
-  const { handle, doc, ready } = useVaultMetadata();
+  const { ready, activeNoteDoc, activeNoteHandle, activeNoteId } = useVaultMetadata();
 
+  // Get supertag instances from the active NoteDoc
   const instances = useMemo(() => {
-    if (!doc || !noteId) return [];
-    return getNoteSupertagInstances(doc, noteId);
-  }, [doc, noteId]);
+    // Only return instances if this is the active note
+    if (!activeNoteDoc || !noteId || noteId !== activeNoteId) return [];
+    return getSupertagInstances(activeNoteDoc);
+  }, [activeNoteDoc, noteId, activeNoteId]);
 
+  /**
+   * Apply a supertag to the note
+   */
   const apply = useCallback(
     (definitionId: string, values: Record<string, any>) => {
-      if (!handle || !noteId) return;
-      applySupertagToNote({ handle, noteId, definitionId, values });
+      if (!activeNoteHandle || !noteId || noteId !== activeNoteId) {
+        console.warn('[useNoteSuperTags] Cannot apply: no active note handle or note ID mismatch');
+        return;
+      }
+      applySupertagToNote(activeNoteHandle, { definitionId, values });
     },
-    [handle, noteId]
+    [activeNoteHandle, noteId, activeNoteId]
   );
 
+  /**
+   * Remove a supertag from the note
+   */
   const remove = useCallback(
     (definitionId: string) => {
-      if (!handle || !noteId) return;
-      removeSupertagFromNote({ handle, noteId, definitionId });
+      if (!activeNoteHandle || !noteId || noteId !== activeNoteId) {
+        console.warn('[useNoteSuperTags] Cannot remove: no active note handle or note ID mismatch');
+        return;
+      }
+      removeSupertagFromNote(activeNoteHandle, definitionId);
     },
-    [handle, noteId]
+    [activeNoteHandle, noteId, activeNoteId]
   );
 
+  /**
+   * Update supertag values (removes and re-applies with new values)
+   */
   const updateValues = useCallback(
     (definitionId: string, values: Record<string, any>) => {
-      if (!handle || !noteId) return;
-      // Remove and re-apply with new values
-      removeSupertagFromNote({ handle, noteId, definitionId });
-      applySupertagToNote({ handle, noteId, definitionId, values });
+      if (!activeNoteHandle || !noteId || noteId !== activeNoteId) {
+        console.warn('[useNoteSuperTags] Cannot update: no active note handle or note ID mismatch');
+        return;
+      }
+      // applySupertagToNote handles update if already applied
+      applySupertagToNote(activeNoteHandle, { definitionId, values });
     },
-    [handle, noteId]
+    [activeNoteHandle, noteId, activeNoteId]
   );
 
   return {

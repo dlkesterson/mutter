@@ -9,9 +9,9 @@
  * - Navigation to source notes
  */
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent } from 'react';
 import { useAIQuery } from '@/hooks/useAIQuery';
-import type { LLMSettings } from '@/services/llm-formatter';
+import type { LLMSettings } from '@/services/llm-service';
 
 interface AIQueryPanelProps {
   vaultPath: string | null;
@@ -41,6 +41,28 @@ export function AIQueryPanel({
   } = useAIQuery(vaultPath, llmSettings);
 
   const [input, setInput] = useState('');
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track elapsed time while loading (and not indexing)
+  useEffect(() => {
+    if (loading && !indexProgress) {
+      setElapsedTime(0);
+      timerRef.current = setInterval(() => {
+        setElapsedTime((prev) => prev + 100);
+      }, 100);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [loading, indexProgress]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -109,7 +131,16 @@ export function AIQueryPanel({
                      disabled:opacity-50 disabled:cursor-not-allowed
                      hover:bg-primary/90 transition-colors"
         >
-          {loading && !indexProgress ? 'Thinking...' : 'Ask'}
+          {loading && !indexProgress ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="animate-pulse">Thinking...</span>
+              <span className="font-mono text-xs opacity-75">
+                {(elapsedTime / 1000).toFixed(1)}s
+              </span>
+            </span>
+          ) : (
+            'Ask'
+          )}
         </button>
         {indexSize === 0 && !loading && (
           <p className="text-xs text-muted-foreground text-center">
@@ -152,7 +183,7 @@ export function AIQueryPanel({
                   >
                     <button
                       className="text-left w-full"
-                      onClick={() => onNavigate(source.note.rel_path)}
+                      onClick={() => onNavigate(source.note.relPath)}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-accent hover:underline">

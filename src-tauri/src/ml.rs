@@ -257,8 +257,12 @@ impl WhisperEngine {
             .ok_or_else(|| anyhow::anyhow!("Invalid model path (non-UTF8)"))?;
 
         // Create context parameters
+        // GPU support is automatically enabled when whisper-rs is compiled with the "cuda" feature
         let params = WhisperContextParameters::default();
-        // Note: GPU support is enabled at compile time via the "cuda" feature
+
+        // Note: CUDA acceleration is enabled via whisper-rs feature flag in Cargo.toml
+        // If GPU is available, whisper.cpp will use it automatically
+        log::info!("Creating Whisper context (GPU acceleration enabled if CUDA available)");
 
         let ctx = WhisperContext::new_with_params(path_str, params)
             .map_err(|e| anyhow::anyhow!("Failed to create Whisper context: {}", e))?;

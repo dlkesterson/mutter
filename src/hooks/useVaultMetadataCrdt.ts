@@ -1,42 +1,77 @@
+/**
+ * useVaultMetadataCrdt Hook
+ *
+ * Manages CRDT-based vault metadata using the split document architecture:
+ * - ManifestDoc: Lightweight root document with note URLs and path indexes
+ * - NoteDoc: Individual documents per note (lazy loaded)
+ * - GraphCacheDoc: Pre-computed graph edges and backlinks
+ *
+ * If a legacy VaultMetadataDoc exists, it's migrated to split format on first load,
+ * then the legacy URL is deleted.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DocHandle } from '@automerge/react';
 import { isValidAutomergeUrl } from '@automerge/react';
+import type { AnyDocumentId } from '@automerge/automerge-repo';
 import { getCrdtRepo } from '@/crdt/repo';
-import { startVaultCrdtFsSnapshotSync, type CrdtFsSyncStatus } from '@/crdt/vaultFsSnapshotSync';
-import { getMutterDeviceId, getOrCreateVaultState, setVaultMetadataDocUrl } from '@/crdt/vaultTauri';
+import {
+  getMutterDeviceId,
+  getOrCreateVaultState,
+  setManifestDocUrl,
+  setVaultMetadataDocUrl,
+} from '@/crdt/vaultTauri';
 import {
   ensureVaultMetadataDocShape,
-  findNoteIdByRelPath,
-  findRelPathByNoteId,
-  ensureNoteForRelPath,
-  recordNoteOpened,
-  recordNoteRenamed,
-  setNoteLinksFromContent,
-  setNoteTags,
   toVaultRelativePath,
-  updateNoteBlocks,
-  VAULT_METADATA_SCHEMA_VERSION,
   type VaultMetadataDoc,
 } from '@/crdt/vaultMetadataDoc';
+import {
+  type ManifestDoc,
+  createEmptyManifest,
+  ensureManifestDocShape,
+  findNoteIdByPath,
+  findPathByNoteId,
+  getNoteCount,
+} from '@/crdt/manifestDoc';
+import {
+  type NoteDoc,
+  setNoteLinks,
+  setNoteTags,
+  updateNoteBlocks,
+  recordNoteOpened,
+} from '@/crdt/noteDoc';
+import type { GraphCacheDoc } from '@/crdt/graphCacheDoc';
+import { NoteDocManager, createNoteDocManager } from '@/crdt/noteDocManager';
+import { migrateToSplitDocuments, type MigrationProgress } from '@/crdt/migration';
 import { extractBlocks } from '@/editor/blockIds';
-import { buildVaultGraph, buildGraphForNote, graphNeedsRebuild } from '@/graph/graphBuilder';
-import { readTextFile } from '@tauri-apps/plugin-fs';
+import { parseLinks } from '@/graph/linkParser';
+
+/** CRDT loading phase for UI feedback */
+export type CrdtLoadingPhase = 'idle' | 'starting' | 'loading-doc' | 'migrating' | 'ready' | 'error';
 
 type Result = {
   ready: boolean;
   vaultId: string | null;
   docUrl: string | null;
   lastError: string | null;
-  fsSyncStatus: CrdtFsSyncStatus;
   activeNoteId: string | null;
   openNoteById: (noteId: string) => string | null;
   setActiveNoteTags: (tags: string[]) => void;
   recordRename: (oldPath: string, newPath: string) => void;
   recordContent: (content: string) => void;
-  /** Get current CRDT document (may be null if not ready) */
-  doc: VaultMetadataDoc | null;
-  /** Get CRDT handle for advanced operations */
-  handle: DocHandle<VaultMetadataDoc> | null;
+  normalizedVaultPath: string | null;
+  loadingPhase: CrdtLoadingPhase;
+  manifest: ManifestDoc | null;
+  manifestHandle: DocHandle<ManifestDoc> | null;
+  noteManager: NoteDocManager | null;
+  activeNoteDoc: NoteDoc | null;
+  /** Handle to the active note's document (for mutations) */
+  activeNoteHandle: DocHandle<NoteDoc> | null;
+  noteCount: number;
+  migrationProgress: MigrationProgress | null;
+  graphCache: GraphCacheDoc | null;
+  graphCacheHandle: DocHandle<GraphCacheDoc> | null;
 };
 
 export function useVaultMetadataCrdt(params: {
@@ -47,244 +82,368 @@ export function useVaultMetadataCrdt(params: {
   const vaultPath = params.vaultPath?.trim() || null;
   const activeFilePath = params.activeFilePath?.trim() || null;
 
-  const handleRef = useRef<DocHandle<VaultMetadataDoc> | null>(null);
-  const stopSyncRef = useRef<null | (() => void)>(null);
-  const detachRef = useRef<null | (() => void)>(null);
+  // Refs for document handles
+  const manifestHandleRef = useRef<DocHandle<ManifestDoc> | null>(null);
+  const graphCacheHandleRef = useRef<DocHandle<GraphCacheDoc> | null>(null);
+  const noteManagerRef = useRef<NoteDocManager | null>(null);
+  const activeNoteHandleRef = useRef<DocHandle<NoteDoc> | null>(null);
 
+  // State
   const [ready, setReady] = useState(false);
   const [vaultId, setVaultId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-  const [fsSyncStatus, setFsSyncStatus] = useState<CrdtFsSyncStatus>({
-    lastExportAtMs: null,
-    lastImportAtMs: null,
-    peers: [],
-    lastError: null,
-  });
+  const [loadingPhase, setLoadingPhase] = useState<CrdtLoadingPhase>('idle');
+  const [activeNoteDoc, setActiveNoteDoc] = useState<NoteDoc | null>(null);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Boot effect: Load or create manifest
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
-    detachRef.current?.();
-    detachRef.current = null;
-    stopSyncRef.current?.();
-    stopSyncRef.current = null;
-    handleRef.current = null;
+    // Reset state
+    manifestHandleRef.current = null;
+    graphCacheHandleRef.current = null;
+    noteManagerRef.current = null;
+    activeNoteHandleRef.current = null;
     setReady(false);
     setVaultId(null);
     setDocUrl(null);
     setLastError(null);
     setActiveNoteId(null);
-    setFsSyncStatus({ lastExportAtMs: null, lastImportAtMs: null, peers: [], lastError: null });
+    setActiveNoteDoc(null);
+    setLoadingPhase('idle');
+    setMigrationProgress(null);
 
     if (!vaultPath) return;
 
+    setLoadingPhase('starting');
+
     const boot = async () => {
       try {
-        const deviceId = await getMutterDeviceId();
+        console.time('[VaultMeta] boot');
+
+        // Get vault state (device ID is created as a side effect if needed)
+        await getMutterDeviceId();
         const state = await getOrCreateVaultState(vaultPath);
         if (cancelled) return;
 
         setVaultId(state.vault_id);
 
-        let handle: DocHandle<VaultMetadataDoc>;
-        if (state.vault_metadata_doc_url && isValidAutomergeUrl(state.vault_metadata_doc_url)) {
-          handle = await repo.find<VaultMetadataDoc>(state.vault_metadata_doc_url);
+        const hasManifest = state.manifest_doc_url && isValidAutomergeUrl(state.manifest_doc_url);
+        const hasLegacy = state.vault_metadata_doc_url && isValidAutomergeUrl(state.vault_metadata_doc_url);
+
+        if (hasManifest) {
+          // ═══════════════════════════════════════════════════════════════════
+          // SPLIT FORMAT: Load manifest (fast!)
+          // ═══════════════════════════════════════════════════════════════════
+          console.log('[VaultMeta] Loading manifest...');
+          setLoadingPhase('loading-doc');
+
+          const manifestHandle = await repo.find<ManifestDoc>(state.manifest_doc_url as AnyDocumentId);
+          await manifestHandle.whenReady();
+          if (cancelled) return;
+
+          manifestHandle.change((doc: any) => ensureManifestDocShape(doc, state.vault_id));
+          manifestHandleRef.current = manifestHandle;
+          setDocUrl(manifestHandle.url);
+
+          // Load graph cache if available
+          const manifest = manifestHandle.doc();
+          if (manifest?.graph_cache_url && isValidAutomergeUrl(manifest.graph_cache_url)) {
+            const graphHandle = await repo.find<GraphCacheDoc>(manifest.graph_cache_url as AnyDocumentId);
+            await graphHandle.whenReady();
+            graphCacheHandleRef.current = graphHandle;
+          }
+
+          // Create note manager
+          noteManagerRef.current = createNoteDocManager(repo, manifestHandle, {
+            maxCacheSize: 100,
+            debug: false,
+          });
+
+          setReady(true);
+          setLoadingPhase('ready');
+          console.timeEnd('[VaultMeta] boot');
+          console.log(`[VaultMeta] Ready with ${getNoteCount(manifest)} notes`);
+
+        } else if (hasLegacy) {
+          // ═══════════════════════════════════════════════════════════════════
+          // LEGACY: Migrate to split format, then delete legacy URL
+          // ═══════════════════════════════════════════════════════════════════
+          console.log('[VaultMeta] Migrating legacy vault...');
+          setLoadingPhase('loading-doc');
+
+          // Load legacy doc for migration
+          const legacyHandle = await repo.find<VaultMetadataDoc>(state.vault_metadata_doc_url as AnyDocumentId);
+          await legacyHandle.whenReady();
+          if (cancelled) return;
+
+          legacyHandle.change((doc: any) => ensureVaultMetadataDocShape(doc, state.vault_id));
+          const legacyDoc = legacyHandle.doc();
+
+          if (legacyDoc) {
+            setLoadingPhase('migrating');
+            console.log(`[VaultMeta] Migrating ${Object.keys(legacyDoc.notes ?? {}).length} notes...`);
+
+            const result = await migrateToSplitDocuments(
+              repo,
+              legacyDoc,
+              (progress) => setMigrationProgress(progress)
+            );
+
+            if (cancelled) return;
+
+            if (result.success && result.manifestHandle) {
+              // Save manifest URL and DELETE legacy URL
+              await setManifestDocUrl(vaultPath, result.manifestHandle.url);
+              await setVaultMetadataDocUrl(vaultPath, null); // Delete legacy!
+
+              manifestHandleRef.current = result.manifestHandle;
+              graphCacheHandleRef.current = result.graphCacheHandle;
+              setDocUrl(result.manifestHandle.url);
+
+              noteManagerRef.current = createNoteDocManager(repo, result.manifestHandle, {
+                maxCacheSize: 100,
+                debug: false,
+              });
+
+              setReady(true);
+              setLoadingPhase('ready');
+              setMigrationProgress(null);
+              console.timeEnd('[VaultMeta] boot');
+              console.log(`[VaultMeta] Migration complete! ${result.notesMigrated} notes, ${result.edgesMigrated} edges`);
+            } else {
+              throw new Error(result.error || 'Migration failed');
+            }
+          } else {
+            // Empty legacy doc - just create new manifest
+            await createNewManifest();
+          }
+
         } else {
-          handle = repo.create<VaultMetadataDoc>({
-            schema_version: VAULT_METADATA_SCHEMA_VERSION,
-            meta: { created_at: Date.now(), vault_id: state.vault_id },
-            notes: {},
-            note_id_by_path: {},
-            // v3 fields
-            supertag_definitions: {},
-            graph_edges: {},
-            backlink_index: {},
-          });
-          await setVaultMetadataDocUrl(vaultPath, handle.url);
+          // ═══════════════════════════════════════════════════════════════════
+          // NEW VAULT: Create manifest
+          // ═══════════════════════════════════════════════════════════════════
+          await createNewManifest();
         }
 
-        await handle.whenReady();
-        if (cancelled) return;
+        async function createNewManifest() {
+          console.log('[VaultMeta] Creating new manifest...');
+          setLoadingPhase('loading-doc');
 
-        handle.change((doc: any) => ensureVaultMetadataDocShape(doc, state.vault_id));
+          const manifestData = createEmptyManifest(state.vault_id);
+          const manifestHandle = repo.create<ManifestDoc>(manifestData as ManifestDoc);
+          await manifestHandle.whenReady();
+          if (cancelled) return;
 
-        handleRef.current = handle;
-        setDocUrl(handle.url);
-        setReady(true);
-        setLastError(null);
+          // vaultPath is guaranteed non-null here (early return in effect)
+          await setManifestDocUrl(vaultPath!, manifestHandle.url);
 
-        stopSyncRef.current = startVaultCrdtFsSnapshotSync({
-          repo,
-          handle,
-          vaultPath,
-          deviceId,
-          pollMs: 2000,
-          onStatus: setFsSyncStatus,
-        });
+          manifestHandleRef.current = manifestHandle;
+          setDocUrl(manifestHandle.url);
 
-        // Build vault graph if needed (async, doesn't block ready state)
-        const currentDoc = handle.doc();
-        if (currentDoc && graphNeedsRebuild(currentDoc)) {
-          console.log('[VaultMeta] Graph needs rebuild, starting...');
-          const vaultPathNormalized = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-          buildVaultGraph({
-            handle,
-            readNoteContent: async (relPath: string) => {
-              return await readTextFile(`${vaultPathNormalized}/${relPath}`);
-            },
-          }).then((result) => {
-            console.log(`[VaultMeta] Graph built: ${result.edgesCreated} edges from ${result.notesProcessed} notes`);
-          }).catch((err) => {
-            console.error('[VaultMeta] Graph build failed:', err);
+          noteManagerRef.current = createNoteDocManager(repo, manifestHandle, {
+            maxCacheSize: 100,
+            debug: false,
           });
+
+          setReady(true);
+          setLoadingPhase('ready');
+          console.timeEnd('[VaultMeta] boot');
+          console.log('[VaultMeta] New vault created');
         }
+
       } catch (e) {
+        console.timeEnd('[VaultMeta] boot');
         if (cancelled) return;
+        console.error('[VaultMeta] Boot error:', e);
         setLastError(e instanceof Error ? e.message : String(e));
+        setLoadingPhase('error');
       }
     };
 
-    const p = Promise.resolve(boot());
+    boot();
+
     return () => {
       cancelled = true;
-      stopSyncRef.current?.();
-      stopSyncRef.current = null;
-      detachRef.current?.();
-      detachRef.current = null;
-      void p;
-      handleRef.current = null;
+      manifestHandleRef.current = null;
+      graphCacheHandleRef.current = null;
+      noteManagerRef.current = null;
+      activeNoteHandleRef.current = null;
     };
   }, [repo, vaultPath]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Active note tracking
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const handle = handleRef.current;
-    if (!handle?.isReady?.()) {
+    if (!ready || !vaultPath || !activeFilePath) {
       setActiveNoteId(null);
-      return;
-    }
-    if (!vaultPath) return;
-    if (!activeFilePath) {
-      setActiveNoteId(null);
-      return;
-    }
-    const rel = toVaultRelativePath(vaultPath, activeFilePath);
-    if (!rel || rel === '') {
-      setActiveNoteId(null);
+      setActiveNoteDoc(null);
       return;
     }
 
-    const doc = handle.doc();
-    setActiveNoteId(findNoteIdByRelPath(doc, rel));
-  }, [activeFilePath, vaultPath]);
-
-  useEffect(() => {
-    const handle = handleRef.current;
-    if (!handle?.isReady?.()) return;
-    if (!vaultPath) return;
-    if (!activeFilePath) return;
     const rel = toVaultRelativePath(vaultPath, activeFilePath);
-    if (!rel || rel === '') return;
+    if (!rel) {
+      setActiveNoteId(null);
+      setActiveNoteDoc(null);
+      return;
+    }
+
+    const manifest = manifestHandleRef.current?.doc() ?? null;
+    const noteId = findNoteIdByPath(manifest, rel);
+    setActiveNoteId(noteId);
+
+    // Load note document
+    if (noteId && noteManagerRef.current) {
+      noteManagerRef.current.loadNote(noteId)
+        .then(handle => {
+          activeNoteHandleRef.current = handle;
+          setActiveNoteDoc(handle.doc() ?? null);
+        })
+        .catch(err => {
+          console.error('[VaultMeta] Failed to load note:', err);
+          setActiveNoteDoc(null);
+        });
+    } else {
+      activeNoteHandleRef.current = null;
+      setActiveNoteDoc(null);
+    }
+  }, [ready, activeFilePath, vaultPath]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Ensure note exists when opening file
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!ready || !vaultPath || !activeFilePath) return;
+
+    const rel = toVaultRelativePath(vaultPath, activeFilePath);
+    if (!rel) return;
+
+    const manager = noteManagerRef.current;
+    if (!manager) return;
 
     let cancelled = false;
-    void (async () => {
+
+    (async () => {
       try {
-        await ensureNoteForRelPath(handle, rel);
+        const noteHandle = await manager.getOrCreateNote(rel);
         if (cancelled) return;
-        recordNoteOpened({ handle, relPath: rel });
-      } catch {
-        // ignore
+
+        recordNoteOpened(noteHandle);
+        activeNoteHandleRef.current = noteHandle;
+        const noteDoc = noteHandle.doc();
+        setActiveNoteId(noteDoc?.id ?? null);
+        setActiveNoteDoc(noteDoc ?? null);
+      } catch (err) {
+        console.error('[VaultMeta] Failed to get/create note:', err);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeFilePath, vaultPath, ready]);
 
-  const openNoteById = useCallback(
-    (noteId: string) => {
-      const handle = handleRef.current;
-      if (!handle?.isReady?.()) return null;
-      if (!vaultPath) return null;
-      const rel = findRelPathByNoteId(handle.doc(), noteId);
-      if (!rel) return null;
-      const vp = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-      return `${vp}/${rel}`;
-    },
-    [vaultPath]
-  );
+    return () => { cancelled = true; };
+  }, [ready, activeFilePath, vaultPath]);
 
-  const setActiveNoteTags = useCallback(
-    (tags: string[]) => {
-      const handle = handleRef.current;
-      if (!handle?.isReady?.()) return;
-      if (!activeNoteId) return;
-      setNoteTags({ handle, noteId: activeNoteId, tags });
-    },
-    [activeNoteId]
-  );
+  // ─────────────────────────────────────────────────────────────────────────
+  // Callbacks
+  // ─────────────────────────────────────────────────────────────────────────
 
-  const recordRename = useCallback(
-    (oldPath: string, newPath: string) => {
-      const handle = handleRef.current;
-      if (!handle?.isReady?.()) return;
-      if (!vaultPath) return;
-      const oldRel = toVaultRelativePath(vaultPath, oldPath);
-      const newRel = toVaultRelativePath(vaultPath, newPath);
-      if (!oldRel || !newRel) return;
-      recordNoteRenamed({ handle, oldRelPath: oldRel, newRelPath: newRel });
-    },
-    [vaultPath]
-  );
+  const openNoteById = useCallback((noteId: string) => {
+    if (!vaultPath) return null;
+    const manifest = manifestHandleRef.current?.doc() ?? null;
+    const rel = findPathByNoteId(manifest, noteId);
+    if (!rel) return null;
+    const vp = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+    return `${vp}/${rel}`;
+  }, [vaultPath]);
 
-  const recordContent = useCallback(
-    (content: string) => {
-      const handle = handleRef.current;
-      if (!handle?.isReady?.()) return;
-      if (!activeNoteId) return;
+  const setActiveNoteTags = useCallback((tags: string[]) => {
+    const noteHandle = activeNoteHandleRef.current;
+    if (noteHandle) {
+      setNoteTags(noteHandle, tags);
+    }
+  }, []);
 
-      // Extract and persist links
-      setNoteLinksFromContent({ handle, noteId: activeNoteId, content });
+  const recordRename = useCallback((oldPath: string, newPath: string) => {
+    if (!vaultPath) return;
+    const oldRel = toVaultRelativePath(vaultPath, oldPath);
+    const newRel = toVaultRelativePath(vaultPath, newPath);
+    if (!oldRel || !newRel) return;
 
-      // Extract and persist blocks to CRDT
-      const blocks = extractBlocks(content);
-      if (blocks.length > 0) {
-        updateNoteBlocks({ handle, noteId: activeNoteId, blocks });
-        console.log(`[CRDT] Persisted ${blocks.length} blocks for note ${activeNoteId}`);
-      }
+    const manager = noteManagerRef.current;
+    if (!manager) return;
 
-      // Rebuild graph edges for this note (incremental update)
-      const result = buildGraphForNote({
-        handle,
-        sourceNoteId: activeNoteId,
-        sourceBlockId: null,
-        content,
-      });
-      if (result.edgesCreated > 0 || result.unresolvedLinks.length > 0) {
-        console.log(`[CRDT] Graph updated: ${result.edgesCreated} edges, ${result.unresolvedLinks.length} unresolved`);
-      }
-    },
-    [activeNoteId]
-  );
+    const noteId = manager.findNoteIdByPath(oldRel);
+    if (noteId) {
+      manager.renameNote(noteId, oldRel, newRel);
+    }
+  }, [vaultPath]);
 
-  // Get current doc snapshot (memoized to prevent unnecessary rerenders)
-  const doc = useMemo(() => {
-    return handleRef.current?.doc() ?? null;
-  }, [ready, activeNoteId]); // Re-compute when ready or activeNoteId changes
+  const recordContent = useCallback((content: string) => {
+    const noteHandle = activeNoteHandleRef.current;
+    if (!noteHandle) return;
+
+    // Update links
+    setNoteLinks(noteHandle, parseLinks(content).map(l => l.target));
+
+    // Update blocks
+    const blocks = extractBlocks(content);
+    if (blocks.length > 0) {
+      updateNoteBlocks(noteHandle, blocks);
+    }
+
+    // Update local state
+    setActiveNoteDoc(noteHandle.doc() ?? null);
+
+    // TODO: Update graph cache incrementally
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Memoized values
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const manifest = useMemo(() => {
+    return manifestHandleRef.current?.doc() ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  const graphCache = useMemo(() => {
+    return graphCacheHandleRef.current?.doc() ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  const normalizedVaultPath = useMemo(() => {
+    if (!vaultPath) return null;
+    return vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
+  }, [vaultPath]);
+
+  const noteCount = useMemo(() => {
+    return getNoteCount(manifest);
+  }, [manifest]);
 
   return {
     ready,
     vaultId,
     docUrl,
     lastError,
-    fsSyncStatus,
     activeNoteId,
     openNoteById,
     setActiveNoteTags,
     recordRename,
     recordContent,
-    doc,
-    handle: handleRef.current,
+    normalizedVaultPath,
+    loadingPhase,
+    manifest,
+    manifestHandle: manifestHandleRef.current,
+    noteManager: noteManagerRef.current,
+    activeNoteDoc,
+    activeNoteHandle: activeNoteHandleRef.current,
+    noteCount,
+    migrationProgress,
+    graphCache,
+    graphCacheHandle: graphCacheHandleRef.current,
   };
 }

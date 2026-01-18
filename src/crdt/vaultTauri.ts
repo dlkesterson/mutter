@@ -3,7 +3,10 @@ import { invoke } from '@tauri-apps/api/core';
 export type VaultState = {
   vault_id: string;
   created_at: string;
+  /** Legacy: monolithic VaultMetadataDoc URL (pre-split) */
   vault_metadata_doc_url?: string | null;
+  /** New: lightweight ManifestDoc URL (post-split) */
+  manifest_doc_url?: string | null;
 };
 
 export async function getMutterDeviceId(): Promise<string> {
@@ -16,6 +19,14 @@ export async function getOrCreateVaultState(vaultPath: string): Promise<VaultSta
 
 export async function setVaultMetadataDocUrl(vaultPath: string, docUrl: string | null): Promise<void> {
   return invoke<void>('set_vault_metadata_doc_url_cmd', { vaultPath, docUrl });
+}
+
+/**
+ * Set the manifest document URL for a vault (new split-doc format).
+ * This replaces the legacy vault_metadata_doc_url.
+ */
+export async function setManifestDocUrl(vaultPath: string, docUrl: string | null): Promise<void> {
+  return invoke<void>('set_manifest_doc_url_cmd', { vaultPath, docUrl });
 }
 
 export type CrdtSnapshotInfo = {

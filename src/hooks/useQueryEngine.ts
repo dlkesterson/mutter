@@ -5,13 +5,14 @@
  * - DSL parsing and execution
  * - Recent query history
  * - Query suggestions/autocomplete
+ *
+ * Uses the split document format (ManifestDoc + GraphCacheDoc + NoteDocs).
  */
 
 import { useState, useCallback, useMemo } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import { parseQuery, validateQuery, describeQuery } from '@/query/parser';
-import { executeQuery, getQuerySuggestions } from '@/query/executor';
-import type { QueryResult } from '@/query/executor';
+import { executeSplitQuery, getSplitQuerySuggestions, type SplitQueryResult } from '@/query/splitExecutor';
 import type { ParsedQuery } from '@/query/parser';
 
 const STORAGE_KEY = 'mutter:recent_queries';
@@ -25,7 +26,7 @@ export interface QueryEngineState {
   /** Query validation errors */
   errors: string[];
   /** Last execution result */
-  result: QueryResult | null;
+  result: SplitQueryResult | null;
   /** Whether a query is currently executing */
   isExecuting: boolean;
   /** Human-readable description of the query */
@@ -58,7 +59,7 @@ function saveRecentQueries(queries: string[]): void {
  * Hook for executing queries against the vault metadata
  */
 export function useQueryEngine() {
-  const { doc } = useVaultMetadata();
+  const { manifest, graphCache, noteManager } = useVaultMetadata();
 
   const [state, setState] = useState<QueryEngineState>({
     query: '',
@@ -92,7 +93,7 @@ export function useQueryEngine() {
    * Execute the current query
    */
   const search = useCallback(
-    (queryString?: string) => {
+    async (queryString?: string): Promise<SplitQueryResult | null> => {
       const queryToExecute = queryString ?? state.query;
       const parsed = parseQuery(queryToExecute);
       const errors = validateQuery(parsed);
@@ -108,33 +109,62 @@ export function useQueryEngine() {
         return null;
       }
 
-      setState((prev) => ({ ...prev, isExecuting: true }));
-
-      const result = executeQuery(parsed, doc);
+      if (!manifest) {
+        setState((prev) => ({
+          ...prev,
+          query: queryToExecute,
+          parsed,
+          errors: ['Vault not loaded'],
+          description: describeQuery(parsed),
+        }));
+        return null;
+      }
 
       setState((prev) => ({
         ...prev,
         query: queryToExecute,
         parsed,
         errors: [],
-        result,
-        isExecuting: false,
+        isExecuting: true,
         description: describeQuery(parsed),
       }));
 
-      // Save to recent queries (if non-empty and not duplicate)
-      if (queryToExecute.trim() && !recentQueries.includes(queryToExecute.trim())) {
-        const updated = [queryToExecute.trim(), ...recentQueries].slice(
-          0,
-          MAX_RECENT_QUERIES
-        );
-        setRecentQueries(updated);
-        saveRecentQueries(updated);
-      }
+      try {
+        const result = await executeSplitQuery({
+          query: parsed,
+          manifest,
+          graphCache,
+          noteManager,
+        });
 
-      return result;
+        setState((prev) => ({
+          ...prev,
+          result,
+          isExecuting: false,
+        }));
+
+        // Save to recent queries (if non-empty and not duplicate)
+        if (queryToExecute.trim() && !recentQueries.includes(queryToExecute.trim())) {
+          const updated = [queryToExecute.trim(), ...recentQueries].slice(
+            0,
+            MAX_RECENT_QUERIES
+          );
+          setRecentQueries(updated);
+          saveRecentQueries(updated);
+        }
+
+        return result;
+      } catch (err) {
+        console.error('[QueryEngine] Execution failed:', err);
+        setState((prev) => ({
+          ...prev,
+          errors: [err instanceof Error ? err.message : 'Query execution failed'],
+          isExecuting: false,
+        }));
+        return null;
+      }
     },
-    [state.query, doc, recentQueries]
+    [state.query, manifest, graphCache, noteManager, recentQueries]
   );
 
   /**
@@ -174,8 +204,8 @@ export function useQueryEngine() {
    * Get query suggestions based on partial input
    */
   const suggestions = useMemo(() => {
-    return getQuerySuggestions(state.query, doc);
-  }, [state.query, doc]);
+    return getSplitQuerySuggestions(state.query, manifest);
+  }, [state.query, manifest]);
 
   /**
    * Get matching recent queries for autocomplete

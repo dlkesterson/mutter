@@ -2,22 +2,20 @@
  * AI Query Hook
  *
  * Provides a React interface for querying the vault using natural language.
- * Handles:
- * - Building/rebuilding the embedding index
- * - Executing queries with loading states
- * - Error handling and progress reporting
+ * Uses ManifestDoc + file system for embeddings and queries.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import {
-  queryVault,
-  buildVaultEmbeddings,
   QueryResult,
   getEmbeddingCacheSize,
   clearEmbeddingCache,
+  buildVaultEmbeddings,
+  queryVault,
+  loadEmbeddingCache,
 } from '@/services/ai-query';
-import type { LLMSettings } from '@/services/llm-formatter';
+import type { LLMSettings } from '@/services/llm-service';
 
 /**
  * Progress state for embedding index build
@@ -55,28 +53,12 @@ export interface UseAIQueryResult {
  * @param vaultPath - Path to the vault root
  * @param llmSettings - LLM configuration (provider, API key, model)
  * @returns Query and indexing functions with state
- *
- * @example
- * ```tsx
- * function QueryPanel() {
- *   const { query, buildIndex, loading, result, error } = useAIQuery(vaultPath, llmSettings);
- *
- *   return (
- *     <div>
- *       <button onClick={buildIndex} disabled={loading}>Build Index</button>
- *       <input onSubmit={(e) => query(e.target.value)} />
- *       {result && <div>{result.answer}</div>}
- *       {error && <div className="error">{error}</div>}
- *     </div>
- *   );
- * }
- * ```
  */
 export function useAIQuery(
   vaultPath: string | null,
   llmSettings: LLMSettings
 ): UseAIQueryResult {
-  const { doc } = useVaultMetadata();
+  const { manifest } = useVaultMetadata();
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
@@ -84,35 +66,47 @@ export function useAIQuery(
   const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
   const [indexSize, setIndexSize] = useState(getEmbeddingCacheSize());
 
+  // Load cached embeddings when vault path changes
+  useEffect(() => {
+    if (!vaultPath) return;
+
+    loadEmbeddingCache(vaultPath).then((count) => {
+      setIndexSize(count);
+    });
+  }, [vaultPath]);
+
   /**
    * Build or rebuild the embedding index for all notes
    */
   const buildIndex = useCallback(async () => {
-    if (!doc || !vaultPath) {
+    if (!manifest || !vaultPath) {
       setError('Vault not loaded');
       return;
     }
 
     setLoading(true);
     setError(null);
-    setIndexProgress({ current: 0, total: Object.keys(doc.notes).length });
+    setIndexProgress({ current: 0, total: Object.keys(manifest.id_to_path).length });
 
     try {
-      await buildVaultEmbeddings({
-        doc,
+      const stats = await buildVaultEmbeddings({
+        manifest,
         vaultPath,
         onProgress: (current, total) => {
           setIndexProgress({ current, total });
         },
       });
-      setIndexProgress(null);
+
       setIndexSize(getEmbeddingCacheSize());
+      console.log(`[AI Query] Index built: ${stats.processed} new, ${stats.cached} cached, ${stats.failed} failed`);
     } catch (err) {
+      console.error('[AI Query] Index build failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to build index');
     } finally {
       setLoading(false);
+      setIndexProgress(null);
     }
-  }, [doc, vaultPath]);
+  }, [manifest, vaultPath]);
 
   /**
    * Clear the embedding cache
@@ -128,7 +122,7 @@ export function useAIQuery(
    */
   const query = useCallback(
     async (queryText: string) => {
-      if (!doc || !vaultPath) {
+      if (!manifest || !vaultPath) {
         setError('Vault not loaded');
         return;
       }
@@ -146,23 +140,24 @@ export function useAIQuery(
 
       setLoading(true);
       setError(null);
-      setResult(null);
 
       try {
         const queryResult = await queryVault({
           query: queryText,
-          doc,
+          manifest,
           vaultPath,
           llmSettings,
         });
+
         setResult(queryResult);
       } catch (err) {
+        console.error('[AI Query] Query failed:', err);
         setError(err instanceof Error ? err.message : 'Query failed');
       } finally {
         setLoading(false);
       }
     },
-    [doc, vaultPath, llmSettings]
+    [manifest, vaultPath, llmSettings]
   );
 
   return {

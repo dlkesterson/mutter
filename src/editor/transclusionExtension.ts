@@ -519,14 +519,8 @@ export function transclusionExtension(config: TransclusionConfig) {
               continue;
             }
 
-            // Mark as loading
+            // Mark as loading in our local tracking set
             this.loadingEmbeds.add(embedId);
-            state.embeds.set(embedId, {
-              link: embed,
-              content: null,
-              loading: true,
-              error: null,
-            });
 
             // Load content asynchronously
             try {
@@ -534,16 +528,26 @@ export function transclusionExtension(config: TransclusionConfig) {
                 embed.target,
                 embed.blockId
               );
-              view.dispatch({
-                effects: updateTransclusionContent.of({ embedId, content }),
-              });
+              // Try to dispatch - view may have been destroyed
+              try {
+                view.dispatch({
+                  effects: updateTransclusionContent.of({ embedId, content }),
+                });
+              } catch {
+                // View was destroyed, ignore
+              }
             } catch (err) {
-              view.dispatch({
-                effects: setTransclusionError.of({
-                  embedId,
-                  error: err instanceof Error ? err.message : 'Failed to load',
-                }),
-              });
+              // Try to dispatch error - view may have been destroyed
+              try {
+                view.dispatch({
+                  effects: setTransclusionError.of({
+                    embedId,
+                    error: err instanceof Error ? err.message : 'Failed to load',
+                  }),
+                });
+              } catch {
+                // View was destroyed, ignore
+              }
             } finally {
               this.loadingEmbeds.delete(embedId);
             }

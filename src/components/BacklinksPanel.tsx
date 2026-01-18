@@ -44,21 +44,28 @@ export function BacklinksPanel({ noteId, onNavigate }: BacklinksPanelProps) {
         {count} Backlink{count !== 1 ? 's' : ''}
       </h3>
       <ul className="space-y-2">
-        {backlinks.map((bl) => (
-          <li key={bl.edge.id}>
-            <button
-              className="w-full text-left px-2 py-1.5 rounded hover:bg-muted transition-colors"
-              onClick={() => onNavigate(bl.sourceNote.rel_path)}
-            >
-              <span className="text-sm font-medium">{bl.sourceNote.title}</span>
-              {bl.edge.sourceBlockId && (
-                <span className="text-xs text-muted-foreground ml-1">
-                  #{bl.edge.sourceBlockId}
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
+        {backlinks.map((bl) => {
+          // Derive title from path (basename without extension)
+          const title = bl.sourcePath
+            ? bl.sourcePath.split('/').pop()?.replace(/\.md$/i, '') ?? bl.sourceNoteId
+            : bl.sourceNoteId;
+          return (
+            <li key={bl.edge.id}>
+              <button
+                className="w-full text-left px-2 py-1.5 rounded hover:bg-muted transition-colors"
+                onClick={() => bl.sourcePath && onNavigate(bl.sourcePath)}
+                disabled={!bl.sourcePath}
+              >
+                <span className="text-sm font-medium">{title}</span>
+                {bl.edge.sourceBlockId && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    #{bl.edge.sourceBlockId}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

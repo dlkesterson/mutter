@@ -2,13 +2,11 @@
  * useGraphStats Hook
  *
  * Provides graph statistics for a note or the entire vault.
+ * Uses ManifestDoc for note metadata and GraphCacheDoc for edge data.
  */
 
 import { useMemo } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
-import { getNoteGraphStats, getBacklinks, getOutgoingLinks } from '@/crdt/vaultMetadataDoc';
-import type { VaultNote } from '@/crdt/vaultMetadataDoc';
-import { getGraphStatistics } from '@/graph/graphBuilder';
 
 /**
  * Graph stats for a single note
@@ -43,10 +41,10 @@ export interface VaultGraphStats {
  * @returns Stats about the note's connections
  */
 export function useGraphStats(noteId: string | null): NoteGraphStats & { loading: boolean } {
-  const { doc, ready } = useVaultMetadata();
+  const { ready, graphCache } = useVaultMetadata();
 
   return useMemo(() => {
-    if (!ready || !doc || !noteId) {
+    if (!ready || !graphCache || !noteId) {
       return {
         incomingCount: 0,
         outgoingCount: 0,
@@ -55,12 +53,24 @@ export function useGraphStats(noteId: string | null): NoteGraphStats & { loading
       };
     }
 
-    const stats = getNoteGraphStats({ doc, noteId });
+    // Count incoming links (backlinks)
+    const incomingCount = graphCache.backlink_index[noteId]?.length ?? 0;
+
+    // Count outgoing links
+    let outgoingCount = 0;
+    for (const edge of Object.values(graphCache.edges)) {
+      if (edge.sourceNoteId === noteId) {
+        outgoingCount++;
+      }
+    }
+
     return {
-      ...stats,
+      incomingCount,
+      outgoingCount,
+      totalConnections: incomingCount + outgoingCount,
       loading: false,
     };
-  }, [doc, noteId, ready]);
+  }, [graphCache, noteId, ready]);
 }
 
 /**
@@ -69,10 +79,10 @@ export function useGraphStats(noteId: string | null): NoteGraphStats & { loading
  * @returns Stats about the vault's link graph
  */
 export function useVaultGraphStats(): VaultGraphStats & { loading: boolean } {
-  const { doc, ready } = useVaultMetadata();
+  const { ready, manifest, graphCache, noteCount } = useVaultMetadata();
 
   return useMemo(() => {
-    if (!ready || !doc) {
+    if (!ready || !manifest) {
       return {
         noteCount: 0,
         edgeCount: 0,
@@ -82,12 +92,32 @@ export function useVaultGraphStats(): VaultGraphStats & { loading: boolean } {
       };
     }
 
-    const stats = getGraphStatistics(doc);
+    const edgeCount = graphCache ? Object.keys(graphCache.edges).length : 0;
+
+    // Calculate orphan count (notes with no connections)
+    let orphanCount = 0;
+    const connectedNotes = new Set<string>();
+
+    if (graphCache) {
+      for (const edge of Object.values(graphCache.edges)) {
+        connectedNotes.add(edge.sourceNoteId);
+        connectedNotes.add(edge.targetNoteId);
+      }
+    }
+
+    orphanCount = noteCount - connectedNotes.size;
+
+    // Average connections per note
+    const avgConnections = noteCount > 0 ? (edgeCount * 2) / noteCount : 0;
+
     return {
-      ...stats,
+      noteCount,
+      edgeCount,
+      orphanCount,
+      avgConnections,
       loading: false,
     };
-  }, [doc, ready]);
+  }, [ready, manifest, graphCache, noteCount]);
 }
 
 /**
@@ -100,32 +130,41 @@ export function useMostConnectedNotes(limit: number = 10): {
   notes: Array<{ noteId: string; title: string; connections: number }>;
   loading: boolean;
 } {
-  const { doc, ready } = useVaultMetadata();
+  const { ready, manifest, graphCache } = useVaultMetadata();
 
   return useMemo(() => {
-    if (!ready || !doc) {
+    if (!ready || !manifest || !graphCache) {
       return { notes: [], loading: !ready };
     }
 
-    // Calculate connections for each note
-    const noteStats = Object.values(doc.notes).map((note: VaultNote) => {
-      const incoming = getBacklinks({ doc, noteId: note.id }).length;
-      const outgoing = getOutgoingLinks({ doc, noteId: note.id }).length;
+    // Count connections for each note
+    const connectionCounts = new Map<string, number>();
 
-      return {
-        noteId: note.id,
-        title: note.title,
-        connections: incoming + outgoing,
-      };
-    });
+    for (const edge of Object.values(graphCache.edges)) {
+      connectionCounts.set(
+        edge.sourceNoteId,
+        (connectionCounts.get(edge.sourceNoteId) ?? 0) + 1
+      );
+      connectionCounts.set(
+        edge.targetNoteId,
+        (connectionCounts.get(edge.targetNoteId) ?? 0) + 1
+      );
+    }
 
-    // Sort by connections (descending) and take top N
-    const sorted = noteStats
+    // Build result with title derived from path
+    const noteStats = Array.from(connectionCounts.entries())
+      .map(([noteId, connections]) => {
+        const relPath = manifest.id_to_path[noteId];
+        const title = relPath
+          ? relPath.split('/').pop()?.replace(/\.md$/i, '') ?? noteId
+          : noteId;
+        return { noteId, title, connections };
+      })
       .sort((a, b) => b.connections - a.connections)
       .slice(0, limit);
 
-    return { notes: sorted, loading: false };
-  }, [doc, ready, limit]);
+    return { notes: noteStats, loading: false };
+  }, [ready, manifest, graphCache, limit]);
 }
 
 /**
@@ -136,30 +175,35 @@ export function useOrphanNotes(): {
   count: number;
   loading: boolean;
 } {
-  const { doc, ready } = useVaultMetadata();
+  const { ready, manifest, graphCache } = useVaultMetadata();
 
   return useMemo(() => {
-    if (!ready || !doc) {
+    if (!ready || !manifest) {
       return { notes: [], count: 0, loading: !ready };
     }
 
-    // Find notes with no connections
-    const orphans = Object.values(doc.notes)
-      .filter((note: VaultNote) => {
-        const incoming = getBacklinks({ doc, noteId: note.id }).length;
-        const outgoing = getOutgoingLinks({ doc, noteId: note.id }).length;
-        return incoming === 0 && outgoing === 0;
-      })
-      .map((note: VaultNote) => ({
-        noteId: note.id,
-        title: note.title,
-        relPath: note.rel_path,
-      }));
+    // Get all connected notes
+    const connectedNotes = new Set<string>();
+    if (graphCache) {
+      for (const edge of Object.values(graphCache.edges)) {
+        connectedNotes.add(edge.sourceNoteId);
+        connectedNotes.add(edge.targetNoteId);
+      }
+    }
+
+    // Find orphans
+    const orphans: Array<{ noteId: string; title: string; relPath: string }> = [];
+    for (const [noteId, relPath] of Object.entries(manifest.id_to_path)) {
+      if (!connectedNotes.has(noteId)) {
+        const title = relPath.split('/').pop()?.replace(/\.md$/i, '') ?? noteId;
+        orphans.push({ noteId, title, relPath });
+      }
+    }
 
     return {
       notes: orphans,
       count: orphans.length,
       loading: false,
     };
-  }, [doc, ready]);
+  }, [ready, manifest, graphCache]);
 }

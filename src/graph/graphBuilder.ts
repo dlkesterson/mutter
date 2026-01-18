@@ -173,34 +173,42 @@ export async function buildVaultGraph(params: {
 
   console.log(`[Graph] Building vault graph for ${notes.length} notes...`);
 
-  for (let i = 0; i < notes.length; i++) {
-    const note = notes[i];
+  // Process in batches to yield to UI thread
+  const batchSize = 20;
+  for (let i = 0; i < notes.length; i += batchSize) {
+    const batch = notes.slice(i, i + batchSize);
 
-    try {
-      // Read note content from disk
-      const content = await params.readNoteContent(note.rel_path);
+    for (const note of batch) {
+      try {
+        // Read note content from disk
+        const content = await params.readNoteContent(note.rel_path);
 
-      // Build graph for this note
-      const { edgesCreated, unresolvedLinks } = buildGraphForNote({
-        handle: params.handle,
-        sourceNoteId: note.id,
-        sourceBlockId: null,
-        content,
-      });
+        // Build graph for this note
+        const { edgesCreated, unresolvedLinks } = buildGraphForNote({
+          handle: params.handle,
+          sourceNoteId: note.id,
+          sourceBlockId: null,
+          content,
+        });
 
-      result.edgesCreated += edgesCreated;
-      result.unresolvedLinks.push(
-        ...unresolvedLinks.map((target) => ({
-          sourceNote: note.rel_path,
-          target,
-        }))
-      );
-    } catch (err) {
-      console.warn(`[Graph] Failed to process ${note.rel_path}:`, err);
+        result.edgesCreated += edgesCreated;
+        result.unresolvedLinks.push(
+          ...unresolvedLinks.map((target) => ({
+            sourceNote: note.rel_path,
+            target,
+          }))
+        );
+      } catch (err) {
+        console.warn(`[Graph] Failed to process ${note.rel_path}:`, err);
+      }
+
+      result.notesProcessed++;
     }
 
-    result.notesProcessed++;
-    params.onProgress?.(i + 1, notes.length);
+    params.onProgress?.(Math.min(i + batchSize, notes.length), notes.length);
+
+    // Yield to event loop to keep UI responsive
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   console.log(

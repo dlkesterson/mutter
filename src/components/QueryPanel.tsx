@@ -11,7 +11,7 @@
 
 import { useState, useCallback, FormEvent, KeyboardEvent, useRef } from 'react';
 import { useQueryEngine, PRESET_QUERIES } from '@/hooks/useQueryEngine';
-import type { VaultNote } from '@/crdt/vaultMetadataDoc';
+import type { QueryNoteInfo } from '@/query/splitExecutor';
 
 interface QueryPanelProps {
   onNavigate: (relPath: string) => void;
@@ -36,56 +36,36 @@ function formatRelativeDate(timestamp: number): string {
 
 /**
  * Note result item component
+ *
+ * Uses QueryNoteInfo which is a lightweight type without tags/supertags.
+ * This is intentional - the split format avoids loading NoteDocs for query results.
  */
 function NoteResultItem({
   note,
   onNavigate,
 }: {
-  note: VaultNote;
+  note: QueryNoteInfo;
   onNavigate: (relPath: string) => void;
 }) {
-  const hasTags = note.tags.length > 0;
-  const hasSupertags = (note.supertags?.length ?? 0) > 0;
-
   return (
     <li>
       <button
         className="w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors group"
-        onClick={() => onNavigate(note.rel_path)}
+        onClick={() => onNavigate(note.relPath)}
       >
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium group-hover:text-accent transition-colors">
             {note.title}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {formatRelativeDate(note.updated_at)}
-          </span>
+          {note.updatedAt && (
+            <span className="text-xs text-muted-foreground">
+              {formatRelativeDate(note.updatedAt)}
+            </span>
+          )}
         </div>
-        {(hasTags || hasSupertags) && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {note.supertags?.map((st) => (
-              <span
-                key={st.definitionId}
-                className="px-1.5 py-0.5 text-[10px] bg-accent/10 text-accent rounded"
-              >
-                #{st.definitionId.slice(0, 6)}
-              </span>
-            ))}
-            {note.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="px-1.5 py-0.5 text-[10px] bg-muted text-muted-foreground rounded"
-              >
-                #{tag}
-              </span>
-            ))}
-            {note.tags.length > 3 && (
-              <span className="text-[10px] text-muted-foreground">
-                +{note.tags.length - 3} more
-              </span>
-            )}
-          </div>
-        )}
+        <span className="text-xs text-muted-foreground truncate block">
+          {note.relPath}
+        </span>
       </button>
     </li>
   );

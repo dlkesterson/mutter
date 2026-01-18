@@ -1,91 +1,31 @@
 /**
- * Embedding Server API Client
- * Connects to the Tauri sidecar embedding server running on localhost:8080
+ * Embedding API Client
+ * Uses Tauri commands to access the ML embedding engine
  */
 
-const EMBEDDING_SERVER_URL = 'http://localhost:8080';
+import { invoke } from '@tauri-apps/api/core';
+
 const EMBEDDING_DIM = 384;
 
 export interface EmbeddingResponse {
   embedding: number[];
   dimensions: number;
   time_ms: number;
-  mode?: string;
-  device?: string;
-  info?: string;
-  warning?: string;
-}
-
-export interface BatchEmbeddingResponse {
-  embeddings: number[][];
-  count: number;
-  dimensions: number;
-  time_ms: number;
-  avg_time_per_text_ms: number;
-  mode?: string;
-  device?: string;
-}
-
-export interface HealthResponse {
-  status: string;
-  mode: string;
-  port: number;
-  embedding_dim: number;
-  device?: string;
-  cuda_available?: boolean;
 }
 
 /**
- * Get a single text embedding
+ * Get a single text embedding via Tauri command
  */
 export async function getEmbedding(text: string): Promise<EmbeddingResponse> {
-  const response = await fetch(`${EMBEDDING_SERVER_URL}/embed`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ text }),
-  });
+  const startTime = performance.now();
+  const embedding = await invoke<number[]>('get_embedding', { text });
+  const timeMs = performance.now() - startTime;
 
-  if (!response.ok) {
-    throw new Error(`Embedding API error: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Get embeddings for multiple texts at once (faster!)
- */
-export async function getBatchEmbeddings(
-  texts: string[]
-): Promise<BatchEmbeddingResponse> {
-  const response = await fetch(`${EMBEDDING_SERVER_URL}/batch`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ texts }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Embedding API error: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Check if the embedding server is healthy and ready
- */
-export async function checkHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${EMBEDDING_SERVER_URL}/health`);
-
-  if (!response.ok) {
-    throw new Error(`Health check failed: ${response.statusText}`);
-  }
-
-  return response.json();
+  return {
+    embedding,
+    dimensions: embedding.length,
+    time_ms: timeMs,
+  };
 }
 
 /**
@@ -109,57 +49,4 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-/**
- * Find the most similar text from a list of options
- */
-export async function findMostSimilar(
-  query: string,
-  options: string[]
-): Promise<{ text: string; similarity: number; index: number }> {
-  // Get embeddings for query and all options in a single batch
-  const allTexts = [query, ...options];
-  const { embeddings } = await getBatchEmbeddings(allTexts);
-
-  const queryEmbedding = embeddings[0];
-  const optionEmbeddings = embeddings.slice(1);
-
-  // Calculate similarities
-  const similarities = optionEmbeddings.map((emb) =>
-    cosineSimilarity(queryEmbedding, emb)
-  );
-
-  // Find the best match
-  let maxSim = -1;
-  let maxIdx = 0;
-
-  for (let i = 0; i < similarities.length; i++) {
-    if (similarities[i] > maxSim) {
-      maxSim = similarities[i];
-      maxIdx = i;
-    }
-  }
-
-  return {
-    text: options[maxIdx],
-    similarity: maxSim,
-    index: maxIdx,
-  };
-}
-
-/**
- * Example usage for Mutter command routing
- */
-export async function routeCommand(
-  userCommand: string,
-  availableCommands: string[]
-): Promise<{ command: string; confidence: number }> {
-  const result = await findMostSimilar(userCommand, availableCommands);
-
-  return {
-    command: result.text,
-    confidence: result.similarity,
-  };
-}
-
-// Export constants
-export { EMBEDDING_DIM, EMBEDDING_SERVER_URL };
+export { EMBEDDING_DIM };

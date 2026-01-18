@@ -11,6 +11,8 @@ interface VoiceIndicatorProps {
 	onToggleListening: () => void;
 	streamingText?: string;
 	audioSamples?: number[];
+	/** Offset from right edge (to avoid overlapping right panel) */
+	rightOffset?: number;
 }
 
 export function VoiceIndicator({
@@ -19,6 +21,7 @@ export function VoiceIndicator({
 	onToggleListening,
 	streamingText,
 	audioSamples = [],
+	rightOffset = 32,
 }: VoiceIndicatorProps) {
 	const getStatusColor = () => {
 		switch (state) {
@@ -47,7 +50,10 @@ export function VoiceIndicator({
 	};
 
 	return (
-		<div className='fixed bottom-8 right-8 flex flex-col items-end gap-2 z-40'>
+		<div
+			className='fixed bottom-8 flex flex-col items-end gap-2 z-40'
+			style={{ right: rightOffset + 8 }}
+		>
 			{/* Streaming transcription display */}
 			{streamingText && (
 				<div className='max-w-md p-3 bg-surface/95 backdrop-blur-md border border-border/20 rounded shadow-xl animate-in fade-in slide-in-from-bottom-2'>

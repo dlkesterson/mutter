@@ -25,7 +25,7 @@ import {
 } from '../editor/blockIdExtension';
 import { extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
-import { findNoteIdByRelPath } from '../crdt/vaultMetadataDoc';
+import { findNoteIdByPath } from '../crdt/manifestDoc';
 import '../editor/transclusion.css';
 import { useToast } from '../hooks/use-toast';
 import { useEditorContextSync } from '../hooks/useEditorContextSync';
@@ -33,7 +33,6 @@ import { useEditorContext } from '../context/EditorContextProvider';
 import { useVaultMetadata } from '../context/VaultMetadataContext';
 import { commandToIntentBucket } from '../types/editorContext';
 import { getStorageItem, setStorageItem } from '../utils/storage';
-import { formatWithLLM, type FormattingContext, type LLMSettings } from '../services/llm-formatter';
 import AmbiguityPopover from './AmbiguityPopover';
 import { VoiceSuggestions, useCursorScreenPosition } from './VoiceSuggestions';
 import type { ExtractedTask } from '../types';
@@ -108,11 +107,11 @@ export default function Editor({
 	const onBlockChangeRef = useRef(onBlockChange);
 	const vaultPathRef = useRef(vaultPath);
 	const onNavigateRef = useRef(onNavigate);
-	const { doc: vaultDoc } = useVaultMetadata();
-	const vaultDocRef = useRef(vaultDoc);
+	const { manifest } = useVaultMetadata();
+	const manifestRef = useRef(manifest);
 	const [content, setContent] = useState('');
 	const [savedContent, setSavedContent] = useState('');
-	const [minimapEnabled, setMinimapEnabled] = useState(true);
+	const [minimapEnabled, setMinimapEnabled] = useState(false);
 	const [editorFontSize, setEditorFontSize] = useState('16');
 	const [isLoadingFile, setIsLoadingFile] = useState(false);
 	const [ambiguityData, setAmbiguityData] = useState<{
@@ -153,8 +152,8 @@ export default function Editor({
 		syncCursorRef.current = syncCursor;
 		vaultPathRef.current = vaultPath;
 		onNavigateRef.current = onNavigate;
-		vaultDocRef.current = vaultDoc;
-	}, [onBlockChange, syncCursor, vaultPath, onNavigate, vaultDoc]);
+		manifestRef.current = manifest;
+	}, [onBlockChange, syncCursor, vaultPath, onNavigate, manifest]);
 
 	// Get cursor screen position for voice suggestions
 	const cursorScreenPosition = useCursorScreenPosition(viewRef.current);
@@ -326,71 +325,6 @@ export default function Editor({
 		};
 	}, []);
 
-	// Helper: Extract context from editor for LLM formatting
-	const extractFormattingContext = (
-		view: EditorView,
-		rawTranscription: string,
-		settings: { removeFillers: boolean; addStructure: boolean; matchStyle: boolean }
-	): FormattingContext => {
-		const doc = view.state.doc.toString();
-		const cursorPos = view.state.selection.main.head;
-
-		// Extract 500 chars before and after cursor
-		const before = doc.slice(Math.max(0, cursorPos - 500), cursorPos);
-		const after = doc.slice(cursorPos, Math.min(doc.length, cursorPos + 500));
-
-		// Analyze document structure
-		const hasHeaders = /^#{1,6}\s/m.test(doc);
-		const hasBullets = /^[-*+]\s/m.test(doc);
-
-		return {
-			rawTranscription,
-			cursorPosition: cursorPos,
-			surroundingText: { before, after },
-			documentStats: { hasHeaders, hasBullets },
-			settings,
-		};
-	};
-
-	// Helper: Load LLM settings from storage
-	const loadLLMSettings = async (): Promise<LLMSettings | null> => {
-		try {
-			const provider = await getStorageItem<'claude' | 'openai' | 'ollama'>('stream_mode_provider');
-			const timeoutMs = await getStorageItem<number>('stream_mode_timeout_ms');
-
-			if (!provider) {
-				console.error('Stream Mode provider not configured');
-				return null;
-			}
-
-			let apiKey = '';
-			let model = '';
-			let ollamaUrl: string | undefined;
-
-			if (provider === 'claude') {
-				apiKey = (await getStorageItem<string>('claude_api_key')) || '';
-				model = (await getStorageItem<string>('claude_model')) || 'claude-sonnet-4-5-20251029';
-			} else if (provider === 'openai') {
-				apiKey = (await getStorageItem<string>('openai_api_key')) || '';
-				model = (await getStorageItem<string>('openai_model')) || 'gpt-4-turbo-preview';
-			} else if (provider === 'ollama') {
-				ollamaUrl = (await getStorageItem<string>('ollama_url')) || 'http://localhost:11434';
-				model = (await getStorageItem<string>('ollama_model')) || 'llama3:8b';
-			}
-
-			return {
-				provider,
-				apiKey,
-				model,
-				ollamaUrl,
-				timeoutMs: timeoutMs || 10000,
-			};
-		} catch (error) {
-			console.error('Failed to load LLM settings:', error);
-			return null;
-		}
-	};
-
 	// Handle transcription results
 	useEffect(() => {
 		const handleTranscription = async (text: string) => {
@@ -417,105 +351,7 @@ export default function Editor({
 			}
 
 			try {
-				// Check if Stream Mode is enabled
-				const streamModeEnabled = await getStorageItem<boolean>('stream_mode_enabled');
-
-				if (streamModeEnabled) {
-					// Stream Mode: Format with LLM instead of classification
-					console.log('[Stream Mode] Formatting with LLM');
-
-					// Load formatting options
-					const removeFillers = (await getStorageItem<boolean>('stream_mode_remove_fillers')) ?? true;
-					const addStructure = (await getStorageItem<boolean>('stream_mode_add_structure')) ?? true;
-					const matchStyle = (await getStorageItem<boolean>('stream_mode_match_style')) ?? true;
-
-					// Extract context
-					const context = extractFormattingContext(viewRef.current, text, {
-						removeFillers,
-						addStructure,
-						matchStyle,
-					});
-
-					// Load LLM settings
-					const llmSettings = await loadLLMSettings();
-
-					if (!llmSettings) {
-						console.error('[Stream Mode] LLM settings not configured, falling back to raw text');
-						toast({
-							title: 'Stream Mode Error',
-							description: 'LLM settings not configured. Inserting raw text.',
-							variant: 'destructive',
-						});
-						// Fall back to inserting raw text
-						const { from } = viewRef.current.state.selection.main;
-						viewRef.current.dispatch({
-							changes: { from, insert: text },
-						});
-						return;
-					}
-
-					// Show formatting indicator
-					toast({
-						title: 'Formatting...',
-						description: `Using ${llmSettings.provider} to format transcription`,
-						duration: 2000,
-					});
-
-					// Format with LLM
-					const formattedText = await formatWithLLM(context, llmSettings);
-
-					if (formattedText) {
-						// Success: Insert formatted text
-						const { from } = viewRef.current.state.selection.main;
-						const insertLength = formattedText.length;
-
-						viewRef.current.dispatch({
-							changes: { from, insert: formattedText },
-						});
-
-						// Add flash effect
-						requestAnimationFrame(() => {
-							if (viewRef.current) {
-								const currentDocLen = viewRef.current.state.doc.length;
-								const safeTo = Math.min(from + insertLength, currentDocLen);
-
-								if (from <= currentDocLen) {
-									viewRef.current.dispatch({
-										effects: addFlash.of({
-											from,
-											to: safeTo,
-											type: 'insert',
-										}),
-									});
-								}
-							}
-						});
-
-						toast({
-							title: 'Text Formatted',
-							description: 'LLM formatting successful',
-							duration: 2000,
-						});
-					} else {
-						// Timeout or error: Fall back to raw text
-						console.warn('[Stream Mode] LLM formatting failed, inserting raw text');
-						toast({
-							title: 'Formatting Failed',
-							description: 'LLM timed out or failed. Inserted raw text instead.',
-							variant: 'destructive',
-							duration: 3000,
-						});
-
-						const { from } = viewRef.current.state.selection.main;
-						viewRef.current.dispatch({
-							changes: { from, insert: text },
-						});
-					}
-
-					return; // Exit early - Stream Mode bypasses classification
-				}
-
-				// Stream Mode disabled: Continue with existing classification flow
+				// Classify the transcription
 				const hasSelection =
 					viewRef.current.state.selection.main.from !==
 					viewRef.current.state.selection.main.to;
@@ -961,22 +797,22 @@ export default function Editor({
 				// Transclusion extension for live embeds
 				transclusionExtension({
 					resolveEmbed: async (target, blockId) => {
-						const doc = vaultDocRef.current;
+						const currentManifest = manifestRef.current;
 						const vp = vaultPathRef.current;
-						if (!doc || !vp) {
+						if (!currentManifest || !vp) {
 							throw new Error('Vault not loaded');
 						}
 						const normalizedVault = vp.replaceAll('\\', '/').replace(/\/+$/g, '');
 						const targetPath = target.endsWith('.md') ? target : target + '.md';
-						const noteId = findNoteIdByRelPath(doc, targetPath);
+						const noteId = findNoteIdByPath(currentManifest, targetPath);
 						if (!noteId) {
 							throw new Error(`Note not found: ${target}`);
 						}
-						const note = doc.notes[noteId];
-						if (!note) {
-							throw new Error(`Note not found: ${target}`);
+						const relPath = currentManifest.id_to_path[noteId];
+						if (!relPath) {
+							throw new Error(`Note path not found: ${target}`);
 						}
-						const fullPath = `${normalizedVault}/${note.rel_path}`;
+						const fullPath = `${normalizedVault}/${relPath}`;
 						const content = await readTextFile(fullPath);
 						if (!blockId) {
 							// Return full content (truncated for safety)
@@ -1115,6 +951,8 @@ export default function Editor({
 	// Block IDs should only be added when explicitly creating block references.
 	useEffect(() => {
 		if (!filePath || !content) return;
+		// Skip if content hasn't actually changed from saved version
+		if (content === savedContent) return;
 
 		const timer = setTimeout(() => {
 			writeTextFile(filePath, content)
@@ -1126,7 +964,7 @@ export default function Editor({
 		}, 500);
 
 		return () => clearTimeout(timer);
-	}, [content, filePath, onContentSaved]);
+	}, [content, savedContent, filePath, onContentSaved]);
 
 	return (
 		<div className='flex-1 flex flex-col overflow-hidden bg-background'>

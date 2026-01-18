@@ -2,14 +2,14 @@
  * Transclusion Resolver Hook
  *
  * Resolves embed targets (![[Note Name#blockId]]) to their content.
- * Uses the CRDT metadata to find notes and the file system to read content.
+ * Uses the manifest to find notes and the file system to read content.
  * Blocks are located by parsing the file content with extractBlocks.
  */
 
 import { useCallback } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import { readTextFile } from '@tauri-apps/plugin-fs';
-import { findNoteIdByRelPath } from '@/crdt/vaultMetadataDoc';
+import { findNoteIdByPath } from '@/crdt/manifestDoc';
 import { extractBlocks, findBlockById } from '@/editor/blockIds';
 
 /**
@@ -65,7 +65,7 @@ export interface TransclusionResolverResult {
 export function useTransclusionResolver(
   vaultPath: string | null
 ): TransclusionResolverResult {
-  const { doc } = useVaultMetadata();
+  const { manifest } = useVaultMetadata();
 
   /**
    * Normalize vault path (remove trailing slashes, normalize separators)
@@ -90,26 +90,26 @@ export function useTransclusionResolver(
    */
   const resolveEmbed = useCallback(
     async (target: string, blockId: string | null): Promise<string> => {
-      if (!doc || !vaultPath) {
+      if (!manifest || !vaultPath) {
         throw new Error('Vault not loaded');
       }
 
       // Resolve target to relative path
       const targetPath = resolveNotePath(target);
-      const noteId = findNoteIdByRelPath(doc, targetPath);
+      const noteId = findNoteIdByPath(manifest, targetPath);
 
       if (!noteId) {
         throw new Error(`Note not found: ${target}`);
       }
 
-      const note = doc.notes[noteId];
-      if (!note) {
-        throw new Error(`Note not found: ${target}`);
+      const relPath = manifest.id_to_path[noteId];
+      if (!relPath) {
+        throw new Error(`Note path not found: ${target}`);
       }
 
       // Build full path and read file content
       const normalizedVault = normalizeVaultPath(vaultPath);
-      const fullPath = `${normalizedVault}/${note.rel_path}`;
+      const fullPath = `${normalizedVault}/${relPath}`;
       const content = await readTextFile(fullPath);
 
       // If no blockId, return full content (truncated)
@@ -140,7 +140,7 @@ export function useTransclusionResolver(
 
       return blockLines.join('\n');
     },
-    [doc, vaultPath]
+    [manifest, vaultPath]
   );
 
   /**

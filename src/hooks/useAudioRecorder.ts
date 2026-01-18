@@ -12,13 +12,19 @@ interface AudioRecorderOptions {
     onStreamingTranscription?: (text: string) => void;
     autoStopOnSilence?: boolean;
     silenceTimeoutMs?: number;
+    /** Enable periodic streaming transcription (shows words while recording) */
+    enableStreaming?: boolean;
+    /** Interval in ms for streaming transcription (default: 4000) */
+    streamingIntervalMs?: number;
 }
 
 export function useAudioRecorder(options?: AudioRecorderOptions) {
     const {
         onSilenceDetected,
         autoStopOnSilence = true,
-        silenceTimeoutMs = 5000
+        silenceTimeoutMs = 5000,
+        enableStreaming = false,
+        streamingIntervalMs = 4000
     } = options || {};
 
     const [isRecording, setIsRecording] = useState(false);
@@ -33,18 +39,25 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     const autoStopCallbackRef = useRef<(() => void) | null>(null);
     const recentSamplesRef = useRef<number[]>([]); // For waveform visualization
     const isCollectingAudioRef = useRef(true); // Track if we should collect audio (paused during silence window)
+    const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null); // For periodic streaming transcription
+    const lastStreamingLengthRef = useRef(0); // Track how much audio we've already streamed
+    const rafPendingRef = useRef(false); // Track if RAF update is pending (throttle state updates)
 
     // Use refs for settings to avoid stale closures
     const autoStopOnSilenceRef = useRef(autoStopOnSilence);
     const silenceTimeoutMsRef = useRef(silenceTimeoutMs);
     const onSilenceDetectedRef = useRef(onSilenceDetected);
+    const enableStreamingRef = useRef(enableStreaming);
+    const streamingIntervalMsRef = useRef(streamingIntervalMs);
 
     // Update refs when props change
     useEffect(() => {
         autoStopOnSilenceRef.current = autoStopOnSilence;
         silenceTimeoutMsRef.current = silenceTimeoutMs;
         onSilenceDetectedRef.current = onSilenceDetected;
-    }, [autoStopOnSilence, silenceTimeoutMs, onSilenceDetected]);
+        enableStreamingRef.current = enableStreaming;
+        streamingIntervalMsRef.current = streamingIntervalMs;
+    }, [autoStopOnSilence, silenceTimeoutMs, onSilenceDetected, enableStreaming, streamingIntervalMs]);
 
     useEffect(() => {
         isRecordingRef.current = isRecording;
@@ -176,7 +189,30 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
             audioBufferRef.current = [];
             isCollectingAudioRef.current = true; // Reset collection flag for new recording
+            lastStreamingLengthRef.current = 0; // Reset streaming position
             setIsRecording(true);
+
+            // Start periodic streaming transcription if enabled
+            if (enableStreamingRef.current) {
+                console.log(`[Streaming] Starting periodic transcription every ${streamingIntervalMsRef.current}ms`);
+                streamingIntervalRef.current = setInterval(async () => {
+                    const currentLength = audioBufferRef.current.length;
+                    // Only transcribe if we have new audio (at least 2 seconds more than last time)
+                    const newSamples = currentLength - lastStreamingLengthRef.current;
+                    if (newSamples >= 32000 && isRecordingRef.current) {
+                        console.log(`[Streaming] Sending ${currentLength} samples for partial transcription`);
+                        try {
+                            // Send ALL accumulated audio for better context
+                            await invoke('transcribe_streaming', {
+                                audioBuffer: [...audioBufferRef.current]
+                            });
+                            lastStreamingLengthRef.current = currentLength;
+                        } catch (e) {
+                            console.error('[Streaming] Error:', e);
+                        }
+                    }
+                }, streamingIntervalMsRef.current);
+            }
 
             processor.onaudioprocess = (e) => {
                 if (!isRecordingRef.current) return;
@@ -197,15 +233,22 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
                 const maxSamples = 16000; // 1 second at 16kHz
                 recentSamplesRef.current = [...recentSamplesRef.current, ...pcmData].slice(-maxSamples);
 
-                // Update state every chunk (~256ms) for smooth waveform
-                // The waveform component now uses refs and runs at 60 FPS, so more frequent
-                // data updates make it smoother without performance cost
-                setRecentAudioSamples([...recentSamplesRef.current]);
+                // Throttle React state updates using requestAnimationFrame
+                // This batches multiple audio callbacks into a single state update per frame (~60fps)
+                // Without this, we'd trigger 4+ re-renders per second which cascades through the app
+                if (!rafPendingRef.current) {
+                    rafPendingRef.current = true;
+                    requestAnimationFrame(() => {
+                        if (isRecordingRef.current) {
+                            setRecentAudioSamples([...recentSamplesRef.current]);
+                        }
+                        rafPendingRef.current = false;
+                    });
+                }
 
-                // Streaming transcription DISABLED - causes infinite loop and blocks auto-stop
-                // TODO: Re-enable after fixing the async transcription issue
-                // The problem: transcription takes 12+ seconds, blocks the event loop,
-                // and causes the component to re-render continuously
+                // Note: Streaming transcription is now handled by a separate interval timer
+                // that runs every N seconds (configurable via streamingIntervalMs)
+                // This avoids blocking the audio processing loop
             };
 
             source.connect(processor);
@@ -226,6 +269,13 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
             silenceTimeoutRef.current = null;
         }
 
+        // Clear streaming transcription interval
+        if (streamingIntervalRef.current) {
+            console.log('[Streaming] Stopping periodic transcription');
+            clearInterval(streamingIntervalRef.current);
+            streamingIntervalRef.current = null;
+        }
+
         if (processorRef.current && sourceRef.current) {
             sourceRef.current.disconnect();
             processorRef.current.disconnect();
@@ -239,6 +289,8 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
         setIsRecording(false);
         setRecentAudioSamples([]); // Clear waveform
         recentSamplesRef.current = [];
+        lastStreamingLengthRef.current = 0; // Reset streaming position
+        rafPendingRef.current = false; // Reset RAF throttle state
 
         // Final transcription
         if (audioBufferRef.current.length > 0) {

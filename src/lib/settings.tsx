@@ -361,7 +361,7 @@ export async function migrateFromIndexedDB(): Promise<{
 			provider:
 				(await getStorageItem<'claude' | 'openai' | 'ollama'>('stream_mode_provider')) ||
 				'ollama',
-			timeout_ms: (await getStorageItem<number>('stream_mode_timeout_ms')) ?? 15000,
+			timeout_ms: (await getStorageItem<number>('stream_mode_timeout_ms')) ?? 60000,
 			formatting: {
 				remove_fillers:
 					(await getStorageItem<boolean>('stream_mode_remove_fillers')) ?? true,

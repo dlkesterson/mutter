@@ -1,53 +1,19 @@
 /**
  * Query Engine Integration Tests
  *
- * Tests that the query engine integrates correctly with:
- * - useQueryEngine hook
- * - VaultMetadata context
- * - Supertag definitions
- * - Backlinks
+ * Tests the split format query engine with ManifestDoc and GraphCacheDoc.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-// Mock the vault metadata context
-const mockDoc = {
+// Mock manifest with note paths and supertag definitions
+const mockManifest = {
   vault_id: 'test-vault',
-  notes: {
-    'note-1': {
-      id: 'note-1',
-      title: 'Project Alpha',
-      rel_path: 'project-alpha.md',
-      tags: ['work', 'important'],
-      links: ['Note B'],
-      blocks: {},
-      supertags: [{ definitionId: 'def-project', values: { status: 'active', priority: 5 } }],
-      created_at: Date.now() - 86400000 * 7,
-      updated_at: Date.now() - 86400000,
-    },
-    'note-2': {
-      id: 'note-2',
-      title: 'Meeting Notes',
-      rel_path: 'meeting-notes.md',
-      tags: ['work', 'meeting'],
-      links: ['Project Alpha'],
-      blocks: { 'block-1': { id: 'block-1', content: 'Action items' } },
-      supertags: [{ definitionId: 'def-meeting', values: { date: '2024-01-15' } }],
-      created_at: Date.now() - 86400000 * 3,
-      updated_at: Date.now(),
-    },
-    'note-3': {
-      id: 'note-3',
-      title: 'Personal Journal',
-      rel_path: 'personal/journal.md',
-      tags: ['personal'],
-      links: [],
-      blocks: {},
-      supertags: [],
-      created_at: Date.now() - 86400000 * 30,
-      updated_at: Date.now() - 86400000 * 10,
-    },
+  id_to_path: {
+    'note-1': 'project-alpha.md',
+    'note-2': 'meeting-notes.md',
+    'note-3': 'personal/journal.md',
   },
   supertag_definitions: {
     'def-project': {
@@ -57,26 +23,43 @@ const mockDoc = {
         { id: 'f1', name: 'status', type: 'text' },
         { id: 'f2', name: 'priority', type: 'number' },
       ],
-      color: '#00A0B4',
       created_at: Date.now(),
+      updated_at: Date.now(),
     },
     'def-meeting': {
       id: 'def-meeting',
       name: 'meeting',
       fields: [{ id: 'f3', name: 'date', type: 'date' }],
-      color: '#FF5500',
       created_at: Date.now(),
+      updated_at: Date.now(),
     },
-  },
-  backlink_index: {
-    'note-1': [{ sourceNoteId: 'note-2', sourceBlockId: null }],
   },
   last_sync_at: Date.now(),
 };
 
-// Mock the context
+const mockGraphCache = {
+  edges: {
+    'edge-1': {
+      id: 'edge-1',
+      sourceNoteId: 'note-2',
+      targetNoteId: 'note-1',
+      linkType: 'wikilink',
+    },
+  },
+  backlink_index: {
+    'note-1': ['note-2'],
+  },
+  forward_link_index: {
+    'note-2': ['note-1'],
+  },
+};
+
 vi.mock('@/context/VaultMetadataContext', () => ({
-  useVaultMetadata: () => ({ doc: mockDoc }),
+  useVaultMetadata: () => ({
+    manifest: mockManifest,
+    graphCache: mockGraphCache,
+    noteManager: null,
+  }),
 }));
 
 // Import after mock setup
@@ -88,115 +71,67 @@ describe('Query Engine Integration', () => {
     localStorage.clear();
   });
 
-  describe('Query + Supertags', () => {
-    it('finds notes by supertag type', () => {
+  describe('Title Search (Manifest)', () => {
+    // Titles derived from file paths: project-alpha.md → "project-alpha"
+    it('finds notes by title text search', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        // Pass query directly to search() to avoid state timing issues
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
       expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].title).toBe('Project Alpha');
+      expect(result.current.result?.notes[0].title).toBe('project-alpha');
     });
 
-    it('filters by supertag field values', () => {
+    it('finds notes matching partial title', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('status:active');
+      await act(async () => {
+        await result.current.search('meeting');
       });
 
       expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].supertags?.[0].values.status).toBe('active');
+      expect(result.current.result?.notes[0].title).toBe('meeting-notes');
     });
 
-    it('combines type and field filters', () => {
+    it('returns all notes for empty query', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project priority:>3');
+      await act(async () => {
+        await result.current.search('');
       });
 
-      expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].title).toBe('Project Alpha');
-    });
-
-    it('returns notes with any supertag using has:supertags', () => {
-      const { result } = renderHook(() => useQueryEngine());
-
-      act(() => {
-        result.current.search('has:supertags');
-      });
-
-      expect(result.current.result?.notes).toHaveLength(2);
-      const titles = result.current.result?.notes.map((n) => n.title);
-      expect(titles).toContain('Project Alpha');
-      expect(titles).toContain('Meeting Notes');
+      expect(result.current.result?.notes).toHaveLength(3);
     });
   });
 
-  describe('Query + Tags', () => {
-    it('finds notes by markdown tag', () => {
+  describe('Link Queries (GraphCache)', () => {
+    it('finds notes linking to target', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('tag:work');
+      await act(async () => {
+        await result.current.search('linked:alpha');
       });
 
-      expect(result.current.result?.notes).toHaveLength(2);
+      // note-2 links to note-1 (project-alpha)
+      expect(result.current.result?.notes).toHaveLength(1);
+      expect(result.current.result?.notes[0].title).toBe('meeting-notes');
     });
 
-    it('combines supertag and markdown tag filters', () => {
+    it('finds notes with any links using has:links', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project tag:work');
+      await act(async () => {
+        await result.current.search('has:links');
       });
 
       expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].title).toBe('Project Alpha');
+      expect(result.current.result?.notes[0].title).toBe('meeting-notes');
     });
   });
 
-  describe('Query + Links', () => {
-    it('finds notes linking to target', () => {
-      const { result } = renderHook(() => useQueryEngine());
-
-      act(() => {
-        result.current.search('linked:Alpha');
-      });
-
-      expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].title).toBe('Meeting Notes');
-    });
-
-    it('finds notes with any links', () => {
-      const { result } = renderHook(() => useQueryEngine());
-
-      act(() => {
-        result.current.search('has:links');
-      });
-
-      expect(result.current.result?.notes).toHaveLength(2);
-    });
-  });
-
-  describe('Query + Blocks', () => {
-    it('finds notes with blocks', () => {
-      const { result } = renderHook(() => useQueryEngine());
-
-      act(() => {
-        result.current.search('has:blocks');
-      });
-
-      expect(result.current.result?.notes).toHaveLength(1);
-      expect(result.current.result?.notes[0].title).toBe('Meeting Notes');
-    });
-  });
-
-  describe('Query State Management', () => {
+  describe('State Management', () => {
     it('tracks query in state', () => {
       const { result } = renderHook(() => useQueryEngine());
 
@@ -218,11 +153,11 @@ describe('Query Engine Integration', () => {
       expect(result.current.description).toContain('supertag');
     });
 
-    it('clears state correctly', () => {
+    it('clears state correctly', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
       expect(result.current.result?.notes).toHaveLength(1);
@@ -237,50 +172,54 @@ describe('Query Engine Integration', () => {
   });
 
   describe('Recent Queries', () => {
-    it('saves queries to history', () => {
+    it('saves queries to history', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
-      expect(result.current.recentQueries).toContain('type:project');
+      expect(result.current.recentQueries).toContain('alpha');
     });
 
-    it('does not duplicate queries', () => {
+    it('does not duplicate queries', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
+      });
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
-      const count = result.current.recentQueries.filter((q) => q === 'type:project').length;
+      const count = result.current.recentQueries.filter((q) => q === 'alpha').length;
       expect(count).toBe(1);
     });
 
-    it('removes queries from history', () => {
+    it('removes queries from history', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
-      expect(result.current.recentQueries).toContain('type:project');
+      expect(result.current.recentQueries).toContain('alpha');
 
       act(() => {
-        result.current.removeRecentQuery('type:project');
+        result.current.removeRecentQuery('alpha');
       });
 
-      expect(result.current.recentQueries).not.toContain('type:project');
+      expect(result.current.recentQueries).not.toContain('alpha');
     });
 
-    it('clears all recent queries', () => {
+    it('clears all recent queries', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
-        result.current.search('tag:work');
+      await act(async () => {
+        await result.current.search('alpha');
+      });
+      await act(async () => {
+        await result.current.search('meeting');
       });
 
       expect(result.current.recentQueries.length).toBeGreaterThan(0);
@@ -325,22 +264,22 @@ describe('Query Engine Integration', () => {
   });
 
   describe('Validation', () => {
-    it('validates date format', () => {
+    it('validates date format', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('created:>invalid');
+      await act(async () => {
+        await result.current.search('created:>invalid');
       });
 
       expect(result.current.errors).toHaveLength(1);
       expect(result.current.errors[0]).toContain('Invalid date format');
     });
 
-    it('allows valid queries without errors', () => {
+    it('allows valid queries without errors', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
       expect(result.current.errors).toHaveLength(0);
@@ -348,11 +287,11 @@ describe('Query Engine Integration', () => {
   });
 
   describe('Performance', () => {
-    it('tracks execution time', () => {
+    it('tracks execution time', async () => {
       const { result } = renderHook(() => useQueryEngine());
 
-      act(() => {
-        result.current.search('type:project');
+      await act(async () => {
+        await result.current.search('alpha');
       });
 
       expect(result.current.result?.executionTimeMs).toBeGreaterThanOrEqual(0);

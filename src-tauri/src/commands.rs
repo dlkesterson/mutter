@@ -441,52 +441,84 @@ pub async fn transcribe_audio(
     Ok(TranscriptionResult { text, duration_ms })
 }
 
-/// Stream partial transcription results while recording
+/// Stream partial transcription results while recording (non-blocking)
+/// This runs transcription on a background thread to avoid blocking the UI
 #[tauri::command]
 pub async fn transcribe_streaming(
     audio_buffer: Vec<f32>,
-    state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    let sample_count = audio_buffer.len();
+    let duration_secs = sample_count as f32 / 16000.0;
+
     log::info!(
-        "Starting streaming transcription: {} samples",
-        audio_buffer.len()
+        "[Streaming] Received {} samples ({:.1}s) for partial transcription",
+        sample_count,
+        duration_secs
     );
 
-    // Only process if we have at least 1 second of audio
-    if audio_buffer.len() < 16000 {
+    // Only process if we have at least 2 seconds of audio
+    if sample_count < 32000 {
+        log::debug!("[Streaming] Skipping - need at least 2 seconds of audio");
         return Ok(());
     }
 
-    let engine = state
-        .whisper_engine
-        .lock()
-        .map_err(|_| "Whisper engine lock poisoned".to_string())?;
-
-    // Emit a "processing" event
+    // Emit a "processing" event immediately
     let _ = app.emit("transcription-processing", ());
 
-    // Transcribe the current buffer
-    match engine.transcribe(&audio_buffer) {
-        Ok(text) => {
-            // Emit partial result
-            let _ = app.emit(
-                "transcription-partial",
-                PartialTranscription {
-                    text: text.clone(),
-                    is_final: false,
-                    timestamp: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis() as u64,
-                },
-            );
-            log::info!("Partial transcription: {}", text);
+    // Clone app handle for the spawned task
+    let app_clone = app.clone();
+
+    // Spawn blocking task for transcription to avoid blocking the async runtime
+    tokio::task::spawn_blocking(move || {
+        let state: tauri::State<AppState> = app_clone.state();
+
+        // Try to acquire the lock (non-blocking check first)
+        let engine = match state.whisper_engine.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                log::debug!("[Streaming] Whisper engine busy, skipping this chunk");
+                return;
+            }
+        };
+
+        if !engine.is_loaded() {
+            log::warn!("[Streaming] Whisper model not loaded");
+            return;
         }
-        Err(e) => {
-            log::warn!("Streaming transcription error: {}", e);
+
+        let start = std::time::Instant::now();
+        match engine.transcribe(&audio_buffer) {
+            Ok(text) => {
+                let duration_ms = start.elapsed().as_millis();
+                if !text.is_empty() {
+                    log::info!(
+                        "[Streaming] ✓ Partial transcription in {}ms: '{}'",
+                        duration_ms,
+                        if text.len() > 80 { format!("{}...", &text[..80]) } else { text.clone() }
+                    );
+
+                    // Emit partial result
+                    let _ = app_clone.emit(
+                        "transcription-partial",
+                        PartialTranscription {
+                            text,
+                            is_final: false,
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis() as u64,
+                        },
+                    );
+                } else {
+                    log::debug!("[Streaming] Empty transcription result (silence?)");
+                }
+            }
+            Err(e) => {
+                log::warn!("[Streaming] Transcription error: {}", e);
+            }
         }
-    }
+    });
 
     Ok(())
 }
