@@ -8,6 +8,7 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { WindowControls } from './WindowControls';
 
 export interface Tab {
     id: string;
@@ -55,11 +56,11 @@ export function TabBar({
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
     if (tabs.length === 0) {
-        // Still show navigation buttons even with no tabs
-        if (onGoBack || onGoForward) {
-            return (
-                <div className="flex items-center w-full bg-surface border-b border-border/20 h-10 px-2">
-                    <div className="flex items-center gap-1">
+        // Still show titlebar with navigation and window controls even with no tabs
+        return (
+            <div className="flex items-center w-full bg-surface border-b border-border/20 h-10">
+                {(onGoBack || onGoForward) && (
+                    <div className="flex items-center gap-1 px-2">
                         <button
                             onClick={onGoBack}
                             disabled={!canGoBack}
@@ -87,10 +88,13 @@ export function TabBar({
                             <ChevronRight size={16} />
                         </button>
                     </div>
-                </div>
-            );
-        }
-        return null;
+                )}
+                {/* Draggable region - allows window to be moved by dragging empty space */}
+                <div data-tauri-drag-region className="flex-1 h-full" />
+                {/* Window controls */}
+                <WindowControls />
+            </div>
+        );
     }
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -129,10 +133,10 @@ export function TabBar({
     };
 
     return (
-        <div className="flex items-center w-full bg-surface border-b border-border/20 overflow-x-auto no-scrollbar h-10">
+        <div className="flex items-center w-full bg-surface border-b border-border/20 h-10">
             {/* Navigation buttons */}
             {(onGoBack || onGoForward) && (
-                <div className="flex items-center gap-0.5 px-1 border-r border-border/20 h-full">
+                <div className="flex items-center gap-0.5 px-1 border-r border-border/20 h-full flex-shrink-0">
                     <button
                         onClick={onGoBack}
                         disabled={!canGoBack}
@@ -162,7 +166,8 @@ export function TabBar({
                 </div>
             )}
 
-            {/* Tabs */}
+            {/* Tabs container - scrollable */}
+            <div className="flex overflow-x-auto no-scrollbar h-full">
             {tabs.map((tab, index) => {
                 const isActive = tab.id === activeTabId;
                 const isDragging = draggedIndex === index;
@@ -261,6 +266,13 @@ export function TabBar({
                     </ContextMenu>
                 );
             })}
+            </div>
+
+            {/* Draggable region - allows window to be moved by dragging empty space */}
+            <div data-tauri-drag-region className="flex-1 h-full min-w-[48px]" />
+
+            {/* Window controls */}
+            <WindowControls className="flex-shrink-0" />
         </div>
     );
 }

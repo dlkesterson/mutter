@@ -787,48 +787,50 @@ function App() {
 			graphCache={vaultMeta.graphCache}
 			graphCacheHandle={vaultMeta.graphCacheHandle}
 		>
-		<div className='flex h-screen w-screen overflow-hidden bg-background text-foreground'>
-			<Sidebar
-				activePath={currentFile}
-				onFileSelect={handleFileSelect}
-				onOpenInNewTab={handleOpenInNewTab}
-				onSettingsClick={() => setOpenDialog('settings')}
-				onVaultPathChange={setVaultPath}
-				onNoteRenamed={(oldPath, newPath) => {
-					vaultMeta.recordRename(oldPath, newPath);
-					handleNoteRename(oldPath, newPath);
+		<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
+			{/* Full-width titlebar with tabs and window controls */}
+			<TabBar
+				tabs={tabs}
+				activeTabId={activeTabId}
+				onTabClick={setActiveTabId}
+				onTabClose={handleTabClose}
+				onTabReorder={handleTabReorder}
+				onCloseOthers={handleCloseOthers}
+				onCloseToRight={handleCloseToRight}
+				onCloseAll={handleCloseAll}
+				onTogglePin={handleTogglePin}
+				onRevealInExplorer={(path) => {
+					// Dispatch event for FileTree to scroll to and highlight the file
+					window.dispatchEvent(new CustomEvent('mutter:reveal-in-explorer', {
+						detail: { path }
+					}));
 				}}
-				onQuickSwitcherOpen={() => setOpenDialog('files')}
-				vaultId={vaultMeta.vaultId}
-				activeNoteId={vaultMeta.activeNoteId}
+				canGoBack={canGoBack}
+				canGoForward={canGoForward}
+				onGoBack={handleGoBack}
+				onGoForward={handleGoForward}
 			/>
 
-			<div className='flex-1 flex flex-col overflow-hidden relative'>
-				<StreamingTranscription
-					isRecording={audioState === 'listening'}
+			{/* Main content area with sidebars */}
+			<div className='flex flex-1 overflow-hidden'>
+				<Sidebar
+					activePath={currentFile}
+					onFileSelect={handleFileSelect}
+					onOpenInNewTab={handleOpenInNewTab}
+					onSettingsClick={() => setOpenDialog('settings')}
+					onVaultPathChange={setVaultPath}
+					onNoteRenamed={(oldPath, newPath) => {
+						vaultMeta.recordRename(oldPath, newPath);
+						handleNoteRename(oldPath, newPath);
+					}}
+					onQuickSwitcherOpen={() => setOpenDialog('files')}
+					vaultId={vaultMeta.vaultId}
+					activeNoteId={vaultMeta.activeNoteId}
 				/>
 
-				<main className='flex-1 flex flex-col overflow-hidden relative'>
-					<TabBar
-						tabs={tabs}
-						activeTabId={activeTabId}
-						onTabClick={setActiveTabId}
-						onTabClose={handleTabClose}
-						onTabReorder={handleTabReorder}
-						onCloseOthers={handleCloseOthers}
-						onCloseToRight={handleCloseToRight}
-						onCloseAll={handleCloseAll}
-						onTogglePin={handleTogglePin}
-						onRevealInExplorer={(path) => {
-							// Dispatch event for FileTree to scroll to and highlight the file
-							window.dispatchEvent(new CustomEvent('mutter:reveal-in-explorer', {
-								detail: { path }
-							}));
-						}}
-						canGoBack={canGoBack}
-						canGoForward={canGoForward}
-						onGoBack={handleGoBack}
-						onGoForward={handleGoForward}
+				<div className='flex-1 flex flex-col overflow-hidden relative'>
+					<StreamingTranscription
+						isRecording={audioState === 'listening'}
 					/>
 					
 					{/* Conditional rendering based on file type */}
@@ -901,12 +903,10 @@ function App() {
 							rightOffset={44}
 						/>
 					)}
+				</div>
 
-					</main>
-			</div>
-
-			{/* Right Panel */}
-			<RightPanel
+				{/* Right Panel */}
+				<RightPanel
 				activeTab={rightPanel}
 				onTabChange={setRightPanel}
 			>
@@ -962,7 +962,8 @@ function App() {
 						}}
 					/>
 				)}
-			</RightPanel>
+				</RightPanel>
+			</div>
 
 			{/* Dialogs */}
 			<FileNavigatorDialog

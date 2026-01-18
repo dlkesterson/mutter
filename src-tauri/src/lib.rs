@@ -83,6 +83,10 @@ pub fn run() {
                 use tauri::Manager;
                 let window = app.get_webview_window("main").unwrap();
 
+                // Remove window decorations (titlebar) programmatically
+                // This is more reliable than config on GTK-based Linux desktops
+                window.set_decorations(false).ok();
+
                 // Enable media stream permissions for WebKitGTK
                 window
                     .with_webview(|webview| {

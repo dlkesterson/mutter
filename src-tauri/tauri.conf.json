@@ -13,6 +13,8 @@
     "windows": [
       {
         "title": "mutter",
+        "decorations": false,
+        "transparent": true,
         "width": 1280,
         "height": 800,
         "minWidth": 800,
