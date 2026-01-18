@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -6,29 +6,18 @@ import { FileTree } from './FileTree';
 import { FileNode, SearchResult } from '@/types';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
-import {
-	CollapsiblePanel,
-	CollapsedPanelButton,
-	PanelContent,
-} from '@/components/ui/collapsible-panel';
+import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 import {
 	Search,
 	FolderOpen,
-	PanelLeftClose,
-	PanelLeftOpen,
 	Settings,
 	Plus,
 	Calendar,
 	Command,
-	MoreHorizontal,
+	Folder,
 } from 'lucide-react';
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-	DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
+
+export type LeftPanelTab = 'files' | 'search';
 
 interface SidebarProps {
 	activePath: string | null;
@@ -42,6 +31,21 @@ interface SidebarProps {
 	activeNoteId?: string | null;
 }
 
+const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
+	{ id: 'files', icon: <Folder size={20} />, label: 'Files' },
+	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
+	{ id: 'open-vault', icon: <FolderOpen size={20} />, label: 'Open Vault' },
+];
+
+const FOOTER_ITEMS: ActivityBarItem[] = [
+	{ id: 'quick-switcher', icon: <Command size={20} />, label: 'Quick Switcher' },
+	{ id: 'settings', icon: <Settings size={20} />, label: 'Settings' },
+];
+
+const PANEL_MIN_WIDTH = 150;
+const PANEL_MAX_WIDTH = 500;
+const PANEL_DEFAULT_WIDTH = 220;
+
 export function Sidebar({
 	activePath,
 	onFileSelect,
@@ -54,8 +58,9 @@ export function Sidebar({
 	activeNoteId: _activeNoteId,
 }: SidebarProps) {
 	// Panel state
-	const [width, setWidth] = useState(256);
-	const [isCollapsed, setIsCollapsed] = useState(false);
+	const [activeTab, setActiveTab] = useState<LeftPanelTab | null>('files');
+	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+	const [isResizing, setIsResizing] = useState(false);
 
 	// Sidebar-specific state
 	const [search, setSearch] = useState('');
@@ -63,6 +68,9 @@ export function Sidebar({
 	const [fileTree, setFileTree] = useState<FileNode[]>([]);
 	const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
+
+	// Derived state
+	const isCollapsed = activeTab === null;
 
 	useEffect(() => {
 		loadVaultPath();
@@ -229,86 +237,122 @@ export function Sidebar({
 		}
 	};
 
-	// Determine if we're in a narrow state (show overflow menu)
-	const isNarrow = width < 220;
+	// Handle activity bar clicks
+	const handleActivityBarClick = (id: string) => {
+		// Action items (don't toggle panels)
+		if (id === 'settings') {
+			onSettingsClick();
+			return;
+		}
+		if (id === 'quick-switcher') {
+			onQuickSwitcherOpen?.();
+			return;
+		}
+		if (id === 'open-vault') {
+			handleSelectVault();
+			return;
+		}
+
+		const tabId = id as LeftPanelTab;
+		// Toggle: if already active, collapse; otherwise activate
+		if (activeTab === tabId) {
+			setActiveTab(null);
+		} else {
+			setActiveTab(tabId);
+		}
+	};
+
+	// Resize handlers
+	const startResizing = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		setIsResizing(true);
+	}, []);
+
+	const stopResizing = useCallback(() => {
+		setIsResizing(false);
+	}, []);
+
+	const resize = useCallback(
+		(e: MouseEvent) => {
+			if (!isResizing) return;
+			// Subtract activity bar width
+			const newWidth = e.clientX - ACTIVITY_BAR_WIDTH;
+			if (newWidth >= PANEL_MIN_WIDTH && newWidth <= PANEL_MAX_WIDTH) {
+				setPanelWidth(newWidth);
+			}
+		},
+		[isResizing]
+	);
+
+	useEffect(() => {
+		if (isResizing) {
+			window.addEventListener('mousemove', resize);
+			window.addEventListener('mouseup', stopResizing);
+			return () => {
+				window.removeEventListener('mousemove', resize);
+				window.removeEventListener('mouseup', stopResizing);
+			};
+		}
+	}, [isResizing, resize, stopResizing]);
+
+	// Total width of the sidebar region
+	const totalWidth = isCollapsed ? ACTIVITY_BAR_WIDTH : ACTIVITY_BAR_WIDTH + panelWidth;
 
 	return (
-		<CollapsiblePanel
-			side="left"
-			isCollapsed={isCollapsed}
-			onCollapsedChange={setIsCollapsed}
-			width={width}
-			onWidthChange={setWidth}
-			defaultWidth={256}
-			minWidth={150}
-			maxWidth={600}
-			className="bg-muted/10"
-			collapsedContent={
-				<>
-					<CollapsedPanelButton
-						onClick={() => setIsCollapsed(false)}
-						icon={<PanelLeftOpen size={20} />}
-						title="Expand Sidebar"
-					/>
-					<CollapsedPanelButton
-						onClick={onSettingsClick}
-						icon={<Settings size={20} />}
-						title="Settings"
-					/>
-				</>
-			}
+		<div
+			className="flex h-full shrink-0 bg-background"
+			style={{ width: totalWidth }}
 		>
-			{/* Header - Two rows for better narrow handling */}
-			<div className="border-b border-border/20 shrink-0">
-				{/* Top row: Vault name + collapse */}
-				<div className="h-10 flex items-center justify-between px-3 gap-2">
-					<span className="font-medium text-sm truncate min-w-0 flex-1">
-						{vaultPath ? (
-							vaultPath.split('/').pop()
-						) : (
-							<span className="text-muted-foreground">No Vault</span>
-						)}
-					</span>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-7 w-7 shrink-0"
-						onClick={() => setIsCollapsed(true)}
-						title="Collapse Sidebar"
-					>
-						<PanelLeftClose size={16} />
-					</Button>
-				</div>
+			{/* Activity Bar - always visible */}
+			<ActivityBar
+				side="left"
+				items={ACTIVITY_BAR_ITEMS}
+				activeId={activeTab}
+				onItemClick={handleActivityBarClick}
+				footerItems={FOOTER_ITEMS}
+			/>
 
-				{/* Bottom row: Action buttons */}
-				<div className="h-9 flex items-center px-2 gap-1 border-t border-border/10">
-					{/* Always visible: Quick Switcher */}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-7 w-7"
-						onClick={onQuickSwitcherOpen}
-						title="Quick Switcher (Ctrl+O)"
-						disabled={!vaultPath}
-					>
-						<Command size={15} />
-					</Button>
+			{/* Panel Content - only visible when not collapsed */}
+			{!isCollapsed && (
+				<div
+					className="flex flex-col h-full overflow-hidden border-r border-border/20 bg-muted/10 relative group"
+					style={{ width: panelWidth }}
+				>
+					{/* Resize handle */}
+					<div
+						className="absolute top-0 bottom-0 right-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100"
+						onMouseDown={startResizing}
+					/>
 
-					{/* Always visible: New Note */}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-7 w-7"
-						onClick={handleCreateNote}
-						title="New Note (Ctrl+N)"
-						disabled={!vaultPath}
-					>
-						<Plus size={15} />
-					</Button>
+					{/* Panel Header */}
+					<div className="border-b border-border/20 shrink-0">
+						{/* Title row */}
+						<div className="h-10 flex items-center justify-between px-3 gap-2">
+							<span className="font-medium text-sm truncate min-w-0 flex-1">
+								{activeTab === 'files' ? (
+									vaultPath ? (
+										vaultPath.split('/').pop()
+									) : (
+										<span className="text-muted-foreground">No Vault</span>
+									)
+								) : (
+									'Search'
+								)}
+							</span>
+						</div>
 
-					{/* Conditionally visible based on width */}
-					{!isNarrow ? (
-						<>
+						{/* Action buttons row */}
+						<div className="h-9 flex items-center px-2 gap-1 border-t border-border/10">
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7"
+								onClick={handleCreateNote}
+								title="New Note (Ctrl+N)"
+								disabled={!vaultPath}
+							>
+								<Plus size={15} />
+							</Button>
 							<Button
 								variant="ghost"
 								size="icon"
@@ -319,124 +363,83 @@ export function Sidebar({
 							>
 								<Calendar size={15} />
 							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-7 w-7"
-								onClick={handleSelectVault}
-								title="Open Vault"
-							>
-								<FolderOpen size={15} />
-							</Button>
-						</>
-					) : (
-						/* Overflow menu for narrow state */
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="ghost" size="icon" className="h-7 w-7">
-									<MoreHorizontal size={15} />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="start" className="w-48">
-								<DropdownMenuItem
-									onClick={handleOpenDailyNote}
-									disabled={!vaultPath}
-								>
-									<Calendar size={14} className="mr-2" />
-									Today's Note
-								</DropdownMenuItem>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem onClick={handleSelectVault}>
-									<FolderOpen size={14} className="mr-2" />
-									Open Vault
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
+						</div>
+					</div>
+
+					{/* Search input (for search tab or file filter) */}
+					{activeTab === 'search' && (
+						<div className="p-2 border-b border-border/20 shrink-0">
+							<div className="relative">
+								<Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+								<input
+									type="text"
+									placeholder="Search notes..."
+									value={search}
+									onChange={(e) => setSearch(e.target.value)}
+									className="w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono"
+									autoFocus
+								/>
+							</div>
+						</div>
 					)}
 
-					{/* Spacer */}
-					<div className="flex-1" />
-
-					{/* Settings always visible at end */}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-7 w-7"
-						onClick={onSettingsClick}
-						title="Settings"
-					>
-						<Settings size={15} />
-					</Button>
-				</div>
-			</div>
-
-			{/* Search */}
-			<div className="p-2 border-b border-border/20 shrink-0">
-				<div className="relative">
-					<Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-					<input
-						type="text"
-						placeholder="Search files..."
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						className="w-full pl-9 pr-3 py-1.5 text-sm bg-transparent border border-border/20 rounded focus:outline-none focus:border-primary/50 focus:bg-background/50 transition-colors placeholder:text-muted-foreground/60 font-mono"
-					/>
-				</div>
-			</div>
-
-			{/* Content */}
-			<PanelContent>
-				{!vaultPath ? (
-					<div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-4">
-						<p className="text-sm text-muted-foreground">
-							Select a folder to view files
-						</p>
-						<Button onClick={handleSelectVault} size="sm">
-							Open Vault
-						</Button>
-					</div>
-				) : isLoading ? (
-					<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-						Loading...
-					</div>
-				) : search.length > 2 ? (
-					<div className="space-y-1 p-2">
-						{searchResults.length === 0 ? (
-							<div className="text-center py-8 text-sm text-muted-foreground">
-								No results found
+					{/* Panel Content */}
+					<div className="flex-1 overflow-y-auto min-h-0">
+						{!vaultPath ? (
+							<div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-4">
+								<p className="text-sm text-muted-foreground">
+									Select a folder to view files
+								</p>
+								<Button onClick={handleSelectVault} size="sm">
+									Open Vault
+								</Button>
+							</div>
+						) : isLoading ? (
+							<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+								Loading...
+							</div>
+						) : activeTab === 'search' && search.length > 2 ? (
+							<div className="space-y-1 p-2">
+								{searchResults.length === 0 ? (
+									<div className="text-center py-8 text-sm text-muted-foreground">
+										No results found
+									</div>
+								) : (
+									searchResults.map((result, index) => (
+										<button
+											key={result.path}
+											className="w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200"
+											style={{ animationDelay: `${index * 30}ms` }}
+											onClick={() => onFileSelect(result.path, false)}
+										>
+											<div className="font-medium text-sm truncate">
+												{result.title}
+											</div>
+											<div className="text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70">
+												{result.excerpt}
+											</div>
+										</button>
+									))
+								)}
+							</div>
+						) : activeTab === 'search' ? (
+							<div className="flex items-center justify-center h-full text-muted-foreground text-sm p-4 text-center">
+								Type at least 3 characters to search
 							</div>
 						) : (
-							searchResults.map((result, index) => (
-								<button
-									key={result.path}
-									className="w-full text-left p-2 rounded hover:bg-accent hover:text-accent-foreground transition-colors group animate-in fade-in slide-in-from-top-1 duration-200"
-									style={{ animationDelay: `${index * 30}ms` }}
-									onClick={() => onFileSelect(result.path, false)}
-								>
-									<div className="font-medium text-sm truncate">
-										{result.title}
-									</div>
-									<div className="text-xs text-muted-foreground truncate group-hover:text-accent-foreground/70">
-										{result.excerpt}
-									</div>
-								</button>
-							))
+							<FileTree
+								nodes={fileTree}
+								onSelect={onFileSelect}
+								onOpenInNewTab={onOpenInNewTab}
+								onRename={handleRename}
+								onFileTreeUpdate={() => loadFileTree(vaultPath)}
+								className="h-full p-2"
+								activePath={activePath}
+							/>
 						)}
 					</div>
-				) : (
-					<FileTree
-						nodes={fileTree}
-						onSelect={onFileSelect}
-						onOpenInNewTab={onOpenInNewTab}
-						onRename={handleRename}
-						onFileTreeUpdate={() => loadFileTree(vaultPath)}
-						className="h-full p-2"
-						activePath={activePath}
-					/>
-				)}
-			</PanelContent>
-
-			{/* Footer removed - Settings button now in action bar */}
-		</CollapsiblePanel>
+				</div>
+			)}
+		</div>
 	);
 }

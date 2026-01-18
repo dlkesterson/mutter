@@ -1,153 +1,168 @@
 /**
  * RightPanel Component
  *
- * The collapsible right panel containing Outline, Backlinks, Query, AI Query, Graph, and Tags tabs.
- * Uses the shared CollapsiblePanel for consistent behavior with the left sidebar.
- *
- * Improvements:
- * - Tabs in a scrollable row that doesn't wrap
- * - Collapse button on a separate line from tabs
- * - Consistent spacing regardless of panel width
+ * VS Code-style right panel with activity bar navigation.
+ * The activity bar is on the outer right edge, content panel is resizable.
  */
 
-import { useEffect, useRef, type ReactNode } from 'react';
-import { PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  CollapsiblePanel,
-  CollapsedPanelButton,
-} from '@/components/ui/collapsible-panel';
-import { cn } from '@/lib/utils';
+	List,
+	Link,
+	Search,
+	Sparkles,
+	GitBranch,
+	Tag,
+} from 'lucide-react';
+import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
 export type RightPanelTab = 'outline' | 'backlinks' | 'query' | 'ai-query' | 'graph' | 'tags';
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
-  outline: 'Outline',
-  backlinks: 'Backlinks',
-  query: 'Query',
-  'ai-query': 'AI Query',
-  graph: 'Graph',
-  tags: 'Tags',
+	outline: 'Outline',
+	backlinks: 'Backlinks',
+	query: 'Query',
+	'ai-query': 'AI Query',
+	graph: 'Graph',
+	tags: 'Tags',
 };
 
-// Short labels for narrow widths
-const TAB_LABELS_SHORT: Record<RightPanelTab, string> = {
-  outline: 'Out',
-  backlinks: 'Back',
-  query: 'Qry',
-  'ai-query': 'AI',
-  graph: 'Grph',
-  tags: 'Tags',
-};
+const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
+	{ id: 'outline', icon: <List size={20} />, label: 'Outline' },
+	{ id: 'backlinks', icon: <Link size={20} />, label: 'Backlinks' },
+	{ id: 'query', icon: <Search size={20} />, label: 'Query' },
+	{ id: 'ai-query', icon: <Sparkles size={20} />, label: 'AI Query' },
+	{ id: 'graph', icon: <GitBranch size={20} />, label: 'Graph' },
+	{ id: 'tags', icon: <Tag size={20} />, label: 'Tags' },
+];
+
+const PANEL_MIN_WIDTH = 180;
+const PANEL_MAX_WIDTH = 500;
+const PANEL_DEFAULT_WIDTH = 280;
 
 export interface RightPanelProps {
-  /** The currently active tab */
-  activeTab: RightPanelTab | null;
-  /** Callback when tab changes */
-  onTabChange: (tab: RightPanelTab) => void;
-  /** Whether the panel is collapsed */
-  isCollapsed: boolean;
-  /** Callback when collapsed state changes */
-  onCollapsedChange: (collapsed: boolean) => void;
-  /** Current width */
-  width: number;
-  /** Callback when width changes */
-  onWidthChange: (width: number) => void;
-  /** Content to render for each tab */
-  children: ReactNode;
-  /** Available tabs (some may be hidden based on context) */
-  availableTabs?: RightPanelTab[];
+	/** The currently active tab */
+	activeTab: RightPanelTab | null;
+	/** Callback when tab changes */
+	onTabChange: (tab: RightPanelTab | null) => void;
+	/** Content to render for each tab */
+	children: ReactNode;
+	/** Available tabs (some may be hidden based on context) */
+	availableTabs?: RightPanelTab[];
 }
 
 export function RightPanel({
-  activeTab,
-  onTabChange,
-  isCollapsed,
-  onCollapsedChange,
-  width,
-  onWidthChange,
-  children,
-  availableTabs = ['outline', 'backlinks', 'query', 'ai-query', 'graph', 'tags'],
+	activeTab,
+	onTabChange,
+	children,
+	availableTabs = ['outline', 'backlinks', 'query', 'ai-query', 'graph', 'tags'],
 }: RightPanelProps) {
-  // Track last used tab for toggle behavior
-  const lastTabRef = useRef<RightPanelTab>('outline');
+	// Panel width state
+	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+	const [isResizing, setIsResizing] = useState(false);
 
-  useEffect(() => {
-    if (activeTab) {
-      lastTabRef.current = activeTab;
-    }
-  }, [activeTab]);
+	// Track last used tab for toggle behavior
+	const lastTabRef = useRef<RightPanelTab>('outline');
 
-  const handleToggle = () => {
-    const newCollapsed = !isCollapsed;
-    onCollapsedChange(newCollapsed);
-    // When expanding, set a tab if none selected
-    if (!newCollapsed && !activeTab) {
-      onTabChange(lastTabRef.current);
-    }
-  };
+	useEffect(() => {
+		if (activeTab) {
+			lastTabRef.current = activeTab;
+		}
+	}, [activeTab]);
 
-  // Use short labels when narrow
-  const useShortLabels = width < 280;
-  const labels = useShortLabels ? TAB_LABELS_SHORT : TAB_LABELS;
+	// Filter activity bar items based on available tabs
+	const filteredItems = ACTIVITY_BAR_ITEMS.filter((item) =>
+		availableTabs.includes(item.id as RightPanelTab)
+	);
 
-  return (
-    <CollapsiblePanel
-      side="right"
-      isCollapsed={isCollapsed}
-      onCollapsedChange={onCollapsedChange}
-      width={width}
-      onWidthChange={onWidthChange}
-      minWidth={200}
-      maxWidth={600}
-      collapsedContent={
-        <CollapsedPanelButton
-          onClick={handleToggle}
-          icon={<PanelRightOpen size={20} />}
-          title="Expand Panel"
-        />
-      }
-    >
-      {/* Header - Two rows: collapse button row + tabs row */}
-      <div className="border-b border-border shrink-0">
-        {/* Top row: Title + collapse button */}
-        <div className="h-9 flex items-center justify-between px-3">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {activeTab ? labels[activeTab] : 'Panel'}
-          </span>
-          <button
-            onClick={handleToggle}
-            className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-            title="Collapse Panel"
-          >
-            <PanelRightClose size={16} />
-          </button>
-        </div>
+	// Derived state
+	const isCollapsed = activeTab === null;
 
-        {/* Bottom row: Tabs - horizontal scrollable */}
-        <div className="h-9 flex items-center px-2 border-t border-border/50 overflow-x-auto no-scrollbar">
-          <div className="flex gap-0.5">
-            {availableTabs.map((tab) => (
-              <button
-                key={tab}
-                className={cn(
-                  'px-2 py-1 text-xs rounded transition-colors whitespace-nowrap',
-                  activeTab === tab
-                    ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                )}
-                onClick={() => onTabChange(tab)}
-              >
-                {labels[tab]}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+	// Handle activity bar clicks
+	const handleActivityBarClick = (id: string) => {
+		const tabId = id as RightPanelTab;
+		// Toggle: if already active, collapse; otherwise activate
+		if (activeTab === tabId) {
+			onTabChange(null);
+		} else {
+			onTabChange(tabId);
+		}
+	};
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-auto">
-        {children}
-      </div>
-    </CollapsiblePanel>
-  );
+	// Resize handlers
+	const startResizing = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		setIsResizing(true);
+	}, []);
+
+	const stopResizing = useCallback(() => {
+		setIsResizing(false);
+	}, []);
+
+	const resize = useCallback(
+		(e: MouseEvent) => {
+			if (!isResizing) return;
+			// For right panel: width = window width - mouse X - activity bar width
+			const newWidth = window.innerWidth - e.clientX - ACTIVITY_BAR_WIDTH;
+			if (newWidth >= PANEL_MIN_WIDTH && newWidth <= PANEL_MAX_WIDTH) {
+				setPanelWidth(newWidth);
+			}
+		},
+		[isResizing]
+	);
+
+	useEffect(() => {
+		if (isResizing) {
+			window.addEventListener('mousemove', resize);
+			window.addEventListener('mouseup', stopResizing);
+			return () => {
+				window.removeEventListener('mousemove', resize);
+				window.removeEventListener('mouseup', stopResizing);
+			};
+		}
+	}, [isResizing, resize, stopResizing]);
+
+	// Total width of the panel region
+	const totalWidth = isCollapsed ? ACTIVITY_BAR_WIDTH : ACTIVITY_BAR_WIDTH + panelWidth;
+
+	return (
+		<div
+			className="flex h-full shrink-0 bg-background"
+			style={{ width: totalWidth }}
+		>
+			{/* Panel Content - only visible when not collapsed */}
+			{!isCollapsed && (
+				<div
+					className="flex flex-col h-full overflow-hidden border-l border-border bg-background relative group"
+					style={{ width: panelWidth }}
+				>
+					{/* Resize handle */}
+					<div
+						className="absolute top-0 bottom-0 left-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100"
+						onMouseDown={startResizing}
+					/>
+
+					{/* Panel Header */}
+					<div className="h-10 flex items-center px-3 border-b border-border shrink-0">
+						<span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+							{activeTab ? TAB_LABELS[activeTab] : 'Panel'}
+						</span>
+					</div>
+
+					{/* Tab Content */}
+					<div className="flex-1 overflow-auto">
+						{children}
+					</div>
+				</div>
+			)}
+
+			{/* Activity Bar - always visible on the right edge */}
+			<ActivityBar
+				side="right"
+				items={filteredItems}
+				activeId={activeTab}
+				onItemClick={handleActivityBarClick}
+			/>
+		</div>
+	);
 }

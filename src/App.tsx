@@ -63,10 +63,8 @@ function App() {
 	const [isQuickCapture, setIsQuickCapture] = useState(false);
 	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
-	// Right panel state
+	// Right panel state - simplified since RightPanel handles its own collapsed/width state
 	const [rightPanel, setRightPanel] = useState<RightPanelTab | null>(null);
-	const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(true);
-	const [rightPanelWidth, setRightPanelWidth] = useState(320);
 	// Graph dialog state
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
 	// Supertag editor state
@@ -903,7 +901,7 @@ function App() {
 							onToggleListening={toggleListening}
 							streamingText={streamingTranscription}
 							audioSamples={recentAudioSamples}
-							rightOffset={isRightPanelCollapsed ? 48 : rightPanelWidth}
+							rightOffset={44}
 						/>
 					)}
 
@@ -919,10 +917,6 @@ function App() {
 			<RightPanel
 				activeTab={rightPanel}
 				onTabChange={setRightPanel}
-				isCollapsed={isRightPanelCollapsed}
-				onCollapsedChange={setIsRightPanelCollapsed}
-				width={rightPanelWidth}
-				onWidthChange={setRightPanelWidth}
 			>
 				{rightPanel === 'outline' && (
 					<OutlinePanel
