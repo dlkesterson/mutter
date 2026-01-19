@@ -41,7 +41,7 @@ export const editorTheme = EditorView.theme({
         backgroundColor: 'hsl(var(--background))',
         color: 'hsl(var(--foreground))',
         height: '100%',
-        fontSize: '1.125rem', // text-lg
+        // fontSize is controlled by fontSizeCompartment in Editor.tsx
     },
     '.cm-content': {
         caretColor: 'hsl(var(--primary))',
@@ -147,8 +147,8 @@ export const editorTheme = EditorView.theme({
     },
     '.cm-hr': {
         border: 'none',
-        borderTop: '2px solid hsl(var(--muted))',
-        margin: '2em 0',
+        borderTop: '1px solid hsl(var(--muted))',
+        margin: '0.75em 0',
     },
     // Minimap Styles
     '.cm-minimap': {
