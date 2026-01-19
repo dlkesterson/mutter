@@ -9,6 +9,9 @@ import { queryLLM, type LLMSettings } from './llm-service';
 import {
 	buildCleanupPrompt,
 	buildStructureAnnotationPrompt,
+	shouldUseHybridMode,
+	parseDocumentIntoElements,
+	reconstructDocument,
 } from './text-cleanup-prompts';
 
 export interface CleanupOptions {
@@ -94,8 +97,47 @@ export function parseAnnotations(response: string): FormatAnnotation[] {
 }
 
 /**
+ * Check if a line is a markdown heading.
+ */
+function isHeadingLine(line: string): boolean {
+	return /^#{1,6}\s+.+/.test(line.trim());
+}
+
+/**
+ * Check if there's already a heading near the target line.
+ * Looks at the target line and the line immediately before it.
+ */
+function hasNearbyHeading(lines: string[], targetIndex: number): boolean {
+	// Check the target line itself
+	if (targetIndex < lines.length && isHeadingLine(lines[targetIndex])) {
+		return true;
+	}
+	// Check the line before (in case we'd be inserting right after an existing heading)
+	if (targetIndex > 0 && isHeadingLine(lines[targetIndex - 1])) {
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Check if there's already a blank line at or near the target position.
+ */
+function hasNearbyBlankLine(lines: string[], targetIndex: number): boolean {
+	// Check if target line is blank
+	if (targetIndex < lines.length && lines[targetIndex].trim() === '') {
+		return true;
+	}
+	// Check if line before is blank
+	if (targetIndex > 0 && lines[targetIndex - 1].trim() === '') {
+		return true;
+	}
+	return false;
+}
+
+/**
  * Apply formatting annotations to the original text.
  * Inserts headings and breaks WITHOUT modifying any original content.
+ * Skips annotations that would duplicate existing formatting.
  */
 export function applyAnnotations(
 	text: string,
@@ -120,18 +162,84 @@ export function applyAnnotations(
 		}
 
 		if (annotation.type === 'heading') {
+			// Skip if there's already a heading at or near this position
+			if (hasNearbyHeading(lines, insertIndex)) {
+				console.log(
+					`[TextCleanup] Skipping heading at line ${annotation.line} - existing heading nearby`
+				);
+				continue;
+			}
+
 			const prefix = '#'.repeat(annotation.level || 2);
 			const headingLine = `${prefix} ${annotation.text}`;
 
 			// Insert heading and blank line before the target line
 			lines.splice(insertIndex, 0, '', headingLine);
 		} else if (annotation.type === 'break') {
+			// Skip if there's already a blank line at this position
+			if (hasNearbyBlankLine(lines, insertIndex)) {
+				console.log(
+					`[TextCleanup] Skipping break at line ${annotation.line} - already has blank line`
+				);
+				continue;
+			}
+
 			// Insert blank line before the target line
 			lines.splice(insertIndex, 0, '');
 		}
 	}
 
 	return lines.join('\n');
+}
+
+/**
+ * Apply annotations in hybrid mode.
+ * Preserves document structure while inserting breaks between sentences.
+ */
+export function applyAnnotationsHybrid(
+	text: string,
+	annotations: FormatAnnotation[]
+): string {
+	const elements = parseDocumentIntoElements(text);
+
+	if (elements.length === 0) {
+		return text;
+	}
+
+	// Build sets for breaks and headings
+	const breakBeforeIndices = new Set<number>();
+	const headingAnnotations = new Map<number, { level: number; text: string }>();
+
+	for (const annotation of annotations) {
+		const index = annotation.line - 1; // Convert to 0-based
+
+		if (index < 0 || index >= elements.length) {
+			console.warn(
+				`[TextCleanup] Skipping annotation for invalid element ${annotation.line}`
+			);
+			continue;
+		}
+
+		// Skip annotations targeting structural elements (they should be preserved)
+		const element = elements[index];
+		if (element.type === 'heading' || element.type === 'horizontal-rule' || element.type === 'blank') {
+			console.log(
+				`[TextCleanup] Skipping annotation at ${annotation.line} - targets structural element`
+			);
+			continue;
+		}
+
+		if (annotation.type === 'break') {
+			breakBeforeIndices.add(index);
+		} else if (annotation.type === 'heading') {
+			headingAnnotations.set(index, {
+				level: annotation.level || 2,
+				text: annotation.text || 'Section',
+			});
+		}
+	}
+
+	return reconstructDocument(elements, breakBeforeIndices, headingAnnotations);
 }
 
 /**
@@ -240,8 +348,11 @@ async function cleanupWithAnnotationMode(
 	startTime: number
 ): Promise<CleanupResult> {
 	const prompt = buildStructureAnnotationPrompt(text);
+	const usingHybridMode = shouldUseHybridMode(text);
 
-	console.log('[TextCleanup] Using annotation mode (preserves all content)');
+	console.log(
+		`[TextCleanup] Using annotation mode (${usingHybridMode ? 'hybrid' : 'line-based'})`
+	);
 
 	try {
 		const result = await queryLLM(prompt, llmSettings);
@@ -265,8 +376,10 @@ async function cleanupWithAnnotationMode(
 			`[TextCleanup] Parsed ${annotations.length} annotations`
 		);
 
-		// Apply annotations to original text
-		const cleaned = applyAnnotations(text, annotations);
+		// Apply annotations using appropriate mode
+		const cleaned = usingHybridMode
+			? applyAnnotationsHybrid(text, annotations)
+			: applyAnnotations(text, annotations);
 
 		return {
 			original: text,

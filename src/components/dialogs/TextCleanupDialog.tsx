@@ -40,8 +40,8 @@ export function TextCleanupDialog({
 	const { credentials } = useCredentials();
 
 	// Cleanup options
-	const [removeFillers, setRemoveFillers] = useState(true);
-	const [addStructure, setAddStructure] = useState(false);
+	const [removeFillers, setRemoveFillers] = useState(false);
+	const [addStructure, setAddStructure] = useState(true);
 
 	// Processing state
 	const [isProcessing, setIsProcessing] = useState(false);
@@ -53,8 +53,8 @@ export function TextCleanupDialog({
 		if (open) {
 			setResult(null);
 			setHasProcessed(false);
-			setRemoveFillers(true);
-			setAddStructure(false);
+			setRemoveFillers(false);
+			setAddStructure(true);
 		}
 	}, [open, text]);
 

@@ -13,6 +13,7 @@ import {
 	GitBranch,
 	Tag,
 	HelpCircle,
+	Sparkles,
 } from 'lucide-react';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
@@ -35,6 +36,7 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 ];
 
 const FOOTER_ITEMS: ActivityBarItem[] = [
+	{ id: 'clean-up-text', icon: <Sparkles size={20} />, label: 'Clean Up Text' },
 	{ id: 'commands-help', icon: <HelpCircle size={20} />, label: 'Commands & Shortcuts' },
 ];
 
@@ -83,6 +85,12 @@ export function RightPanel({
 	// Handle activity bar clicks
 	const handleActivityBarClick = (id: string) => {
 		// Handle footer items (actions, not panel tabs)
+		if (id === 'clean-up-text') {
+			window.dispatchEvent(
+				new CustomEvent('mutter:execute-command', { detail: { command: 'cleanup-text' } })
+			);
+			return;
+		}
 		if (id === 'commands-help') {
 			window.dispatchEvent(
 				new CustomEvent('mutter:open-dialog', { detail: { dialog: 'commands' } })
