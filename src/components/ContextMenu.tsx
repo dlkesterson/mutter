@@ -29,7 +29,10 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+			if (
+				menuRef.current &&
+				!menuRef.current.contains(event.target as Node)
+			) {
 				onClose();
 			}
 		};
@@ -76,8 +79,8 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
 		<div
 			ref={menuRef}
 			className={cn(
-				'fixed z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 shadow-lg',
-				'animate-in fade-in-0 zoom-in-95'
+				'fixed z-50 min-w-45 rounded-md border border-border bg-popover p-1 shadow-lg',
+				'animate-in fade-in-0 zoom-in-95',
 			)}
 			style={{ left: position.x, top: position.y }}
 		>
@@ -90,7 +93,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
 							className={cn(
 								'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors',
 								'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
-								'disabled:pointer-events-none disabled:opacity-50'
+								'disabled:pointer-events-none disabled:opacity-50',
 							)}
 							onClick={() => {
 								if (!item.disabled) {
@@ -100,7 +103,9 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
 							}}
 							disabled={item.disabled}
 						>
-							{item.icon && <span className='w-4 h-4'>{item.icon}</span>}
+							{item.icon && (
+								<span className='w-4 h-4'>{item.icon}</span>
+							)}
 							<span>{item.label}</span>
 						</button>
 					)}
@@ -118,7 +123,7 @@ export function useContextMenu() {
 
 	const showContextMenu = (
 		items: ContextMenuItem[],
-		event: React.MouseEvent
+		event: React.MouseEvent,
 	) => {
 		event.preventDefault();
 		event.stopPropagation();

@@ -40,7 +40,16 @@ import { NoteSuperTags } from './components/supertags/NoteSuperTags';
 import { SupertagsPanel } from './components/supertags/SupertagsPanel';
 import { RightPanel, type RightPanelTab } from './components/RightPanel';
 
-type DialogType = 'files' | 'voice-log' | 'settings' | 'supertag-creator' | 'supertag-apply' | 'supertag-editor' | 'text-cleanup' | 'commands' | null;
+type DialogType =
+	| 'files'
+	| 'voice-log'
+	| 'settings'
+	| 'supertag-creator'
+	| 'supertag-apply'
+	| 'supertag-editor'
+	| 'text-cleanup'
+	| 'commands'
+	| null;
 
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
@@ -54,7 +63,8 @@ function App() {
 	const [audioState, setAudioState] = useState<
 		'idle' | 'listening' | 'processing' | 'executing'
 	>('idle');
-	const [streamingTranscription, setStreamingTranscription] = useState<string>('');
+	const [streamingTranscription, setStreamingTranscription] =
+		useState<string>('');
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -68,7 +78,9 @@ function App() {
 	// Graph dialog state
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
 	// Supertag editor state
-	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+		null,
+	);
 	// Text cleanup dialog state
 	const [textCleanupData, setTextCleanupData] = useState<{
 		text: string;
@@ -79,13 +91,8 @@ function App() {
 	const [editorContent, setEditorContent] = useState<string>('');
 
 	// Navigation history
-	const {
-		canGoBack,
-		canGoForward,
-		recordNavigation,
-		goBack,
-		goForward,
-	} = useNavigationHistory();
+	const { canGoBack, canGoForward, recordNavigation, goBack, goForward } =
+		useNavigationHistory();
 
 	// LLM settings derived from config context
 	const { settings } = useSettings();
@@ -139,7 +146,9 @@ function App() {
 		const loadSettings = async () => {
 			const voiceOn = await getStorageItem<boolean>('voice_enabled');
 			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
-			const timeout = await getStorageItem<number>('auto_stop_timeout_ms');
+			const timeout = await getStorageItem<number>(
+				'auto_stop_timeout_ms',
+			);
 
 			if (voiceOn !== null) setVoiceEnabled(voiceOn);
 			if (enabled !== null) setAutoStopEnabled(enabled);
@@ -152,8 +161,15 @@ function App() {
 		const handleVoiceSettingsChange = () => {
 			loadSettings();
 		};
-		window.addEventListener('mutter:voice-settings-changed', handleVoiceSettingsChange);
-		return () => window.removeEventListener('mutter:voice-settings-changed', handleVoiceSettingsChange);
+		window.addEventListener(
+			'mutter:voice-settings-changed',
+			handleVoiceSettingsChange,
+		);
+		return () =>
+			window.removeEventListener(
+				'mutter:voice-settings-changed',
+				handleVoiceSettingsChange,
+			);
 	}, []);
 
 	useEffect(() => {
@@ -165,15 +181,20 @@ function App() {
 
 		syncModeFromHash();
 		window.addEventListener('hashchange', syncModeFromHash);
-		return () =>
-			window.removeEventListener('hashchange', syncModeFromHash);
+		return () => window.removeEventListener('hashchange', syncModeFromHash);
 	}, []);
 
 	// Listen for dialog/panel open events from voice commands and Editor
 	useEffect(() => {
-		const handleOpenDialog = (event: CustomEvent<{ dialog: string; [key: string]: any }>) => {
+		const handleOpenDialog = (
+			event: CustomEvent<{ dialog: string; [key: string]: any }>,
+		) => {
 			const { dialog } = event.detail;
-			console.log('[App] Received mutter:open-dialog:', dialog, event.detail);
+			console.log(
+				'[App] Received mutter:open-dialog:',
+				dialog,
+				event.detail,
+			);
 
 			switch (dialog) {
 				case 'ai-query':
@@ -185,26 +206,26 @@ function App() {
 					setRightPanel('backlinks');
 					break;
 				case 'supertag-creator':
-				setOpenDialog('supertag-creator');
-				break;
-			case 'supertag-apply':
-				setOpenDialog('supertag-apply');
-				break;
-			case 'supertag-query':
-			case 'insert-embed':
-				// These could open dedicated dialogs in the future
-				console.log(`[App] Dialog ${dialog} not yet implemented`);
-				break;
-			case 'text-cleanup':
-				setTextCleanupData({
-					text: event.detail.text || '',
-					selectionRange: event.detail.selectionRange || null,
-				});
-				setOpenDialog('text-cleanup');
-				break;
-			case 'commands':
-				setOpenDialog('commands');
-				break;
+					setOpenDialog('supertag-creator');
+					break;
+				case 'supertag-apply':
+					setOpenDialog('supertag-apply');
+					break;
+				case 'supertag-query':
+				case 'insert-embed':
+					// These could open dedicated dialogs in the future
+					console.log(`[App] Dialog ${dialog} not yet implemented`);
+					break;
+				case 'text-cleanup':
+					setTextCleanupData({
+						text: event.detail.text || '',
+						selectionRange: event.detail.selectionRange || null,
+					});
+					setOpenDialog('text-cleanup');
+					break;
+				case 'commands':
+					setOpenDialog('commands');
+					break;
 				default:
 					console.warn('[App] Unknown dialog:', dialog);
 			}
@@ -215,15 +236,29 @@ function App() {
 			setOpenDialog('settings');
 		};
 
-		window.addEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
+		window.addEventListener(
+			'mutter:open-dialog',
+			handleOpenDialog as EventListener,
+		);
 		window.addEventListener('mutter:open-settings', handleOpenSettings);
 		return () => {
-			window.removeEventListener('mutter:open-dialog', handleOpenDialog as EventListener);
-			window.removeEventListener('mutter:open-settings', handleOpenSettings);
+			window.removeEventListener(
+				'mutter:open-dialog',
+				handleOpenDialog as EventListener,
+			);
+			window.removeEventListener(
+				'mutter:open-settings',
+				handleOpenSettings,
+			);
 		};
 	}, []);
 
-	const { startRecording, stopRecording, setAutoStopCallback, recentAudioSamples } = useAudioRecorder({
+	const {
+		startRecording,
+		stopRecording,
+		setAutoStopCallback,
+		recentAudioSamples,
+	} = useAudioRecorder({
 		onSilenceDetected: () => {
 			console.log('🔇 Silence detected');
 		},
@@ -247,7 +282,7 @@ function App() {
 	}
 
 	const addVoiceLogEntry = (
-		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>
+		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>,
 	) => {
 		setVoiceLogEntries((prev) => [
 			...prev,
@@ -259,7 +294,11 @@ function App() {
 		]);
 	};
 
-	const handleFileSelect = (path: string, permanent: boolean = false, fromHistory: boolean = false) => {
+	const handleFileSelect = (
+		path: string,
+		permanent: boolean = false,
+		fromHistory: boolean = false,
+	) => {
 		// Record navigation unless coming from back/forward
 		if (!fromHistory) {
 			recordNavigation(path);
@@ -271,7 +310,9 @@ function App() {
 				setActiveTabId(existingTab.id);
 				if (permanent && existingTab.isPreview) {
 					return prevTabs.map((t) =>
-						t.id === existingTab.id ? { ...t, isPreview: false } : t
+						t.id === existingTab.id
+							? { ...t, isPreview: false }
+							: t,
 					);
 				}
 				return prevTabs;
@@ -323,35 +364,47 @@ function App() {
 	};
 
 	// Open a file in a new tab (always creates new, never reuses)
-	const handleOpenInNewTab = useCallback((path: string) => {
-		recordNavigation(path);
+	const handleOpenInNewTab = useCallback(
+		(path: string) => {
+			recordNavigation(path);
 
-		// Check if already open - if so, just switch to it
-		const existingTab = tabs.find((t) => t.path === path);
-		if (existingTab) {
-			setActiveTabId(existingTab.id);
-			return;
-		}
+			// Check if already open - if so, just switch to it
+			const existingTab = tabs.find((t) => t.path === path);
+			if (existingTab) {
+				setActiveTabId(existingTab.id);
+				return;
+			}
 
-		// Always create a new permanent tab
-		const newTab: Tab = {
-			id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-			path,
-			title: path.split('/').pop() || 'Untitled',
-			isPreview: false, // Permanent tab
-		};
-		setTabs((prev) => [...prev, newTab]);
-		setActiveTabId(newTab.id);
-	}, [tabs, recordNavigation]);
+			// Always create a new permanent tab
+			const newTab: Tab = {
+				id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+				path,
+				title: path.split('/').pop() || 'Untitled',
+				isPreview: false, // Permanent tab
+			};
+			setTabs((prev) => [...prev, newTab]);
+			setActiveTabId(newTab.id);
+		},
+		[tabs, recordNavigation],
+	);
 
 	// Handle navigation history events (from keyboard shortcuts)
 	useEffect(() => {
-		const handleNavigateHistory = (e: CustomEvent<{ path: string; direction: string }>) => {
+		const handleNavigateHistory = (
+			e: CustomEvent<{ path: string; direction: string }>,
+		) => {
 			handleFileSelect(e.detail.path, false, true);
 		};
 
-		window.addEventListener('mutter:navigate-history', handleNavigateHistory as EventListener);
-		return () => window.removeEventListener('mutter:navigate-history', handleNavigateHistory as EventListener);
+		window.addEventListener(
+			'mutter:navigate-history',
+			handleNavigateHistory as EventListener,
+		);
+		return () =>
+			window.removeEventListener(
+				'mutter:navigate-history',
+				handleNavigateHistory as EventListener,
+			);
 	}, []);
 
 	// Handle back/forward button clicks
@@ -371,9 +424,11 @@ function App() {
 
 	// Handle tab pinning
 	const handleTogglePin = (id: string) => {
-		setTabs(prev => prev.map(tab =>
-			tab.id === id ? { ...tab, isPinned: !tab.isPinned } : tab
-		));
+		setTabs((prev) =>
+			prev.map((tab) =>
+				tab.id === id ? { ...tab, isPinned: !tab.isPinned } : tab,
+			),
+		);
 	};
 
 	// Zoom handling
@@ -384,11 +439,11 @@ function App() {
 					e.preventDefault();
 					const delta = e.key === '=' || e.key === '+' ? 0.1 : -0.1;
 					const currentZoom = parseFloat(
-						(document.body.style as any).zoom || '1'
+						(document.body.style as any).zoom || '1',
 					);
 					const newZoom = Math.max(
 						0.5,
-						Math.min(3.0, currentZoom + delta)
+						Math.min(3.0, currentZoom + delta),
 					);
 					(document.body.style as any).zoom = newZoom;
 				}
@@ -461,7 +516,7 @@ function App() {
 					};
 				}
 				return tab;
-			})
+			}),
 		);
 	};
 
@@ -476,7 +531,7 @@ function App() {
 					};
 				}
 				return tab;
-			})
+			}),
 		);
 	};
 
@@ -506,9 +561,8 @@ function App() {
 
 				// Restore last opened file
 				console.time('[App] restore last file');
-				const lastFile = await getStorageItem<string>(
-					'last_opened_file'
-				);
+				const lastFile =
+					await getStorageItem<string>('last_opened_file');
 				if (lastFile) {
 					handleFileSelect(lastFile);
 				}
@@ -533,7 +587,10 @@ function App() {
 		}
 	}, [currentFile]);
 
-	const vaultMeta = useVaultMetadataCrdt({ vaultPath, activeFilePath: currentFile });
+	const vaultMeta = useVaultMetadataCrdt({
+		vaultPath,
+		activeFilePath: currentFile,
+	});
 
 	const onOpenNoteById = useCallback(() => {
 		const id = window.prompt('Note ID (uuid)', '')?.trim() ?? '';
@@ -563,7 +620,7 @@ function App() {
 		const current = window.localStorage.getItem(CRDT_WS_URL_KEY) ?? '';
 		const raw = window.prompt(
 			'CRDT WebSocket URL (e.g. ws://127.0.0.1:3030)',
-			current || 'ws://127.0.0.1:3030'
+			current || 'ws://127.0.0.1:3030',
 		);
 		if (raw === null) return;
 
@@ -578,7 +635,7 @@ function App() {
 
 	const onClearCrdtWebSocket = useCallback(() => {
 		const ok = window.confirm(
-			'Clear CRDT WebSocket URL for this install? (requires reload)'
+			'Clear CRDT WebSocket URL for this install? (requires reload)',
 		);
 		if (!ok) return;
 		window.localStorage.removeItem(CRDT_WS_URL_KEY);
@@ -594,23 +651,34 @@ function App() {
 				const hasModel = await invoke<boolean>('has_loaded_model');
 
 				if (hasModel) {
-					console.log('[Model Check] Whisper model is loaded and ready');
+					console.log(
+						'[Model Check] Whisper model is loaded and ready',
+					);
 					return;
 				}
 
 				// Check if we have a saved model preference to try auto-loading
 				const savedModelId = await getStorageItem<string>(
-					'selected_whisper_model'
+					'selected_whisper_model',
 				);
 
 				if (savedModelId) {
-					console.log(`[Model Check] Attempting to load saved model: ${savedModelId}`);
+					console.log(
+						`[Model Check] Attempting to load saved model: ${savedModelId}`,
+					);
 					try {
-						await invoke('load_whisper_model', { modelName: savedModelId });
-						console.log(`[Model Check] ✓ Successfully loaded saved model: ${savedModelId}`);
+						await invoke('load_whisper_model', {
+							modelName: savedModelId,
+						});
+						console.log(
+							`[Model Check] ✓ Successfully loaded saved model: ${savedModelId}`,
+						);
 						return;
 					} catch (loadError) {
-						console.error(`[Model Check] Failed to load saved model ${savedModelId}:`, loadError);
+						console.error(
+							`[Model Check] Failed to load saved model ${savedModelId}:`,
+							loadError,
+						);
 						// Fall through to open selector
 					}
 				}
@@ -643,7 +711,9 @@ function App() {
 				e.preventDefault();
 				if (activeTabId) {
 					// Create a synthetic mouse event for the handler
-					handleTabClose(activeTabId, { stopPropagation: () => {} } as React.MouseEvent);
+					handleTabClose(activeTabId, {
+						stopPropagation: () => {},
+					} as React.MouseEvent);
 				}
 			}
 			// Ctrl/Cmd + N to create new note (dispatches event to Sidebar)
@@ -657,12 +727,18 @@ function App() {
 				setOpenDialog('settings');
 			}
 			// Ctrl/Cmd + Shift + L for text cleanup
-			if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+			if (
+				(e.ctrlKey || e.metaKey) &&
+				e.shiftKey &&
+				e.key.toLowerCase() === 'l'
+			) {
 				e.preventDefault();
 				// Dispatch event to get text from editor
-				window.dispatchEvent(new CustomEvent('mutter:execute-command', {
-					detail: { command: 'cleanup-text' }
-				}));
+				window.dispatchEvent(
+					new CustomEvent('mutter:execute-command', {
+						detail: { command: 'cleanup-text' },
+					}),
+				);
 			}
 		};
 
@@ -672,7 +748,7 @@ function App() {
 
 	const handleVoiceCommand = async (
 		command: string,
-		transcription: string
+		transcription: string,
 	) => {
 		console.log('Voice command:', command, transcription);
 		// Execute the command via Editor's handler
@@ -711,7 +787,8 @@ function App() {
 				if (!hasModel) {
 					toast({
 						title: 'No Whisper Model',
-						description: 'Please select a speech-to-text model in Settings first.',
+						description:
+							'Please select a speech-to-text model in Settings first.',
 						variant: 'destructive',
 					});
 					setModelSelectorOpen(true);
@@ -729,7 +806,9 @@ function App() {
 						if (result) {
 							if ((window as any).handleTranscription) {
 								setAudioState('executing');
-								await (window as any).handleTranscription(result.text);
+								await (window as any).handleTranscription(
+									result.text,
+								);
 							}
 						}
 					} catch (error) {
@@ -795,290 +874,345 @@ function App() {
 
 	return (
 		<EditorContextProvider>
-		<VaultMetadataProvider
-			ready={vaultMeta.ready}
-			vaultId={vaultMeta.vaultId}
-			activeNoteId={vaultMeta.activeNoteId}
-			vaultPath={vaultPath}
-			normalizedVaultPath={vaultMeta.normalizedVaultPath}
-			loadingPhase={vaultMeta.loadingPhase}
-			manifest={vaultMeta.manifest}
-			manifestHandle={vaultMeta.manifestHandle}
-			noteManager={vaultMeta.noteManager}
-			activeNoteDoc={vaultMeta.activeNoteDoc}
-			activeNoteHandle={vaultMeta.activeNoteHandle}
-			noteCount={vaultMeta.noteCount}
-			migrationProgress={vaultMeta.migrationProgress}
-			graphCache={vaultMeta.graphCache}
-			graphCacheHandle={vaultMeta.graphCacheHandle}
-		>
-		<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
-			{/* Full-width titlebar with tabs and window controls */}
-			<TabBar
-				tabs={tabs}
-				activeTabId={activeTabId}
-				onTabClick={setActiveTabId}
-				onTabClose={handleTabClose}
-				onTabReorder={handleTabReorder}
-				onCloseOthers={handleCloseOthers}
-				onCloseToRight={handleCloseToRight}
-				onCloseAll={handleCloseAll}
-				onTogglePin={handleTogglePin}
-				onRevealInExplorer={(path) => {
-					// Dispatch event for FileTree to scroll to and highlight the file
-					window.dispatchEvent(new CustomEvent('mutter:reveal-in-explorer', {
-						detail: { path }
-					}));
-				}}
-				canGoBack={canGoBack}
-				canGoForward={canGoForward}
-				onGoBack={handleGoBack}
-				onGoForward={handleGoForward}
-			/>
-
-			{/* Main content area with sidebars */}
-			<div className='flex flex-1 overflow-hidden'>
-				<Sidebar
-					activePath={currentFile}
-					onFileSelect={handleFileSelect}
-					onOpenInNewTab={handleOpenInNewTab}
-					onSettingsClick={() => setOpenDialog('settings')}
-					onVaultPathChange={setVaultPath}
-					onNoteRenamed={(oldPath, newPath) => {
-						vaultMeta.recordRename(oldPath, newPath);
-						handleNoteRename(oldPath, newPath);
-					}}
-					onQuickSwitcherOpen={() => setOpenDialog('files')}
-					vaultId={vaultMeta.vaultId}
-					activeNoteId={vaultMeta.activeNoteId}
-				/>
-
-				<div className='flex-1 flex flex-col overflow-hidden relative'>
-					<StreamingTranscription
-						isRecording={audioState === 'listening'}
+			<VaultMetadataProvider
+				ready={vaultMeta.ready}
+				vaultId={vaultMeta.vaultId}
+				activeNoteId={vaultMeta.activeNoteId}
+				vaultPath={vaultPath}
+				normalizedVaultPath={vaultMeta.normalizedVaultPath}
+				loadingPhase={vaultMeta.loadingPhase}
+				manifest={vaultMeta.manifest}
+				manifestHandle={vaultMeta.manifestHandle}
+				noteManager={vaultMeta.noteManager}
+				activeNoteDoc={vaultMeta.activeNoteDoc}
+				activeNoteHandle={vaultMeta.activeNoteHandle}
+				noteCount={vaultMeta.noteCount}
+				migrationProgress={vaultMeta.migrationProgress}
+				graphCache={vaultMeta.graphCache}
+				graphCacheHandle={vaultMeta.graphCacheHandle}
+			>
+				<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
+					{/* Full-width titlebar with tabs and window controls */}
+					<TabBar
+						tabs={tabs}
+						activeTabId={activeTabId}
+						onTabClick={setActiveTabId}
+						onTabClose={handleTabClose}
+						onTabReorder={handleTabReorder}
+						onCloseOthers={handleCloseOthers}
+						onCloseToRight={handleCloseToRight}
+						onCloseAll={handleCloseAll}
+						onTogglePin={handleTogglePin}
+						onRevealInExplorer={(path) => {
+							// Dispatch event for FileTree to scroll to and highlight the file
+							window.dispatchEvent(
+								new CustomEvent('mutter:reveal-in-explorer', {
+									detail: { path },
+								}),
+							);
+						}}
+						canGoBack={canGoBack}
+						canGoForward={canGoForward}
+						onGoBack={handleGoBack}
+						onGoForward={handleGoForward}
 					/>
-					
-					{/* Conditional rendering based on file type */}
-					{!currentFile ? (
-						/* Empty state when no file is open */
-						<div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-							<FileText size={48} className="mb-4 opacity-30" />
-							<p className="text-sm">No file open</p>
-							<p className="text-xs mt-1 opacity-60">Select a file from the sidebar or press Ctrl+P</p>
+
+					{/* Main content area with sidebars */}
+					<div className='flex flex-1 overflow-hidden'>
+						<Sidebar
+							activePath={currentFile}
+							onFileSelect={handleFileSelect}
+							onOpenInNewTab={handleOpenInNewTab}
+							onSettingsClick={() => setOpenDialog('settings')}
+							onVaultPathChange={setVaultPath}
+							onNoteRenamed={(oldPath, newPath) => {
+								vaultMeta.recordRename(oldPath, newPath);
+								handleNoteRename(oldPath, newPath);
+							}}
+							onQuickSwitcherOpen={() => setOpenDialog('files')}
+							vaultId={vaultMeta.vaultId}
+							activeNoteId={vaultMeta.activeNoteId}
+						/>
+
+						<div className='flex-1 flex flex-col overflow-hidden relative'>
+							<StreamingTranscription
+								isRecording={audioState === 'listening'}
+							/>
+
+							{/* Conditional rendering based on file type */}
+							{!currentFile ? (
+								/* Empty state when no file is open */
+								<div className='flex-1 flex flex-col items-center justify-center text-muted-foreground'>
+									<FileText
+										size={48}
+										className='mb-4 opacity-30'
+									/>
+									<p className='text-sm'>No file open</p>
+									<p className='text-xs mt-1 opacity-60'>
+										Select a file from the sidebar or press
+										Ctrl+P
+									</p>
+								</div>
+							) : isImageFile(currentFile) ? (
+								<ImageViewer filePath={currentFile} />
+							) : (
+								<>
+									{/* Supertag badges for the current note */}
+									<div className='px-4 border-b border-border bg-background/50'>
+										<NoteSuperTags
+											noteId={vaultMeta.activeNoteId}
+										/>
+									</div>
+									<Editor
+										filePath={currentFile}
+										audioState={audioState}
+										onVoiceLogEntry={addVoiceLogEntry}
+										onSystemCommand={handleSystemCommand}
+										onContentSaved={(content) =>
+											vaultMeta.recordContent(content)
+										}
+										onContentChange={(content) =>
+											setEditorContent(content)
+										}
+										onDirtyChange={(isDirty) => {
+											if (currentFile) {
+												handleTabDirtyChange(
+													currentFile,
+													isDirty,
+												);
+											}
+										}}
+										noteId={vaultMeta.activeNoteId}
+										vaultPath={vaultPath}
+										onNavigate={(target, _blockId) => {
+											// Navigate to the target note from transclusion
+											if (!vaultPath) return;
+											const normalizedVault = vaultPath
+												.replaceAll('\\', '/')
+												.replace(/\/+$/g, '');
+											const targetPath = target.endsWith(
+												'.md',
+											)
+												? target
+												: target + '.md';
+											handleFileSelect(
+												`${normalizedVault}/${targetPath}`,
+											);
+										}}
+									/>
+								</>
+							)}
+
+							{/* Status Bar */}
+							<StatusBar
+								content={editorContent}
+								filePath={currentFile}
+								isRecording={audioState === 'listening'}
+								isDirty={activeTab?.isDirty}
+							/>
+
+							<Omnibox
+								onCommand={handleVoiceCommand}
+								onDialogOpen={setOpenDialog}
+								isListening={audioState === 'listening'}
+								onToggleListening={toggleListening}
+								onOpenNoteById={onOpenNoteById}
+								onSetActiveNoteTags={onSetActiveNoteTags}
+								onConfigureCrdtWebSocket={
+									onConfigureCrdtWebSocket
+								}
+								onClearCrdtWebSocket={onClearCrdtWebSocket}
+							/>
+
+							{voiceEnabled && (
+								<VoiceIndicator
+									state={audioState}
+									onLogClick={() =>
+										setOpenDialog('voice-log')
+									}
+									onToggleListening={toggleListening}
+									streamingText={streamingTranscription}
+									audioSamples={recentAudioSamples}
+									rightOffset={44}
+								/>
+							)}
 						</div>
-					) : isImageFile(currentFile) ? (
-						<ImageViewer filePath={currentFile} />
-					) : (
-						<>
-						{/* Supertag badges for the current note */}
-						<div className="px-4 border-b border-border bg-background/50">
-							<NoteSuperTags noteId={vaultMeta.activeNoteId} />
-						</div>
-						<Editor
-							filePath={currentFile}
-							audioState={audioState}
-							onVoiceLogEntry={addVoiceLogEntry}
-							onSystemCommand={handleSystemCommand}
-							onContentSaved={(content) => vaultMeta.recordContent(content)}
-							onContentChange={(content) => setEditorContent(content)}
-							onDirtyChange={(isDirty) => {
-								if (currentFile) {
-									handleTabDirtyChange(currentFile, isDirty);
+
+						{/* Right Panel */}
+						<RightPanel
+							activeTab={rightPanel}
+							onTabChange={setRightPanel}
+						>
+							{rightPanel === 'outline' && (
+								<OutlinePanel
+									content={editorContent}
+									onNavigate={(line, from) => {
+										window.dispatchEvent(
+											new CustomEvent(
+												'mutter:scroll-to-line',
+												{
+													detail: { line, from },
+												},
+											),
+										);
+									}}
+								/>
+							)}
+							{rightPanel === 'backlinks' && (
+								<BacklinksPanel
+									noteId={vaultMeta.activeNoteId}
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath
+											.replaceAll('\\', '/')
+											.replace(/\/+$/g, '');
+										handleFileSelect(
+											`${normalizedVault}/${relPath}`,
+										);
+									}}
+								/>
+							)}
+							{rightPanel === 'search' && (
+								<SearchPanel
+									vaultPath={vaultPath}
+									llmSettings={llmSettings}
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath
+											.replaceAll('\\', '/')
+											.replace(/\/+$/g, '');
+										handleFileSelect(
+											`${normalizedVault}/${relPath}`,
+										);
+									}}
+								/>
+							)}
+							{rightPanel === 'graph' && (
+								<GraphPanel
+									onNavigate={(relPath) => {
+										if (!vaultPath) return;
+										const normalizedVault = vaultPath
+											.replaceAll('\\', '/')
+											.replace(/\/+$/g, '');
+										handleFileSelect(
+											`${normalizedVault}/${relPath}`,
+										);
+									}}
+									onExpand={() => setGraphDialogOpen(true)}
+								/>
+							)}
+							{rightPanel === 'tags' && (
+								<SupertagsPanel
+									noteId={vaultMeta.activeNoteId}
+									onOpenCreator={() =>
+										setOpenDialog('supertag-creator')
+									}
+									onOpenApply={() =>
+										setOpenDialog('supertag-apply')
+									}
+									onEditTemplate={(id) => {
+										setEditingTemplateId(id);
+										setOpenDialog('supertag-editor');
+									}}
+								/>
+							)}
+						</RightPanel>
+					</div>
+
+					{/* Dialogs */}
+					<FileNavigatorDialog
+						open={openDialog === 'files'}
+						onOpenChange={(open) => {
+							if (!open) {
+								setOpenDialog(null);
+								setFileDialogQuery('');
+							}
+						}}
+						onFileSelect={(path) => {
+							handleFileSelect(path);
+							setOpenDialog(null);
+							setFileDialogQuery('');
+						}}
+						initialQuery={fileDialogQuery}
+					/>
+					<VoiceLogDialog
+						open={openDialog === 'voice-log'}
+						onOpenChange={(open) => !open && setOpenDialog(null)}
+						entries={voiceLogEntries.map((e) => ({
+							transcription: e.transcript,
+							command: e.interpretation,
+							confidence: e.confidence,
+						}))}
+					/>
+					<SettingsDialog
+						open={openDialog === 'settings'}
+						onOpenChange={(open) => !open && setOpenDialog(null)}
+					/>
+					<SupertagCreatorDialog
+						open={openDialog === 'supertag-creator'}
+						onClose={() => setOpenDialog(null)}
+					/>
+					<SupertagApplyDialog
+						open={openDialog === 'supertag-apply'}
+						onClose={() => setOpenDialog(null)}
+						noteId={vaultMeta.activeNoteId}
+					/>
+					<SupertagEditorDialog
+						open={openDialog === 'supertag-editor'}
+						onClose={() => {
+							setOpenDialog(null);
+							setEditingTemplateId(null);
+						}}
+						definitionId={editingTemplateId}
+					/>
+					{textCleanupData && (
+						<TextCleanupDialog
+							open={openDialog === 'text-cleanup'}
+							onOpenChange={(open) => {
+								if (!open) {
+									setOpenDialog(null);
+									setTextCleanupData(null);
 								}
 							}}
-							noteId={vaultMeta.activeNoteId}
-							vaultPath={vaultPath}
-							onNavigate={(target, _blockId) => {
-								// Navigate to the target note from transclusion
-								if (!vaultPath) return;
-								const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-								const targetPath = target.endsWith('.md') ? target : target + '.md';
-								handleFileSelect(`${normalizedVault}/${targetPath}`);
+							text={textCleanupData.text}
+							selectionRange={textCleanupData.selectionRange}
+							onApply={(cleanedText, range) => {
+								// Dispatch event to Editor to apply the cleaned text
+								window.dispatchEvent(
+									new CustomEvent(
+										'mutter:apply-text-cleanup',
+										{
+											detail: { cleanedText, range },
+										},
+									),
+								);
 							}}
 						/>
-						</>
 					)}
 
-					{/* Status Bar */}
-					<StatusBar
-						content={editorContent}
-						filePath={currentFile}
-						isRecording={audioState === 'listening'}
-						isDirty={activeTab?.isDirty}
+					<CommandsDialog
+						open={openDialog === 'commands'}
+						onOpenChange={(open) => !open && setOpenDialog(null)}
 					/>
 
-					<Omnibox
-						onCommand={handleVoiceCommand}
-						onDialogOpen={setOpenDialog}
-						isListening={audioState === 'listening'}
-						onToggleListening={toggleListening}
-						onOpenNoteById={onOpenNoteById}
-						onSetActiveNoteTags={onSetActiveNoteTags}
-						onConfigureCrdtWebSocket={onConfigureCrdtWebSocket}
-						onClearCrdtWebSocket={onClearCrdtWebSocket}
+					<WhisperModelSelector
+						open={modelSelectorOpen}
+						onOpenChange={setModelSelectorOpen}
 					/>
-
-					{voiceEnabled && (
-						<VoiceIndicator
-							state={audioState}
-							onLogClick={() => setOpenDialog('voice-log')}
-							onToggleListening={toggleListening}
-							streamingText={streamingTranscription}
-							audioSamples={recentAudioSamples}
-							rightOffset={44}
-						/>
-					)}
+					<GraphDialog
+						open={graphDialogOpen}
+						onOpenChange={setGraphDialogOpen}
+						onNavigate={(relPath) => {
+							if (!vaultPath) return;
+							const normalizedVault = vaultPath
+								.replaceAll('\\', '/')
+								.replace(/\/+$/g, '');
+							handleFileSelect(`${normalizedVault}/${relPath}`);
+						}}
+					/>
+					<Toaster />
 				</div>
-
-				{/* Right Panel */}
-				<RightPanel
-				activeTab={rightPanel}
-				onTabChange={setRightPanel}
-			>
-				{rightPanel === 'outline' && (
-					<OutlinePanel
-						content={editorContent}
-						onNavigate={(line, from) => {
-							window.dispatchEvent(new CustomEvent('mutter:scroll-to-line', {
-								detail: { line, from }
-							}));
-						}}
-					/>
-				)}
-				{rightPanel === 'backlinks' && (
-					<BacklinksPanel
-						noteId={vaultMeta.activeNoteId}
-						onNavigate={(relPath) => {
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-							handleFileSelect(`${normalizedVault}/${relPath}`);
-						}}
-					/>
-				)}
-				{rightPanel === 'search' && (
-					<SearchPanel
-						vaultPath={vaultPath}
-						llmSettings={llmSettings}
-						onNavigate={(relPath) => {
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-							handleFileSelect(`${normalizedVault}/${relPath}`);
-						}}
-					/>
-				)}
-				{rightPanel === 'graph' && (
-					<GraphPanel
-						onNavigate={(relPath) => {
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-							handleFileSelect(`${normalizedVault}/${relPath}`);
-						}}
-						onExpand={() => setGraphDialogOpen(true)}
-					/>
-				)}
-				{rightPanel === 'tags' && (
-					<SupertagsPanel
-						noteId={vaultMeta.activeNoteId}
-						onOpenCreator={() => setOpenDialog('supertag-creator')}
-						onOpenApply={() => setOpenDialog('supertag-apply')}
-						onEditTemplate={(id) => {
-							setEditingTemplateId(id);
-							setOpenDialog('supertag-editor');
-						}}
-					/>
-				)}
-				</RightPanel>
-			</div>
-
-			{/* Dialogs */}
-			<FileNavigatorDialog
-				open={openDialog === 'files'}
-				onOpenChange={(open) => {
-					if (!open) {
-						setOpenDialog(null);
-						setFileDialogQuery('');
-					}
-				}}
-				onFileSelect={(path) => {
-					handleFileSelect(path);
-					setOpenDialog(null);
-					setFileDialogQuery('');
-				}}
-				initialQuery={fileDialogQuery}
-			/>
-			<VoiceLogDialog
-				open={openDialog === 'voice-log'}
-				onOpenChange={(open) => !open && setOpenDialog(null)}
-				entries={voiceLogEntries.map((e) => ({
-					transcription: e.transcript,
-					command: e.interpretation,
-					confidence: e.confidence,
-				}))}
-			/>
-			<SettingsDialog
-				open={openDialog === 'settings'}
-				onOpenChange={(open) => !open && setOpenDialog(null)}
-			/>
-			<SupertagCreatorDialog
-				open={openDialog === 'supertag-creator'}
-				onClose={() => setOpenDialog(null)}
-			/>
-			<SupertagApplyDialog
-				open={openDialog === 'supertag-apply'}
-				onClose={() => setOpenDialog(null)}
-				noteId={vaultMeta.activeNoteId}
-			/>
-			<SupertagEditorDialog
-				open={openDialog === 'supertag-editor'}
-				onClose={() => {
-					setOpenDialog(null);
-					setEditingTemplateId(null);
-				}}
-				definitionId={editingTemplateId}
-			/>
-			{textCleanupData && (
-				<TextCleanupDialog
-					open={openDialog === 'text-cleanup'}
-					onOpenChange={(open) => {
-						if (!open) {
-							setOpenDialog(null);
-							setTextCleanupData(null);
-						}
-					}}
-					text={textCleanupData.text}
-					selectionRange={textCleanupData.selectionRange}
-					onApply={(cleanedText, range) => {
-						// Dispatch event to Editor to apply the cleaned text
-						window.dispatchEvent(new CustomEvent('mutter:apply-text-cleanup', {
-							detail: { cleanedText, range }
-						}));
-					}}
-				/>
-			)}
-
-			<CommandsDialog
-				open={openDialog === 'commands'}
-				onOpenChange={(open) => !open && setOpenDialog(null)}
-			/>
-
-			<WhisperModelSelector
-				open={modelSelectorOpen}
-				onOpenChange={setModelSelectorOpen}
-			/>
-			<GraphDialog
-				open={graphDialogOpen}
-				onOpenChange={setGraphDialogOpen}
-				onNavigate={(relPath) => {
-					if (!vaultPath) return;
-					const normalizedVault = vaultPath.replaceAll('\\', '/').replace(/\/+$/g, '');
-					handleFileSelect(`${normalizedVault}/${relPath}`);
-				}}
-			/>
-			<Toaster />
-
-			{/* Loading overlay removed for debugging */}
-		</div>
-		</VaultMetadataProvider>
+			</VaultMetadataProvider>
 		</EditorContextProvider>
 	);
 }

@@ -32,7 +32,7 @@ export function StreamingTranscription({
 				setPartialText(event.payload.text);
 				setIsProcessing(false);
 				setIsVisible(true);
-			}
+			},
 		);
 
 		// Listen for processing events
@@ -69,7 +69,7 @@ export function StreamingTranscription({
 					: 'opacity-0 -translate-y-4'
 			}`}
 		>
-			<div className='bg-background/90 backdrop-blur-md border border-border rounded-full shadow-xl px-6 py-3 min-w-[300px] max-w-[600px] flex items-center gap-4'>
+			<div className='bg-background/90 backdrop-blur-md border border-border rounded-full shadow-xl px-6 py-3 min-w-75 max-w-150 flex items-center gap-4'>
 				<div className='flex items-center gap-2 shrink-0'>
 					<div className='w-2 h-2 bg-red-500 rounded-full animate-pulse' />
 					<span className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>

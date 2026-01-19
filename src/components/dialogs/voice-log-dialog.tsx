@@ -23,14 +23,13 @@ export function VoiceLogDialog({
 		<BaseDialog
 			open={open}
 			onOpenChange={onOpenChange}
-			title="Voice Command History"
-			size="lg"
+			title='Voice Command History'
+			size='lg'
 		>
 			<div className='space-y-4'>
 				{entries.length === 0 ? (
 					<div className='text-center py-8 text-muted-foreground'>
-						No voice commands yet. Use the voice indicator to
-						start.
+						No voice commands yet. Use the voice indicator to start.
 					</div>
 				) : (
 					<div className='space-y-2 max-h-96 overflow-y-auto'>
@@ -41,7 +40,7 @@ export function VoiceLogDialog({
 							>
 								<div className='flex items-start justify-between gap-3'>
 									<div className='flex-1 min-w-0'>
-										<div className='text-sm font-medium text-foreground break-words'>
+										<div className='text-sm font-medium text-foreground wrap-break-word'>
 											{entry.transcription}
 										</div>
 										<div className='text-sm text-muted-foreground mt-1'>
@@ -49,9 +48,7 @@ export function VoiceLogDialog({
 										</div>
 										<div className='text-xs text-muted-foreground mt-1'>
 											Confidence:{' '}
-											{Math.round(
-												entry.confidence * 100
-											)}
+											{Math.round(entry.confidence * 100)}
 											%
 										</div>
 									</div>

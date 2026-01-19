@@ -77,7 +77,7 @@ export function WhisperModelSelector({
 	const [downloading, setDownloading] = useState(false);
 	const [downloadProgress, setDownloadProgress] = useState(0);
 	const [downloadedModels, setDownloadedModels] = useState<Set<string>>(
-		new Set()
+		new Set(),
 	);
 	const { toast } = useToast();
 
@@ -88,7 +88,7 @@ export function WhisperModelSelector({
 
 			// Check saved model preference
 			const savedModelId = await getStorageItem<string>(
-				'selected_whisper_model'
+				'selected_whisper_model',
 			);
 			if (savedModelId) {
 				setSelectedModel(savedModelId);
@@ -100,7 +100,7 @@ export function WhisperModelSelector({
 						'is_model_downloaded',
 						{
 							modelName: model.id,
-						}
+						},
 					);
 					if (isDownloaded) {
 						downloaded.add(model.id);
@@ -113,7 +113,7 @@ export function WhisperModelSelector({
 									modelName: model.id,
 								});
 								console.log(
-									`Auto-loaded saved model: ${model.id}`
+									`Auto-loaded saved model: ${model.id}`,
 								);
 							} catch (e) {
 								console.error('Failed to auto-load model', e);
@@ -216,7 +216,7 @@ export function WhisperModelSelector({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className='sm:max-w-[600px] max-h-[85vh] flex flex-col'>
+			<DialogContent className='sm:max-w-150 max-h-[85vh] flex flex-col'>
 				<DialogHeader>
 					<DialogTitle>Select Whisper Model</DialogTitle>
 					<DialogDescription>
@@ -246,7 +246,7 @@ export function WhisperModelSelector({
 									'disabled:opacity-50 disabled:cursor-not-allowed',
 									isDownloaded
 										? 'border-green-500/50 bg-green-500/10'
-										: 'border-input bg-transparent'
+										: 'border-input bg-transparent',
 								)}
 							>
 								<div className='flex-1'>

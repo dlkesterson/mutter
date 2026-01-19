@@ -140,7 +140,7 @@ export function TabBar({
 		<div className='flex items-center w-full bg-surface border-b border-border/20 h-8'>
 			{/* Navigation buttons */}
 			{(onGoBack || onGoForward) && (
-				<div className='flex items-center gap-0.5 px-1 border-r border-border/20 h-full flex-shrink-0'>
+				<div className='flex items-center gap-0.5 px-1 border-r border-border/20 h-full shrink-0'>
 					<button
 						onClick={onGoBack}
 						disabled={!canGoBack}
@@ -208,14 +208,14 @@ export function TabBar({
 										<span title='Pinned tab'>
 											<Pin
 												size={12}
-												className='flex-shrink-0 text-primary'
+												className='shrink-0 text-primary'
 											/>
 										</span>
 									)}
 									<span className='truncate flex-1 flex items-center gap-1.5'>
 										{tab.isDirty && (
 											<span
-												className='inline-block w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0'
+												className='inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0'
 												title='Unsaved changes'
 											/>
 										)}
@@ -232,7 +232,7 @@ export function TabBar({
 									<button
 										onClick={(e) => onTabClose(tab.id, e)}
 										className={cn(
-											'p-0.5 rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted-foreground/20 transition-all flex-shrink-0',
+											'p-0.5 rounded-sm opacity-0 group-hover:opacity-100 hover:bg-muted-foreground/20 transition-all shrink-0',
 											isActive && 'opacity-100',
 										)}
 									>
@@ -294,13 +294,10 @@ export function TabBar({
 			</div>
 
 			{/* Draggable region - allows window to be moved by dragging empty space */}
-			<div
-				data-tauri-drag-region
-				className='flex-1 h-full min-w-[48px]'
-			/>
+			<div data-tauri-drag-region className='flex-1 h-full min-w-6' />
 
 			{/* Window controls */}
-			<WindowControls className='flex-shrink-0' />
+			<WindowControls className='shrink-0' />
 		</div>
 	);
 }
