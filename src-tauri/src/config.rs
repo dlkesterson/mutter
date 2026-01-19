@@ -43,11 +43,15 @@ pub struct Settings {
     #[serde(default)]
     pub voice: VoiceSettings,
     #[serde(default)]
-    pub stream_mode: StreamModeSettings,
-    #[serde(default)]
     pub ai_providers: AiProviderSettings,
     #[serde(default)]
     pub sync: SyncSettings,
+    /// Which AI provider to use by default
+    #[serde(default = "default_ai_provider")]
+    pub ai_default_provider: String,
+    /// Timeout for AI requests in milliseconds
+    #[serde(default = "default_ai_timeout")]
+    pub ai_timeout_ms: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,28 +78,6 @@ pub struct VoiceSettings {
     #[serde(default = "default_auto_stop_timeout")]
     pub auto_stop_timeout_ms: u32,
     pub selected_whisper_model: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StreamModeSettings {
-    #[serde(default = "default_false")]
-    pub enabled: bool,
-    #[serde(default = "default_stream_provider")]
-    pub provider: String,
-    #[serde(default = "default_stream_timeout")]
-    pub timeout_ms: u32,
-    #[serde(default)]
-    pub formatting: StreamModeFormatting,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StreamModeFormatting {
-    #[serde(default = "default_true")]
-    pub remove_fillers: bool,
-    #[serde(default = "default_true")]
-    pub add_structure: bool,
-    #[serde(default = "default_true")]
-    pub match_style: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,12 +172,12 @@ fn default_auto_stop_timeout() -> u32 {
     3000
 }
 
-fn default_stream_provider() -> String {
+fn default_ai_provider() -> String {
     "ollama".to_string()
 }
 
-fn default_stream_timeout() -> u32 {
-    60000
+fn default_ai_timeout() -> u32 {
+    120000 // 2 minutes
 }
 
 fn default_claude_model() -> String {
@@ -248,27 +230,6 @@ impl Default for VoiceSettings {
     }
 }
 
-impl Default for StreamModeFormatting {
-    fn default() -> Self {
-        Self {
-            remove_fillers: true,
-            add_structure: true,
-            match_style: true,
-        }
-    }
-}
-
-impl Default for StreamModeSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            provider: "ollama".to_string(),
-            timeout_ms: 60000,
-            formatting: StreamModeFormatting::default(),
-        }
-    }
-}
-
 impl Default for ClaudeSettings {
     fn default() -> Self {
         Self {
@@ -311,9 +272,10 @@ impl Default for Settings {
             vault: VaultSettings::default(),
             editor: EditorSettings::default(),
             voice: VoiceSettings::default(),
-            stream_mode: StreamModeSettings::default(),
             ai_providers: AiProviderSettings::default(),
             sync: SyncSettings::default(),
+            ai_default_provider: "ollama".to_string(),
+            ai_timeout_ms: 120000,
         }
     }
 }

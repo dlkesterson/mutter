@@ -424,11 +424,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							<div className='space-y-2'>
 								<Label htmlFor='ai-provider'>AI Provider</Label>
 								<Select
-									value={settings.stream_mode.provider}
+									value={settings.ai_default_provider}
 									onValueChange={(val: 'claude' | 'openai' | 'ollama') => {
 										updateSettings((prev) => ({
 											...prev,
-											stream_mode: { ...prev.stream_mode, provider: val },
+											ai_default_provider: val,
 										}));
 									}}
 								>
@@ -442,12 +442,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 									</SelectContent>
 								</Select>
 								<p className='text-xs text-muted-foreground'>
-									Choose the AI provider for query answering and stream mode.
+									Choose the AI provider for text cleanup and AI queries.
 								</p>
 							</div>
 
 							{/* Ollama Settings */}
-							{settings.stream_mode.provider === 'ollama' && (
+							{settings.ai_default_provider === 'ollama' && (
 								<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
 									<div className='space-y-2'>
 										<Label htmlFor='ollama-url'>Ollama URL</Label>
@@ -492,7 +492,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							)}
 
 							{/* Claude Settings */}
-							{settings.stream_mode.provider === 'claude' && credentials && (
+							{settings.ai_default_provider === 'claude' && credentials && (
 								<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
 									<div className='space-y-2'>
 										<Label htmlFor='claude-key'>API Key</Label>
@@ -547,7 +547,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							)}
 
 							{/* OpenAI Settings */}
-							{settings.stream_mode.provider === 'openai' && credentials && (
+							{settings.ai_default_provider === 'openai' && credentials && (
 								<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
 									<div className='space-y-2'>
 										<Label htmlFor='openai-key'>API Key</Label>
@@ -603,115 +603,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							)}
 						</div>
 
-						{/* Timeout & Stream Mode Options */}
+						{/* AI Timeout */}
 						<div className='space-y-4'>
-							{/* LLM Timeout - Always visible */}
 							<div className='space-y-2'>
 								<div className='flex justify-between'>
-									<Label>LLM Timeout</Label>
+									<Label>AI Timeout</Label>
 									<span className='text-sm text-muted-foreground'>
-										{(settings.stream_mode.timeout_ms / 1000).toFixed(0)}s
+										{(settings.ai_timeout_ms / 1000).toFixed(0)}s
 									</span>
 								</div>
 								<input
 									type='range'
-									min='15000'
-									max='120000'
-									step='5000'
-									value={settings.stream_mode.timeout_ms}
+									min='30000'
+									max='300000'
+									step='15000'
+									value={settings.ai_timeout_ms}
 									onChange={(e) => {
 										updateSettings((prev) => ({
 											...prev,
-											stream_mode: { ...prev.stream_mode, timeout_ms: parseInt(e.target.value) },
+											ai_timeout_ms: parseInt(e.target.value),
 										}));
 									}}
 									className='w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary'
 								/>
 								<p className='text-xs text-muted-foreground'>
-									Time to wait for LLM response (AI Query, Stream Mode). Local models may need longer.
+									Time to wait for AI responses. Local models may need longer (2-5 minutes for large documents).
 								</p>
 							</div>
-
-							{/* Stream Mode Toggle */}
-							<div className='space-y-2 pt-2 border-t border-border'>
-								<Label className='flex items-center gap-2 cursor-pointer'>
-									<input
-										type='checkbox'
-										checked={settings.stream_mode.enabled}
-										onChange={(e) => {
-											updateSettings((prev) => ({
-												...prev,
-												stream_mode: { ...prev.stream_mode, enabled: e.target.checked },
-											}));
-										}}
-										className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-									/>
-									Enable Stream Mode
-								</Label>
-								<p className='text-xs text-muted-foreground ml-6'>
-									Post-process voice transcriptions with AI to clean up and format text.
-								</p>
-							</div>
-
-							{settings.stream_mode.enabled && (
-								<div className='space-y-3 p-3 bg-muted/30 rounded-lg'>
-									<h4 className='text-sm font-medium'>Formatting Options</h4>
-
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={settings.stream_mode.formatting.remove_fillers}
-											onChange={(e) => {
-												updateSettings((prev) => ({
-													...prev,
-													stream_mode: {
-														...prev.stream_mode,
-														formatting: { ...prev.stream_mode.formatting, remove_fillers: e.target.checked },
-													},
-												}));
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Remove filler words
-									</Label>
-
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={settings.stream_mode.formatting.add_structure}
-											onChange={(e) => {
-												updateSettings((prev) => ({
-													...prev,
-													stream_mode: {
-														...prev.stream_mode,
-														formatting: { ...prev.stream_mode.formatting, add_structure: e.target.checked },
-													},
-												}));
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Add structure (lists, paragraphs)
-									</Label>
-
-									<Label className='flex items-center gap-2 cursor-pointer'>
-										<input
-											type='checkbox'
-											checked={settings.stream_mode.formatting.match_style}
-											onChange={(e) => {
-												updateSettings((prev) => ({
-													...prev,
-													stream_mode: {
-														...prev.stream_mode,
-														formatting: { ...prev.stream_mode.formatting, match_style: e.target.checked },
-													},
-												}));
-											}}
-											className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
-										/>
-										Match document style
-									</Label>
-								</div>
-							)}
 						</div>
 					</div>
 				)}

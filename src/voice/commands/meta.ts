@@ -509,6 +509,37 @@ const metaCommands: VoiceCommand[] = [
     reversible: true,
     action: () => dispatchEditorCommand('focusMode'),
   },
+
+  // ====================================
+  // Help (Phase 2)
+  // ====================================
+  {
+    id: 'meta-show-commands',
+    name: 'Show commands',
+    examples: [
+      'show commands',
+      'help',
+      'what can I say',
+      'voice commands',
+      'keyboard shortcuts',
+      'show help',
+      'list commands',
+    ],
+    bucket: 'meta',
+    requiresSelection: false,
+    requiresNote: false,
+    allowedLocations: [],
+    allowedViewModes: [],
+    allowedVoicePhases: META_PHASES,
+    destructiveness: 'none',
+    scope: 'vault',
+    reversible: true,
+    action: () => {
+      window.dispatchEvent(
+        new CustomEvent('mutter:open-dialog', { detail: { dialog: 'commands' } })
+      );
+    },
+  },
 ];
 
 /**

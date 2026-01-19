@@ -690,6 +690,32 @@ export default function Editor({
 						detail: { dialog: 'ai-query', mode: args?.mode }
 					}));
 					break;
+				case 'cleanup-text': {
+					// Get selection or entire document for text cleanup
+					const view = viewRef.current;
+					const selection = view.state.selection.main;
+					const hasSelection = selection.from !== selection.to;
+					const textToClean = hasSelection
+						? view.state.doc.sliceString(selection.from, selection.to)
+						: view.state.doc.toString();
+					const range = hasSelection
+						? { from: selection.from, to: selection.to }
+						: null;
+
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: {
+							dialog: 'text-cleanup',
+							text: textToClean,
+							selectionRange: range,
+						}
+					}));
+					break;
+				}
+				case 'show-commands':
+					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
+						detail: { dialog: 'commands' }
+					}));
+					break;
 				default:
 					// Try to execute as a formatting/editor command
 					try {
@@ -732,6 +758,38 @@ export default function Editor({
 		window.addEventListener('mutter:scroll-to-line', handleScrollToLine as EventListener);
 		return () => {
 			window.removeEventListener('mutter:scroll-to-line', handleScrollToLine as EventListener);
+		};
+	}, []);
+
+	// Listen for text cleanup apply events
+	useEffect(() => {
+		const handleApplyCleanup = (event: CustomEvent<{
+			cleanedText: string;
+			range: { from: number; to: number } | null;
+		}>) => {
+			if (!viewRef.current) return;
+
+			const { cleanedText, range } = event.detail;
+			const view = viewRef.current;
+
+			if (range) {
+				// Replace selection
+				view.dispatch({
+					changes: { from: range.from, to: range.to, insert: cleanedText },
+				});
+			} else {
+				// Replace entire document
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: cleanedText },
+				});
+			}
+
+			view.focus();
+		};
+
+		window.addEventListener('mutter:apply-text-cleanup', handleApplyCleanup as EventListener);
+		return () => {
+			window.removeEventListener('mutter:apply-text-cleanup', handleApplyCleanup as EventListener);
 		};
 	}, []);
 

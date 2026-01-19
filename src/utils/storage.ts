@@ -125,17 +125,11 @@ export const StorageKeys = {
     AUTO_STOP_TIMEOUT_MS: 'auto_stop_timeout_ms',
     MINIMAP_ENABLED: 'minimap_enabled',
 
-    // Stream Mode Settings
-    STREAM_MODE_ENABLED: 'stream_mode_enabled',
-    STREAM_MODE_PROVIDER: 'stream_mode_provider',
+    // AI Provider Settings (legacy keys kept for migration)
     CLAUDE_API_KEY: 'claude_api_key',
     CLAUDE_MODEL: 'claude_model',
     OPENAI_API_KEY: 'openai_api_key',
     OPENAI_MODEL: 'openai_model',
     OLLAMA_URL: 'ollama_url',
     OLLAMA_MODEL: 'ollama_model',
-    STREAM_MODE_REMOVE_FILLERS: 'stream_mode_remove_fillers',
-    STREAM_MODE_ADD_STRUCTURE: 'stream_mode_add_structure',
-    STREAM_MODE_MATCH_STYLE: 'stream_mode_match_style',
-    STREAM_MODE_TIMEOUT_MS: 'stream_mode_timeout_ms',
 } as const;

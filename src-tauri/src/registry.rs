@@ -329,6 +329,38 @@ impl CommandRegistry {
                 selection_required: false,
                 context_filter: None,
             },
+            CommandIntent {
+                id: "cleanup_text".to_string(),
+                phrases: vec![
+                    "clean up text".to_string(),
+                    "clean this up".to_string(),
+                    "format this".to_string(),
+                    "remove fillers".to_string(),
+                    "tidy up".to_string(),
+                    "fix transcription".to_string(),
+                    "clean up transcription".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::AppSpecific("cleanup-text".to_string()),
+                selection_required: false,
+                context_filter: None,
+            },
+            CommandIntent {
+                id: "show_commands".to_string(),
+                phrases: vec![
+                    "show commands".to_string(),
+                    "help".to_string(),
+                    "what can I say".to_string(),
+                    "voice commands".to_string(),
+                    "keyboard shortcuts".to_string(),
+                    "show help".to_string(),
+                    "list commands".to_string(),
+                ],
+                embedding: vec![],
+                action: CommandAction::AppSpecific("show-commands".to_string()),
+                selection_required: false,
+                context_filter: None,
+            },
         ]
     }
 

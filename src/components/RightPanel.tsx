@@ -12,6 +12,7 @@ import {
 	Search,
 	GitBranch,
 	Tag,
+	HelpCircle,
 } from 'lucide-react';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
@@ -31,6 +32,10 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
 	{ id: 'graph', icon: <GitBranch size={20} />, label: 'Graph' },
 	{ id: 'tags', icon: <Tag size={20} />, label: 'Tags' },
+];
+
+const FOOTER_ITEMS: ActivityBarItem[] = [
+	{ id: 'commands-help', icon: <HelpCircle size={20} />, label: 'Commands & Shortcuts' },
 ];
 
 const PANEL_MIN_WIDTH = 180;
@@ -77,6 +82,14 @@ export function RightPanel({
 
 	// Handle activity bar clicks
 	const handleActivityBarClick = (id: string) => {
+		// Handle footer items (actions, not panel tabs)
+		if (id === 'commands-help') {
+			window.dispatchEvent(
+				new CustomEvent('mutter:open-dialog', { detail: { dialog: 'commands' } })
+			);
+			return;
+		}
+
 		const tabId = id as RightPanelTab;
 		// Toggle: if already active, collapse; otherwise activate
 		if (activeTab === tabId) {
@@ -159,6 +172,7 @@ export function RightPanel({
 				items={filteredItems}
 				activeId={activeTab}
 				onItemClick={handleActivityBarClick}
+				footerItems={FOOTER_ITEMS}
 			/>
 		</div>
 	);

@@ -34,11 +34,13 @@ import { useSettings, useCredentials } from '@/lib/settings';
 import { SupertagCreatorDialog } from './components/dialogs/supertag-creator-dialog';
 import { SupertagApplyDialog } from './components/dialogs/supertag-apply-dialog';
 import { SupertagEditorDialog } from './components/dialogs/supertag-editor-dialog';
+import { TextCleanupDialog } from './components/dialogs/TextCleanupDialog';
+import { CommandsDialog } from './components/dialogs/CommandsDialog';
 import { NoteSuperTags } from './components/supertags/NoteSuperTags';
 import { SupertagsPanel } from './components/supertags/SupertagsPanel';
 import { RightPanel, type RightPanelTab } from './components/RightPanel';
 
-type DialogType = 'files' | 'voice-log' | 'settings' | 'supertag-creator' | 'supertag-apply' | 'supertag-editor' | null;
+type DialogType = 'files' | 'voice-log' | 'settings' | 'supertag-creator' | 'supertag-apply' | 'supertag-editor' | 'text-cleanup' | 'commands' | null;
 
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
@@ -67,6 +69,11 @@ function App() {
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
 	// Supertag editor state
 	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+	// Text cleanup dialog state
+	const [textCleanupData, setTextCleanupData] = useState<{
+		text: string;
+		selectionRange: { from: number; to: number } | null;
+	} | null>(null);
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
@@ -95,7 +102,7 @@ function App() {
 			};
 		}
 
-		const provider = settings.stream_mode.provider;
+		const provider = settings.ai_default_provider;
 		let apiKey = '';
 		let model = '';
 
@@ -115,7 +122,7 @@ function App() {
 			apiKey,
 			model,
 			ollamaUrl: settings.ai_providers.ollama.url,
-			timeoutMs: settings.stream_mode.timeout_ms,
+			timeoutMs: settings.ai_timeout_ms,
 		};
 	}, [settings, credentials]);
 
@@ -187,6 +194,16 @@ function App() {
 			case 'insert-embed':
 				// These could open dedicated dialogs in the future
 				console.log(`[App] Dialog ${dialog} not yet implemented`);
+				break;
+			case 'text-cleanup':
+				setTextCleanupData({
+					text: event.detail.text || '',
+					selectionRange: event.detail.selectionRange || null,
+				});
+				setOpenDialog('text-cleanup');
+				break;
+			case 'commands':
+				setOpenDialog('commands');
 				break;
 				default:
 					console.warn('[App] Unknown dialog:', dialog);
@@ -639,6 +656,14 @@ function App() {
 				e.preventDefault();
 				setOpenDialog('settings');
 			}
+			// Ctrl/Cmd + Shift + L for text cleanup
+			if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+				e.preventDefault();
+				// Dispatch event to get text from editor
+				window.dispatchEvent(new CustomEvent('mutter:execute-command', {
+					detail: { command: 'cleanup-text' }
+				}));
+			}
 		};
 
 		window.addEventListener('keydown', handleKeyDown);
@@ -1010,6 +1035,30 @@ function App() {
 					setEditingTemplateId(null);
 				}}
 				definitionId={editingTemplateId}
+			/>
+			{textCleanupData && (
+				<TextCleanupDialog
+					open={openDialog === 'text-cleanup'}
+					onOpenChange={(open) => {
+						if (!open) {
+							setOpenDialog(null);
+							setTextCleanupData(null);
+						}
+					}}
+					text={textCleanupData.text}
+					selectionRange={textCleanupData.selectionRange}
+					onApply={(cleanedText, range) => {
+						// Dispatch event to Editor to apply the cleaned text
+						window.dispatchEvent(new CustomEvent('mutter:apply-text-cleanup', {
+							detail: { cleanedText, range }
+						}));
+					}}
+				/>
+			)}
+
+			<CommandsDialog
+				open={openDialog === 'commands'}
+				onOpenChange={(open) => !open && setOpenDialog(null)}
 			/>
 
 			<WhisperModelSelector

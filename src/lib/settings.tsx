@@ -10,8 +10,11 @@ export interface Settings {
 	vault: VaultSettings;
 	editor: EditorSettings;
 	voice: VoiceSettings;
-	stream_mode: StreamModeSettings;
 	ai_providers: AiProviderSettings;
+	/** Which AI provider to use by default */
+	ai_default_provider: 'claude' | 'openai' | 'ollama';
+	/** Timeout for AI requests in milliseconds */
+	ai_timeout_ms: number;
 }
 
 export interface VaultSettings {
@@ -31,19 +34,6 @@ export interface VoiceSettings {
 	auto_stop_enabled: boolean;
 	auto_stop_timeout_ms: number;
 	selected_whisper_model: string | null;
-}
-
-export interface StreamModeSettings {
-	enabled: boolean;
-	provider: 'claude' | 'openai' | 'ollama';
-	timeout_ms: number;
-	formatting: StreamModeFormatting;
-}
-
-export interface StreamModeFormatting {
-	remove_fillers: boolean;
-	add_structure: boolean;
-	match_style: boolean;
 }
 
 export interface AiProviderSettings {
@@ -356,19 +346,6 @@ export async function migrateFromIndexedDB(): Promise<{
 			selected_whisper_model:
 				(await getStorageItem<string>('selected_whisper_model')) || null,
 		},
-		stream_mode: {
-			enabled: (await getStorageItem<boolean>('stream_mode_enabled')) ?? false,
-			provider:
-				(await getStorageItem<'claude' | 'openai' | 'ollama'>('stream_mode_provider')) ||
-				'ollama',
-			timeout_ms: (await getStorageItem<number>('stream_mode_timeout_ms')) ?? 60000,
-			formatting: {
-				remove_fillers:
-					(await getStorageItem<boolean>('stream_mode_remove_fillers')) ?? true,
-				add_structure: (await getStorageItem<boolean>('stream_mode_add_structure')) ?? true,
-				match_style: (await getStorageItem<boolean>('stream_mode_match_style')) ?? true,
-			},
-		},
 		ai_providers: {
 			claude: {
 				model:
@@ -383,6 +360,8 @@ export async function migrateFromIndexedDB(): Promise<{
 				model: (await getStorageItem<string>('ollama_model')) || 'qwen2.5:3b',
 			},
 		},
+		ai_default_provider: 'ollama',
+		ai_timeout_ms: 120000,
 	};
 
 	// Migrate credentials

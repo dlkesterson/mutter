@@ -99,6 +99,12 @@ export async function queryLLM(
 						model,
 						prompt,
 						stream: false,
+						options: {
+							// Allow long outputs for text cleanup (default is ~2048)
+							num_predict: 8192,
+							// Ensure context window fits input + output
+							num_ctx: 16384,
+						},
 					}),
 					signal: controller.signal,
 				});

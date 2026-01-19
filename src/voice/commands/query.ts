@@ -120,6 +120,31 @@ const queryCommands: VoiceCommand[] = [
       dispatchEditorCommand('build-ai-index');
     },
   },
+  {
+    id: 'cleanup-text',
+    name: 'Clean up text',
+    examples: [
+      'clean up text',
+      'clean this up',
+      'format this',
+      'remove fillers',
+      'tidy up',
+      'fix transcription',
+      'clean up transcription',
+    ],
+    bucket: 'query-ai',
+    requiresSelection: false, // Works on selection OR entire document
+    requiresNote: true,
+    allowedLocations: ['paragraph', 'heading', 'list', 'blockquote'],
+    allowedViewModes: ['editor', 'split'],
+    allowedVoicePhases: ['listening', 'command-recognized'],
+    destructiveness: 'medium', // Modifies content
+    scope: 'document',
+    reversible: true, // Can undo
+    action: () => {
+      dispatchEditorCommand('cleanup-text');
+    },
+  },
 ];
 
 /**
