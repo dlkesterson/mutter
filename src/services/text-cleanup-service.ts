@@ -6,7 +6,10 @@
  */
 
 import { queryLLM, type LLMSettings } from './llm-service';
-import { buildCleanupPrompt } from './text-cleanup-prompts';
+import {
+	buildCleanupPrompt,
+	buildStructureAnnotationPrompt,
+} from './text-cleanup-prompts';
 
 export interface CleanupOptions {
 	removeFillers: boolean;
@@ -18,10 +21,177 @@ export interface CleanupResult {
 	cleaned: string;
 	processingTimeMs: number;
 	error?: string;
+	/** Which processing mode was used */
+	mode?: 'annotation' | 'full-text';
+	/** If content validation detected significant loss (full-text mode only) */
+	contentLossWarning?: string;
 }
 
 /**
+ * Formatting annotation parsed from LLM response.
+ */
+export interface FormatAnnotation {
+	type: 'heading' | 'break';
+	/** 1-based line number where to insert */
+	line: number;
+	/** Heading level (1-3) for heading annotations */
+	level?: number;
+	/** Heading text for heading annotations */
+	text?: string;
+}
+
+/**
+ * Parse annotations from LLM response.
+ * Format: HEADING:<line>:<level>:<text> or BREAK:<line>
+ */
+export function parseAnnotations(response: string): FormatAnnotation[] {
+	const annotations: FormatAnnotation[] = [];
+
+	// Check for no changes needed
+	if (response.trim() === 'NO_CHANGES_NEEDED') {
+		return annotations;
+	}
+
+	const lines = response.trim().split('\n');
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+
+		// Parse HEADING:<line>:<level>:<text>
+		const headingMatch = trimmed.match(/^HEADING:(\d+):(\d+):(.+)$/);
+		if (headingMatch) {
+			const lineNum = parseInt(headingMatch[1], 10);
+			const level = parseInt(headingMatch[2], 10);
+			const text = headingMatch[3].trim();
+
+			if (lineNum > 0 && level >= 1 && level <= 3 && text) {
+				annotations.push({
+					type: 'heading',
+					line: lineNum,
+					level,
+					text,
+				});
+			}
+			continue;
+		}
+
+		// Parse BREAK:<line>
+		const breakMatch = trimmed.match(/^BREAK:(\d+)$/);
+		if (breakMatch) {
+			const lineNum = parseInt(breakMatch[1], 10);
+			if (lineNum > 0) {
+				annotations.push({
+					type: 'break',
+					line: lineNum,
+				});
+			}
+		}
+	}
+
+	// Sort by line number descending so we can insert from bottom to top
+	// without affecting earlier line numbers
+	return annotations.sort((a, b) => b.line - a.line);
+}
+
+/**
+ * Apply formatting annotations to the original text.
+ * Inserts headings and breaks WITHOUT modifying any original content.
+ */
+export function applyAnnotations(
+	text: string,
+	annotations: FormatAnnotation[]
+): string {
+	if (annotations.length === 0) {
+		return text;
+	}
+
+	const lines = text.split('\n');
+
+	// Annotations are sorted descending by line number, so we insert from bottom to top
+	for (const annotation of annotations) {
+		const insertIndex = annotation.line - 1; // Convert to 0-based
+
+		// Skip invalid line references
+		if (insertIndex < 0 || insertIndex > lines.length) {
+			console.warn(
+				`[TextCleanup] Skipping annotation for invalid line ${annotation.line}`
+			);
+			continue;
+		}
+
+		if (annotation.type === 'heading') {
+			const prefix = '#'.repeat(annotation.level || 2);
+			const headingLine = `${prefix} ${annotation.text}`;
+
+			// Insert heading and blank line before the target line
+			lines.splice(insertIndex, 0, '', headingLine);
+		} else if (annotation.type === 'break') {
+			// Insert blank line before the target line
+			lines.splice(insertIndex, 0, '');
+		}
+	}
+
+	return lines.join('\n');
+}
+
+/**
+ * Count words in text (for validation).
+ */
+function countWords(text: string): number {
+	return text.split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Validate that content preservation is acceptable.
+ * For filler removal, we allow up to 30% word loss.
+ * For structure-only, we expect word count to stay the same or increase.
+ */
+export function validateContentPreservation(
+	original: string,
+	cleaned: string,
+	mode: 'filler-removal' | 'structure-only'
+): { valid: boolean; ratio: number; message?: string } {
+	const originalWords = countWords(original);
+	const cleanedWords = countWords(cleaned);
+
+	if (originalWords === 0) {
+		return { valid: true, ratio: 1 };
+	}
+
+	const ratio = cleanedWords / originalWords;
+
+	if (mode === 'structure-only') {
+		// Structure-only should only ADD content (headings), not remove any
+		if (ratio < 0.95) {
+			return {
+				valid: false,
+				ratio,
+				message: `Content loss detected: ${Math.round((1 - ratio) * 100)}% of words removed. Structure mode should preserve all content.`,
+			};
+		}
+	} else {
+		// Filler removal allows up to 30% loss
+		if (ratio < 0.7) {
+			return {
+				valid: false,
+				ratio,
+				message: `Excessive content loss: ${Math.round((1 - ratio) * 100)}% of words removed. This exceeds the 30% threshold for filler removal.`,
+			};
+		}
+	}
+
+	return { valid: true, ratio };
+}
+
+/** Word count threshold for using annotation mode */
+const ANNOTATION_MODE_THRESHOLD = 500;
+
+/**
  * Clean up transcribed text using the configured LLM.
+ *
+ * Uses annotation mode for structure-only formatting on documents >500 words
+ * to guarantee 100% content preservation. For filler removal or shorter documents,
+ * uses full-text mode with validation.
  *
  * @param text - The raw transcribed text to clean up
  * @param options - What cleanup operations to perform
@@ -44,12 +214,37 @@ export async function cleanupText(
 		};
 	}
 
-	// Build the appropriate prompt
-	const prompt = buildCleanupPrompt(text, options);
+	const wordCount = countWords(text);
+
+	// Use annotation mode for structure-only formatting on longer documents
+	const useAnnotationMode =
+		options.addStructure &&
+		!options.removeFillers &&
+		wordCount >= ANNOTATION_MODE_THRESHOLD;
+
+	if (useAnnotationMode) {
+		return cleanupWithAnnotationMode(text, llmSettings, startTime);
+	} else {
+		return cleanupWithFullTextMode(text, options, llmSettings, startTime);
+	}
+}
+
+/**
+ * Structure-only cleanup using annotation mode.
+ * LLM outputs formatting instructions, we apply them programmatically.
+ * Guarantees 100% content preservation.
+ */
+async function cleanupWithAnnotationMode(
+	text: string,
+	llmSettings: LLMSettings,
+	startTime: number
+): Promise<CleanupResult> {
+	const prompt = buildStructureAnnotationPrompt(text);
+
+	console.log('[TextCleanup] Using annotation mode (preserves all content)');
 
 	try {
 		const result = await queryLLM(prompt, llmSettings);
-
 		const processingTimeMs = Math.round(performance.now() - startTime);
 
 		if (!result) {
@@ -57,14 +252,27 @@ export async function cleanupText(
 				original: text,
 				cleaned: text,
 				processingTimeMs,
+				mode: 'annotation',
 				error: 'LLM returned empty response. Is Ollama running?',
 			};
 		}
 
+		console.log('[TextCleanup] Annotation response:', result);
+
+		// Parse annotations from LLM response
+		const annotations = parseAnnotations(result);
+		console.log(
+			`[TextCleanup] Parsed ${annotations.length} annotations`
+		);
+
+		// Apply annotations to original text
+		const cleaned = applyAnnotations(text, annotations);
+
 		return {
 			original: text,
-			cleaned: result,
+			cleaned,
 			processingTimeMs,
+			mode: 'annotation',
 		};
 	} catch (error) {
 		const processingTimeMs = Math.round(performance.now() - startTime);
@@ -75,6 +283,94 @@ export async function cleanupText(
 			original: text,
 			cleaned: text,
 			processingTimeMs,
+			mode: 'annotation',
+			error: errorMessage,
+		};
+	}
+}
+
+/**
+ * Full-text cleanup mode (for filler removal or short documents).
+ * LLM rewrites the entire text. Includes validation to catch content loss.
+ */
+async function cleanupWithFullTextMode(
+	text: string,
+	options: CleanupOptions,
+	llmSettings: LLMSettings,
+	startTime: number
+): Promise<CleanupResult> {
+	const prompt = buildCleanupPrompt(text, options);
+
+	console.log('[TextCleanup] Using full-text mode');
+
+	try {
+		const result = await queryLLM(prompt, llmSettings);
+		const processingTimeMs = Math.round(performance.now() - startTime);
+
+		if (!result) {
+			return {
+				original: text,
+				cleaned: text,
+				processingTimeMs,
+				mode: 'full-text',
+				error: 'LLM returned empty response. Is Ollama running?',
+			};
+		}
+
+		// Validate content preservation
+		const validationMode =
+			options.addStructure && !options.removeFillers
+				? 'structure-only'
+				: 'filler-removal';
+		const validation = validateContentPreservation(
+			text,
+			result,
+			validationMode
+		);
+
+		if (!validation.valid) {
+			console.warn(
+				'[TextCleanup] Content validation failed:',
+				validation.message
+			);
+
+			// For structure-only, this is a hard failure
+			if (validationMode === 'structure-only') {
+				return {
+					original: text,
+					cleaned: text,
+					processingTimeMs,
+					mode: 'full-text',
+					error: validation.message,
+				};
+			}
+
+			// For filler removal, return result but with warning
+			return {
+				original: text,
+				cleaned: result,
+				processingTimeMs,
+				mode: 'full-text',
+				contentLossWarning: validation.message,
+			};
+		}
+
+		return {
+			original: text,
+			cleaned: result,
+			processingTimeMs,
+			mode: 'full-text',
+		};
+	} catch (error) {
+		const processingTimeMs = Math.round(performance.now() - startTime);
+		const errorMessage =
+			error instanceof Error ? error.message : 'Unknown error occurred';
+
+		return {
+			original: text,
+			cleaned: text,
+			processingTimeMs,
+			mode: 'full-text',
 			error: errorMessage,
 		};
 	}

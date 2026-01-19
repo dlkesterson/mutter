@@ -82,6 +82,52 @@ ${text}
 }
 
 /**
+ * Prompt for annotation-based structure formatting.
+ * Instead of asking the LLM to rewrite the text, we ask it to output
+ * ONLY formatting annotations that we apply programmatically.
+ * This guarantees 100% content preservation.
+ */
+export function buildStructureAnnotationPrompt(text: string): string {
+	// Split text into numbered lines for reference
+	const lines = text.split('\n');
+	const numberedLines = lines
+		.map((line, i) => `[${i + 1}] ${line}`)
+		.join('\n');
+
+	return `You are a document structure analyzer. Analyze this text and output ONLY formatting annotations.
+
+DO NOT rewrite or output the text itself. Only output formatting instructions.
+
+ANNOTATION FORMAT (one per line):
+- HEADING:<line>:<level>:<text> - Insert a heading before line <line>
+  - <level> is 1, 2, or 3 (for #, ##, ###)
+  - <text> is the heading text (derive from content, 2-6 words)
+- BREAK:<line> - Insert a blank line before line <line>
+
+RULES:
+1. Add headings where major topics or sections change (typically every 5-15 paragraphs)
+2. Add breaks between distinct thoughts or paragraphs
+3. Don't add a heading at line 1 unless it's clearly a document title
+4. Prefer level 2 (##) for main sections, level 3 (###) for subsections
+5. Output 3-10 annotations total for most documents
+6. If the text is already well-structured, output: NO_CHANGES_NEEDED
+
+EXAMPLE OUTPUT:
+HEADING:3:2:Morning Routine
+BREAK:5
+HEADING:12:2:Project Updates
+BREAK:15
+HEADING:20:3:Technical Details
+
+TEXT TO ANALYZE:
+"""
+${numberedLines}
+"""
+
+Output ONLY the annotations (or NO_CHANGES_NEEDED), nothing else:`;
+}
+
+/**
  * Build the appropriate prompt based on cleanup options.
  */
 export function buildCleanupPrompt(

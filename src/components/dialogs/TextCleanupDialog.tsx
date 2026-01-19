@@ -10,7 +10,7 @@ import { BaseDialog } from '@/components/ui/base-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Loader2, RefreshCw, AlertCircle, Info } from 'lucide-react';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
 	cleanupText,
@@ -119,6 +119,14 @@ export function TextCleanupDialog({
 		: 0;
 	const wordsRemoved =
 		result && !result.error ? wordCount - cleanedWordCount : 0;
+	const wordsAdded =
+		result && !result.error && cleanedWordCount > wordCount
+			? cleanedWordCount - wordCount
+			: 0;
+
+	// Determine if annotation mode would be used
+	const willUseAnnotationMode =
+		addStructure && !removeFillers && wordCount >= 500;
 
 	return (
 		<BaseDialog
@@ -135,7 +143,10 @@ export function TextCleanupDialog({
 							<>
 								Processed in{' '}
 								{(result.processingTimeMs / 1000).toFixed(1)}s
+								{wordsAdded > 0 &&
+									` · ${wordsAdded} words added (headings)`}
 								{wordsRemoved > 0 &&
+									wordsAdded === 0 &&
 									` · ${wordsRemoved} words removed`}
 							</>
 						)}
@@ -212,9 +223,49 @@ export function TextCleanupDialog({
 					</Button>
 				</div>
 
+				{/* Mode indicator (shown before processing) */}
+				{!result && !isProcessing && willUseAnnotationMode && (
+					<div className='flex items-center gap-2 mt-3 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground shrink-0'>
+						<Info className='w-4 h-4 shrink-0' />
+						<span>
+							Using annotation mode for {wordCount} words
+							(preserves all content)
+						</span>
+					</div>
+				)}
+
+				{/* Mode indicator (shown after processing) */}
+				{result && !result.error && result.mode && (
+					<div className='flex items-center gap-2 mt-3 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground shrink-0'>
+						<Info className='w-4 h-4 shrink-0' />
+						<span>
+							{result.mode === 'annotation'
+								? 'Processed with annotation mode (all content preserved)'
+								: 'Processed with full-text mode'}
+						</span>
+					</div>
+				)}
+
+				{/* Content loss warning */}
+				{result?.contentLossWarning && (
+					<div className='flex items-start gap-3 p-4 mt-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-500 shrink-0'>
+						<AlertCircle className='w-5 h-5 shrink-0 mt-0.5' />
+						<div>
+							<p className='font-medium'>Content loss warning</p>
+							<p className='text-sm opacity-90'>
+								{result.contentLossWarning}
+							</p>
+							<p className='text-sm mt-2 opacity-75'>
+								Review the cleaned text carefully before
+								applying.
+							</p>
+						</div>
+					</div>
+				)}
+
 				{/* Error display */}
 				{result?.error && (
-					<div className='flex items-start gap-3 p-4 mt-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive shrink-0'>
+					<div className='flex items-start gap-3 p-4 mt-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive shrink-0'>
 						<AlertCircle className='w-5 h-5 shrink-0 mt-0.5' />
 						<div>
 							<p className='font-medium'>Processing failed</p>
