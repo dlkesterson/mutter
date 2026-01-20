@@ -2,7 +2,7 @@
  * Text Cleanup Dialog
  *
  * A dialog for cleaning up transcribed speech-to-text using local LLM (Ollama).
- * Shows side-by-side comparison of original and cleaned text.
+ * Shows a unified git-style diff view with word-level inline highlighting.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,6 +10,7 @@ import { BaseDialog } from '@/components/ui/base-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { DiffView } from '@/components/ui/diff-view';
 import { Loader2, RefreshCw, AlertCircle, Info } from 'lucide-react';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
@@ -117,12 +118,6 @@ export function TextCleanupDialog({
 	const cleanedWordCount = result?.cleaned
 		? result.cleaned.split(/\s+/).filter(Boolean).length
 		: 0;
-	const wordsRemoved =
-		result && !result.error ? wordCount - cleanedWordCount : 0;
-	const wordsAdded =
-		result && !result.error && cleanedWordCount > wordCount
-			? cleanedWordCount - wordCount
-			: 0;
 
 	// Determine if annotation mode would be used
 	const willUseAnnotationMode =
@@ -139,16 +134,13 @@ export function TextCleanupDialog({
 			footer={
 				<div className='flex items-center justify-between w-full'>
 					<div className='text-sm text-muted-foreground'>
-						{result && !result.error && (
+						{result && !result.error ? (
 							<>
-								Processed in{' '}
-								{(result.processingTimeMs / 1000).toFixed(1)}s
-								{wordsAdded > 0 &&
-									` · ${wordsAdded} words added (headings)`}
-								{wordsRemoved > 0 &&
-									wordsAdded === 0 &&
-									` · ${wordsRemoved} words removed`}
+								{wordCount}→{cleanedWordCount} words · Processed
+								in {(result.processingTimeMs / 1000).toFixed(1)}s
 							</>
+						) : (
+							<>{wordCount} words</>
 						)}
 					</div>
 					<div className='flex gap-2'>
@@ -279,50 +271,41 @@ export function TextCleanupDialog({
 					</div>
 				)}
 
-				{/* Side-by-side content - takes remaining space */}
-				<div className='flex-1 flex gap-4 pt-4 min-h-0'>
-					{/* Original text */}
-					<div className='flex-1 flex flex-col min-h-0'>
-						<div className='text-sm font-medium text-muted-foreground mb-2 shrink-0'>
-							Original ({wordCount} words)
+				{/* Diff view - takes remaining space */}
+				<div className='flex-1 flex flex-col pt-4 min-h-0'>
+					{isProcessing ? (
+						<div className='flex-1 flex items-center justify-center bg-muted/30 rounded-lg text-muted-foreground'>
+							<Loader2 className='w-6 h-6 animate-spin mr-3' />
+							Processing with{' '}
+							{settings?.ai_providers.ollama.model || 'Ollama'}
+							...
 						</div>
-						<div className='flex-1 overflow-y-auto p-4 bg-muted/50 rounded-lg font-mono text-sm whitespace-pre-wrap min-h-0'>
-							{text}
+					) : result?.error ? (
+						<div className='flex-1 flex items-center justify-center bg-muted/30 rounded-lg'>
+							<div className='text-muted-foreground italic'>
+								Cleanup failed. Original text will be preserved.
+							</div>
 						</div>
-					</div>
-
-					{/* Cleaned text */}
-					<div className='flex-1 flex flex-col min-h-0'>
-						<div className='text-sm font-medium text-muted-foreground mb-2 shrink-0'>
-							Cleaned{' '}
-							{result &&
-								!result.error &&
-								`(${cleanedWordCount} words)`}
+					) : result ? (
+						<DiffView
+							original={text}
+							modified={result.cleaned}
+							className='flex-1 min-h-0'
+						/>
+					) : (
+						<div className='flex-1 flex flex-col bg-muted/30 rounded-lg'>
+							{/* Show original text before processing */}
+							<div className='px-3 py-2 text-xs text-muted-foreground border-b border-border/50'>
+								Original ({wordCount} words)
+							</div>
+							<div className='flex-1 overflow-y-auto p-4 font-mono text-sm whitespace-pre-wrap'>
+								{text}
+							</div>
+							<div className='px-4 py-3 text-center text-muted-foreground italic border-t border-border/50'>
+								Select cleanup options above, then click Process
+							</div>
 						</div>
-						<div className='flex-1 overflow-y-auto p-4 bg-muted/50 rounded-lg font-mono text-sm whitespace-pre-wrap min-h-0'>
-							{isProcessing ? (
-								<div className='flex items-center justify-center h-full text-muted-foreground'>
-									<Loader2 className='w-6 h-6 animate-spin mr-3' />
-									Processing with{' '}
-									{settings?.ai_providers.ollama.model ||
-										'Ollama'}
-									...
-								</div>
-							) : result?.error ? (
-								<div className='text-muted-foreground italic'>
-									Cleanup failed. Original text will be
-									preserved.
-								</div>
-							) : result ? (
-								result.cleaned
-							) : (
-								<div className='text-muted-foreground italic'>
-									Select cleanup options above, then click
-									Process
-								</div>
-							)}
-						</div>
-					</div>
+					)}
 				</div>
 			</div>
 		</BaseDialog>

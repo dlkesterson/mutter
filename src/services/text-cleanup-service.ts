@@ -250,6 +250,24 @@ function countWords(text: string): number {
 }
 
 /**
+ * Strip markdown code fences from LLM output.
+ * Some LLMs wrap their output in ```markdown ... ``` despite instructions.
+ */
+function stripCodeFences(text: string): string {
+	const trimmed = text.trim();
+
+	// Match ```markdown or ```md or ``` at start and ``` at end
+	const fencePattern = /^```(?:markdown|md)?\s*\n?([\s\S]*?)\n?```$/;
+	const match = trimmed.match(fencePattern);
+
+	if (match) {
+		return match[1].trim();
+	}
+
+	return text;
+}
+
+/**
  * Validate that content preservation is acceptable.
  * For filler removal, we allow up to 30% word loss.
  * For structure-only, we expect word count to stay the same or increase.
@@ -417,10 +435,10 @@ async function cleanupWithFullTextMode(
 	console.log('[TextCleanup] Using full-text mode');
 
 	try {
-		const result = await queryLLM(prompt, llmSettings);
+		const rawResult = await queryLLM(prompt, llmSettings);
 		const processingTimeMs = Math.round(performance.now() - startTime);
 
-		if (!result) {
+		if (!rawResult) {
 			return {
 				original: text,
 				cleaned: text,
@@ -429,6 +447,9 @@ async function cleanupWithFullTextMode(
 				error: 'LLM returned empty response. Is Ollama running?',
 			};
 		}
+
+		// Strip code fences if LLM wrapped output in them
+		const result = stripCodeFences(rawResult);
 
 		// Validate content preservation
 		const validationMode =

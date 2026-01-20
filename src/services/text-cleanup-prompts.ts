@@ -15,7 +15,10 @@ export function buildFillerRemovalPrompt(text: string): string {
 - Fix run-on sentences by adding appropriate punctuation
 - Maintain the original meaning, voice, and all substantive content
 
-IMPORTANT: Only output the cleaned text. No explanations, no commentary, no markdown formatting unless it was in the original.
+IMPORTANT:
+- Only output the cleaned text
+- No explanations, no commentary
+- Do NOT wrap output in \`\`\`markdown code fences - just output the raw text
 
 Text to clean:
 """
@@ -27,22 +30,21 @@ ${text}
  * Prompt for adding structure (paragraphs, headings) to wall-of-text transcriptions.
  */
 export function buildStructurePrompt(text: string): string {
-	return `You are a markdown formatter. Your ONLY job is to add formatting to improve readability. You must NOT change, remove, summarize, or rephrase ANY content.
+	return `You are a markdown formatter. Your ONLY job is to add paragraph breaks and occasional headings to improve readability.
 
 TASK: Add structure to this text:
 - Insert blank lines between paragraphs (where topics or thoughts shift)
-- Add markdown headings (## or ###) where major topics change
-- Convert obvious lists into bullet points if present
+- Add markdown headings (## or ###) ONLY at major section/topic changes
 
 CRITICAL RULES:
-1. Output EVERY SINGLE SENTENCE from the input - do not skip or omit anything
-2. Do NOT summarize, condense, or shorten the text in any way
-3. Do NOT rephrase or reword sentences - keep exact wording
+1. PRESERVE all existing formatting exactly (bullet points, lists, headings, etc.)
+2. Do NOT convert bullet points (-) into headings (##) - keep them as bullets
+3. Do NOT rephrase, reword, or change ANY text - keep exact wording
 4. Do NOT remove any words, sentences, or paragraphs
-5. ONLY add: line breaks, headings, and bullet formatting
-6. Output ONLY the formatted text - no explanations
-
-The output must be the same length as the input (plus a few heading characters).
+5. ONLY add: blank lines for paragraph breaks, and occasional headings for major sections
+6. Headings should be rare - only for distinct topic changes, not for every paragraph
+7. Output ONLY the formatted text - no explanations
+8. Do NOT wrap output in \`\`\`markdown code fences - just output the raw text
 
 Text to format:
 """
@@ -63,14 +65,16 @@ ALLOWED CHANGES:
 3. Remove stammering/repetition (e.g., "the the the")
 4. Fix punctuation and capitalization
 5. Add paragraph breaks between different topics
-6. Add markdown headings (##) where major topics change
+6. Add markdown headings (##) ONLY at major section/topic changes (use sparingly)
 
 NOT ALLOWED:
+- Do NOT convert bullet points (-) into headings (##) - preserve existing formatting
 - Do NOT remove words like "like", "you know", "basically", "actually" unless they are pure filler with no meaning
 - Do NOT summarize or condense content
 - Do NOT rephrase or reword sentences
 - Do NOT skip any sentences or paragraphs
 - Do NOT add any commentary
+- Do NOT wrap output in \`\`\`markdown code fences - just output the raw text
 
 Output EVERY sentence from the input (minus only the filler sounds listed above).
 Output ONLY the cleaned text.
