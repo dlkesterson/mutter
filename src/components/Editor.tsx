@@ -62,8 +62,8 @@ interface EditorProps {
 	noteId?: string | null;
 	/** Vault path for transclusion resolution */
 	vaultPath?: string | null;
-	/** Navigate to a file (for transclusion jump) */
-	onNavigate?: (target: string, blockId: string | null) => void;
+	/** Navigate to a file (for transclusion jump or wiki link click) */
+	onNavigate?: (target: string, blockId: string | null, newTab?: boolean) => void;
 }
 
 interface ClassificationResult {
@@ -792,6 +792,21 @@ export default function Editor({
 			window.removeEventListener('mutter:apply-text-cleanup', handleApplyCleanup as EventListener);
 		};
 	}, []);
+
+	// Listen for wiki link navigation events from livePreview
+	useEffect(() => {
+		const handleWikiLinkNavigate = (e: CustomEvent<{ target: string; blockId: string | null; newTab?: boolean }>) => {
+			const { target, blockId, newTab } = e.detail;
+			if (onNavigate) {
+				onNavigate(target, blockId, newTab);
+			}
+		};
+
+		window.addEventListener('mutter:navigate-wikilink', handleWikiLinkNavigate as EventListener);
+		return () => {
+			window.removeEventListener('mutter:navigate-wikilink', handleWikiLinkNavigate as EventListener);
+		};
+	}, [onNavigate]);
 
 	useEffect(() => {
 		if (!editorRef.current) return;

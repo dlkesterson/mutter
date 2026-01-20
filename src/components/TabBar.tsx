@@ -23,6 +23,7 @@ interface TabBarProps {
 	tabs: Tab[];
 	activeTabId: string | null;
 	onTabClick: (id: string) => void;
+	onTabDoubleClick?: (id: string) => void;
 	onTabClose: (id: string, e: React.MouseEvent) => void;
 	onTabReorder?: (fromIndex: number, toIndex: number) => void;
 	onCloseOthers?: (id: string) => void;
@@ -40,6 +41,7 @@ export function TabBar({
 	tabs,
 	activeTabId,
 	onTabClick,
+	onTabDoubleClick,
 	onTabClose,
 	onTabReorder,
 	onCloseOthers,
@@ -192,6 +194,7 @@ export function TabBar({
 									onDrop={(e) => handleDrop(e, index)}
 									onDragEnd={handleDragEnd}
 									onClick={() => onTabClick(tab.id)}
+									onDoubleClick={() => onTabDoubleClick?.(tab.id)}
 									className={cn(
 										'group flex items-center gap-2 px-2 py-1 text-sm border-r border-border/20 cursor-pointer select-none min-w-30 max-w-60 h-full transition-all relative',
 										isActive

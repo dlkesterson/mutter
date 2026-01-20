@@ -51,17 +51,60 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
     class {
         decorations: DecorationSet;
         view: EditorView;
+        private boundHandleClick: (e: MouseEvent) => void;
+        private boundHandleMousedown: (e: MouseEvent) => void;
 
         constructor(view: EditorView) {
             this.view = view;
             this.decorations = this.buildDecorations(view);
 
-            // Add click handler for links
-            view.dom.addEventListener('click', this.handleClick.bind(this));
+            // Bind handlers
+            this.boundHandleClick = this.handleClick.bind(this);
+            this.boundHandleMousedown = this.handleMousedown.bind(this);
+
+            // Add click handler for links and checkboxes
+            view.dom.addEventListener('click', this.boundHandleClick);
+
+            // Add pointerdown handler in capture phase for wiki links
+            // CodeMirror 6 uses pointer events internally, so we need to intercept those
+            view.dom.addEventListener('pointerdown', this.boundHandleMousedown, true);
         }
 
         destroy() {
-            // Clean up event listener if needed
+            this.view.dom.removeEventListener('click', this.boundHandleClick);
+            this.view.dom.removeEventListener('pointerdown', this.boundHandleMousedown, true);
+        }
+
+        /**
+         * Handle pointerdown on wiki links - intercepts before CodeMirror places cursor
+         * Ctrl/Cmd+click opens in new tab, regular click navigates current tab
+         */
+        handleMousedown(e: PointerEvent | MouseEvent) {
+            const target = e.target as HTMLElement;
+
+            // Find wiki link element (direct or via closest for nested elements)
+            const wikiLinkElement = target.classList.contains('cm-wikilink')
+                ? target
+                : target.closest('.cm-wikilink') as HTMLElement | null;
+
+            if (wikiLinkElement) {
+                const linkTarget = wikiLinkElement.getAttribute('data-target');
+                const blockId = wikiLinkElement.getAttribute('data-block-id') || null;
+
+                if (linkTarget) {
+                    // Prevent CodeMirror from placing cursor
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Ctrl+click (or Cmd+click on Mac) opens in new tab
+                    const newTab = e.ctrlKey || e.metaKey;
+
+                    // Dispatch custom event for the Editor to handle navigation
+                    window.dispatchEvent(new CustomEvent('mutter:navigate-wikilink', {
+                        detail: { target: linkTarget, blockId, newTab }
+                    }));
+                }
+            }
         }
 
         handleClick(e: MouseEvent) {
@@ -226,6 +269,42 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                             decorations.push(Decoration.replace({}).range(start, start + 1));
                             decorations.push(Decoration.mark({ class: 'cm-inline-code' }).range(start + 1, end - 1));
                             decorations.push(Decoration.replace({}).range(end - 1, end));
+                        }
+                    }
+
+                    // Wiki Links: [[Note Name]] or [[Note Name|Alias]]
+                    // Skip embeds (handled by transclusion extension)
+                    const wikiLinkRegex = /(?<!!)\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g;
+                    while ((match = wikiLinkRegex.exec(text)) !== null) {
+                        const start = lineStart + match.index;
+                        const end = start + match[0].length;
+                        const target = match[1]; // Note name
+                        const blockId = match[2] || ''; // Optional block ID
+                        const alias = match[3]; // Optional alias
+
+                        if (cursorPos < start || cursorPos > end) {
+                            // Hide [[ at start
+                            decorations.push(Decoration.replace({}).range(start, start + 2));
+
+                            // The display text position depends on whether there's an alias
+                            const displayStart = start + 2;
+                            const displayEnd = alias
+                                ? end - 2  // Before ]]
+                                : start + 2 + target.length + (blockId ? 1 + blockId.length : 0); // target + optional #blockId
+
+                            // Mark the visible text as a wiki link with target data
+                            decorations.push(Decoration.mark({
+                                class: 'cm-wikilink',
+                                attributes: {
+                                    'data-target': target,
+                                    'data-block-id': blockId,
+                                }
+                            }).range(displayStart, displayEnd));
+
+                            // Hide everything after display text (including | and ]])
+                            if (displayEnd < end) {
+                                decorations.push(Decoration.replace({}).range(displayEnd, end));
+                            }
                         }
                     }
 

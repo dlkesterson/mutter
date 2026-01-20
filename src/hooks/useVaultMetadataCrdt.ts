@@ -41,7 +41,8 @@ import {
   updateNoteBlocks,
   recordNoteOpened,
 } from '@/crdt/noteDoc';
-import type { GraphCacheDoc } from '@/crdt/graphCacheDoc';
+import type { GraphCacheDoc, GraphEdge } from '@/crdt/graphCacheDoc';
+import { updateEdgesForNote, createEmptyGraphCache } from '@/crdt/graphCacheDoc';
 import { NoteDocManager, createNoteDocManager } from '@/crdt/noteDocManager';
 import { migrateToSplitDocuments, type MigrationProgress } from '@/crdt/migration';
 import { extractBlocks } from '@/editor/blockIds';
@@ -49,6 +50,47 @@ import { parseLinks } from '@/graph/linkParser';
 
 /** CRDT loading phase for UI feedback */
 export type CrdtLoadingPhase = 'idle' | 'starting' | 'loading-doc' | 'migrating' | 'ready' | 'error';
+
+/**
+ * Resolve a wiki link target to a note ID using the manifest
+ *
+ * Handles various link formats:
+ * - "Note Name" → matches filename without extension
+ * - "folder/Note Name" → matches path
+ * - "Note Name.md" → matches exact path
+ */
+function resolveLinkTargetFromManifest(
+  manifest: ManifestDoc,
+  target: string
+): string | null {
+  const normalizedTarget = target.trim();
+  if (!normalizedTarget) return null;
+
+  // Try exact path match with .md extension
+  const withMd = normalizedTarget.endsWith('.md')
+    ? normalizedTarget
+    : `${normalizedTarget}.md`;
+
+  const byExactPath = manifest.path_index[withMd];
+  if (byExactPath) return byExactPath;
+
+  // Try path without extension (edge case)
+  const withoutMd = normalizedTarget.replace(/\.md$/i, '');
+  const byPathNoExt = manifest.path_index[withoutMd];
+  if (byPathNoExt) return byPathNoExt;
+
+  // Search for matching filename across all paths
+  const lowerTarget = normalizedTarget.toLowerCase();
+  for (const [path, noteId] of Object.entries(manifest.path_index)) {
+    // Extract filename without extension
+    const filename = path.split('/').pop()?.replace(/\.md$/i, '') ?? '';
+    if (filename.toLowerCase() === lowerTarget) {
+      return noteId;
+    }
+  }
+
+  return null;
+}
 
 type Result = {
   ready: boolean;
@@ -151,12 +193,25 @@ export function useVaultMetadataCrdt(params: {
           manifestHandleRef.current = manifestHandle;
           setDocUrl(manifestHandle.url);
 
-          // Load graph cache if available
+          // Load or create graph cache
           const manifest = manifestHandle.doc();
           if (manifest?.graph_cache_url && isValidAutomergeUrl(manifest.graph_cache_url)) {
             const graphHandle = await repo.find<GraphCacheDoc>(manifest.graph_cache_url as AnyDocumentId);
             await graphHandle.whenReady();
             graphCacheHandleRef.current = graphHandle;
+          } else {
+            // Create new graph cache if missing
+            console.log('[VaultMeta] Creating new graph cache...');
+            const graphCacheData = createEmptyGraphCache() as GraphCacheDoc;
+            const graphHandle = repo.create<GraphCacheDoc>(graphCacheData);
+            await graphHandle.whenReady();
+            graphCacheHandleRef.current = graphHandle;
+
+            // Register graph cache URL in manifest
+            manifestHandle.change((doc: any) => {
+              doc.graph_cache_url = graphHandle.url;
+            });
+            console.log('[VaultMeta] Graph cache created:', graphHandle.url);
           }
 
           // Create note manager
@@ -240,10 +295,23 @@ export function useVaultMetadataCrdt(params: {
           await manifestHandle.whenReady();
           if (cancelled) return;
 
+          // Create graph cache for new vault
+          console.log('[VaultMeta] Creating graph cache for new vault...');
+          const graphCacheData = createEmptyGraphCache() as GraphCacheDoc;
+          const graphHandle = repo.create<GraphCacheDoc>(graphCacheData);
+          await graphHandle.whenReady();
+          if (cancelled) return;
+
+          // Register graph cache URL in manifest
+          manifestHandle.change((doc: any) => {
+            doc.graph_cache_url = graphHandle.url;
+          });
+
           // vaultPath is guaranteed non-null here (early return in effect)
           await setManifestDocUrl(vaultPath!, manifestHandle.url);
 
           manifestHandleRef.current = manifestHandle;
+          graphCacheHandleRef.current = graphHandle;
           setDocUrl(manifestHandle.url);
 
           noteManagerRef.current = createNoteDocManager(repo, manifestHandle, {
@@ -254,7 +322,7 @@ export function useVaultMetadataCrdt(params: {
           setReady(true);
           setLoadingPhase('ready');
           console.timeEnd('[VaultMeta] boot');
-          console.log('[VaultMeta] New vault created');
+          console.log('[VaultMeta] New vault created with graph cache');
         }
 
       } catch (e) {
@@ -386,8 +454,15 @@ export function useVaultMetadataCrdt(params: {
     const noteHandle = activeNoteHandleRef.current;
     if (!noteHandle) return;
 
-    // Update links
-    setNoteLinks(noteHandle, parseLinks(content).map(l => l.target));
+    const noteDoc = noteHandle.doc();
+    const sourceNoteId = noteDoc?.id;
+    if (!sourceNoteId) return;
+
+    // Parse links from content
+    const parsedLinks = parseLinks(content);
+
+    // Update links in note document
+    setNoteLinks(noteHandle, parsedLinks.map(l => l.target));
 
     // Update blocks
     const blocks = extractBlocks(content);
@@ -398,7 +473,32 @@ export function useVaultMetadataCrdt(params: {
     // Update local state
     setActiveNoteDoc(noteHandle.doc() ?? null);
 
-    // TODO: Update graph cache incrementally
+    // Update graph cache with resolved edges
+    const graphCacheHandle = graphCacheHandleRef.current;
+    const manifest = manifestHandleRef.current?.doc();
+    if (graphCacheHandle && manifest) {
+      const now = Date.now();
+      const edges: GraphEdge[] = [];
+
+      for (const link of parsedLinks) {
+        const targetNoteId = resolveLinkTargetFromManifest(manifest, link.target);
+
+        // Skip unresolved links and self-links
+        if (!targetNoteId || targetNoteId === sourceNoteId) continue;
+
+        edges.push({
+          id: `${sourceNoteId}-${targetNoteId}-${now}-${edges.length}`,
+          sourceNoteId,
+          sourceBlockId: null,
+          targetNoteId,
+          targetBlockId: link.blockId,
+          type: link.type,
+          created_at: now,
+        });
+      }
+
+      updateEdgesForNote(graphCacheHandle, sourceNoteId, edges);
+    }
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────

@@ -897,6 +897,16 @@ function App() {
 						tabs={tabs}
 						activeTabId={activeTabId}
 						onTabClick={setActiveTabId}
+						onTabDoubleClick={(id) => {
+							// Double-click converts preview tab to permanent
+							setTabs((prev) =>
+								prev.map((tab) =>
+									tab.id === id && tab.isPreview
+										? { ...tab, isPreview: false }
+										: tab,
+								),
+							);
+						}}
 						onTabClose={handleTabClose}
 						onTabReorder={handleTabReorder}
 						onCloseOthers={handleCloseOthers}
@@ -984,8 +994,8 @@ function App() {
 										}}
 										noteId={vaultMeta.activeNoteId}
 										vaultPath={vaultPath}
-										onNavigate={(target, _blockId) => {
-											// Navigate to the target note from transclusion
+										onNavigate={(target, _blockId, newTab) => {
+											// Navigate to the target note from wiki link or transclusion
 											if (!vaultPath) return;
 											const normalizedVault = vaultPath
 												.replaceAll('\\', '/')
@@ -995,9 +1005,14 @@ function App() {
 											)
 												? target
 												: target + '.md';
-											handleFileSelect(
-												`${normalizedVault}/${targetPath}`,
-											);
+											const fullPath = `${normalizedVault}/${targetPath}`;
+
+											// Ctrl/Cmd+click opens in new tab
+											if (newTab) {
+												handleOpenInNewTab(fullPath);
+											} else {
+												handleFileSelect(fullPath);
+											}
 										}}
 									/>
 								</>

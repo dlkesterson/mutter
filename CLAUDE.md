@@ -54,7 +54,7 @@ pnpm test:coverage
 pnpm test:ui
 ```
 
-Tests are organized in `src/__tests__/` with `unit/`, `integration/`, and `performance/` subdirectories.
+Tests are organized in `src/__tests__/` with `unit/`, `integration/`, and `performance/` subdirectories. The test setup (`src/__tests__/setup.ts`) mocks localStorage, ResizeObserver, IntersectionObserver, and Tauri APIs (`@tauri-apps/api/core`, `@tauri-apps/api/event`, `@tauri-apps/plugin-dialog`).
 
 ### Linting & Type Checking
 
@@ -113,6 +113,7 @@ pnpm lint
 - `voice/` - Voice command system (108 commands across 7 categories)
 - `graph/` - Link parsing and graph building utilities
 - `context/` - React contexts (VaultMetadataContext, EditorContextProvider)
+- `services/` - LLM integration (llm-service.ts supports Claude/OpenAI/Ollama), text cleanup with annotation parsing
 
 **Backend (src-tauri/src/):**
 - `ml.rs` - Whisper (whisper-rs) + BERT (Candle) ML inference
@@ -159,6 +160,11 @@ The editor loads multiple ViewPlugins that rebuild decorations on document/viewp
 ### Stream Mode (Experimental)
 
 AI-assisted post-processing of transcriptions. After Whisper completes, optionally sends text to Claude/OpenAI/Ollama to remove fillers and add structure. Configure in Settings → Stream Mode.
+
+**Services layer (`src/services/`):**
+- `llm-service.ts` - Unified LLM API (Claude, OpenAI, Ollama) with timeout handling
+- `text-cleanup-service.ts` - Annotation-based text processing that parses `HEADING:<line>:<level>:<text>` and `BREAK:<line>` directives
+- `text-cleanup-prompts.ts` - Prompt templates with hybrid mode detection for large documents
 
 ### File System Watcher
 
@@ -263,6 +269,14 @@ Models are downloaded from `ggerganov/whisper.cpp` on HuggingFace in GGML format
 ### State Management
 
 No global state library. Uses React hooks + props drilling + LocalStorage (`utils/storage.ts`). Automerge for vault metadata (experimental).
+
+### Path Aliases
+
+The project uses `@/` as an alias for `src/`:
+```typescript
+import { Button } from '@/components/ui/button';
+```
+Configured in both `tsconfig.json` and `vitest.config.ts`.
 
 ## Common Workflows
 
@@ -370,6 +384,10 @@ Vault metadata uses Automerge 3.2.1. See `docs/CRDT-CONVENTIONS.md` for sync str
 - **Hooks**: `camelCase.ts` with `use` prefix (if any)
 - **Utilities**: `camelCase.ts` (e.g., `storage.ts`)
 - **Editor Extensions**: `camelCase.ts` (e.g., `livePreview.ts`)
+
+### Rust Version
+
+Requires Rust 1.77.2+ (specified in `Cargo.toml`). The Candle ML framework and whisper-rs have specific compiler requirements.
 
 ### Linux Dependencies
 

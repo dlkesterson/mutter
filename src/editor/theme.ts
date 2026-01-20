@@ -120,6 +120,16 @@ export const editorTheme = EditorView.theme({
     '.cm-heading .cm-link, .cm-heading.cm-link': {
         textDecoration: 'none !important',
     },
+    '.cm-wikilink': {
+        color: 'hsl(var(--primary))',
+        cursor: 'pointer',
+        borderBottom: '1px dashed hsl(var(--primary) / 0.5)',
+        transition: 'border-color 0.15s ease',
+    },
+    '.cm-wikilink:hover': {
+        borderBottomColor: 'hsl(var(--primary))',
+        borderBottomStyle: 'solid',
+    },
     '.cm-list-marker': {
         color: 'hsl(var(--muted-foreground))',
     },
