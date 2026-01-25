@@ -2,14 +2,125 @@ import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetTy
 import { StateField, Range } from '@codemirror/state';
 
 class ImageWidget extends WidgetType {
-    constructor(readonly url: string, readonly alt: string) { super() }
+    constructor(
+        readonly url: string,
+        readonly alt: string,
+        readonly width: number | null,
+        readonly pos: number,
+        readonly view: EditorView
+    ) { super() }
+
+    eq(other: ImageWidget) {
+        return this.url === other.url && this.alt === other.alt && this.width === other.width;
+    }
 
     toDOM() {
+        const wrapper = document.createElement("div");
+        wrapper.className = "cm-image-wrapper";
+
         const img = document.createElement("img");
         img.src = this.url;
         img.alt = this.alt;
         img.className = "cm-image";
-        return img;
+        if (this.width) {
+            img.style.width = this.width + "px";
+        } else {
+            img.style.maxWidth = "100%";
+        }
+
+        const handle = document.createElement("div");
+        handle.className = "cm-image-resize-handle";
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(handle);
+
+        let startX = 0;
+        let startWidth = 0;
+        const view = this.view;
+        const url = this.url;
+        const pos = this.pos;
+
+        const onMouseMove = (e: MouseEvent) => {
+            const newWidth = Math.max(50, startWidth + (e.clientX - startX));
+            img.style.width = newWidth + "px";
+        };
+
+        const onMouseUp = (e: MouseEvent) => {
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+            wrapper.classList.remove("resizing");
+
+            const newWidth = Math.max(50, startWidth + (e.clientX - startX));
+            updateImageWidth(view, pos, url, newWidth);
+        };
+
+        handle.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startX = e.clientX;
+            startWidth = img.offsetWidth;
+            wrapper.classList.add("resizing");
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+
+        // Double-click to reset to default width
+        handle.addEventListener("dblclick", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            resetImageWidth(view, pos, url);
+        });
+
+        return wrapper;
+    }
+}
+
+function updateImageWidth(view: EditorView, pos: number, url: string, newWidth: number) {
+    const doc = view.state.doc;
+    const line = doc.lineAt(pos);
+    const lineText = line.text;
+
+    const imageRegex = /!\[([^\]|]*?)(?:\|(\d+))?\]\(([^)]+)\)/g;
+    let match;
+
+    while ((match = imageRegex.exec(lineText)) !== null) {
+        const matchUrl = match[3];
+        if (matchUrl === url) {
+            const altText = match[1];
+            const newMarkdown = "![" + altText + "|" + Math.round(newWidth) + "](" + url + ")";
+            const matchStart = line.from + match.index;
+            const matchEnd = matchStart + match[0].length;
+
+            view.dispatch({
+                changes: { from: matchStart, to: matchEnd, insert: newMarkdown }
+            });
+            break;
+        }
+    }
+}
+
+function resetImageWidth(view: EditorView, pos: number, url: string) {
+    const doc = view.state.doc;
+    const line = doc.lineAt(pos);
+    const lineText = line.text;
+
+    const imageRegex = /!\[([^\]|]*?)(?:\|(\d+))?\]\(([^)]+)\)/g;
+    let match;
+
+    while ((match = imageRegex.exec(lineText)) !== null) {
+        const matchUrl = match[3];
+        if (matchUrl === url) {
+            const altText = match[1];
+            // Remove width, just keep ![alt](url)
+            const newMarkdown = "![" + altText + "](" + url + ")";
+            const matchStart = line.from + match.index;
+            const matchEnd = matchStart + match[0].length;
+
+            view.dispatch({
+                changes: { from: matchStart, to: matchEnd, insert: newMarkdown }
+            });
+            break;
+        }
     }
 }
 
@@ -250,13 +361,16 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                         }
                     }
 
-                    // Images
-                    const imageRegex = /!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
+                    // Images: ![alt](url) or ![alt|width](url)
+                    const imageRegex = /!\[([^\]|\n]*)(?:\|(\d+))?\]\(([^)\n]+)\)/g;
                     while ((match = imageRegex.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
+                        const alt = match[1];
+                        const width = match[2] ? parseInt(match[2], 10) : null;
+                        const url = match[3];
                         if (cursorPos < start || cursorPos > end) {
-                            decorations.push(Decoration.replace({ widget: new ImageWidget(match[2], match[1]) }).range(start, end));
+                            decorations.push(Decoration.replace({ widget: new ImageWidget(url, alt, width, start, view) }).range(start, end));
                         }
                     }
 

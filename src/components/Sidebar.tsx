@@ -318,9 +318,9 @@ export function Sidebar({
 					className="flex flex-col h-full overflow-hidden border-r border-border/20 bg-muted/10 relative group"
 					style={{ width: panelWidth }}
 				>
-					{/* Resize handle */}
+					{/* Resize handle - always visible subtle line, highlights on hover */}
 					<div
-						className="absolute top-0 bottom-0 right-0 w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10 opacity-0 group-hover:opacity-100"
+						className="absolute top-0 bottom-0 right-0 w-1 cursor-col-resize bg-border/30 hover:bg-primary/50 transition-colors z-10"
 						onMouseDown={startResizing}
 					/>
 

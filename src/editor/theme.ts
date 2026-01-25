@@ -41,14 +41,18 @@ export const editorTheme = EditorView.theme({
         backgroundColor: 'hsl(var(--background))',
         color: 'hsl(var(--foreground))',
         height: '100%',
+        width: '100%',
         // fontSize is controlled by fontSizeCompartment in Editor.tsx
+    },
+    '.cm-scroller': {
+        maxWidth: '800px',
+        margin: '0 auto',
+        // Width will be controlled dynamically via inline styles
     },
     '.cm-content': {
         caretColor: 'hsl(var(--primary))',
         fontFamily: 'var(--font-mono)',
         padding: '4rem 2rem', // More vertical padding, less horizontal
-        maxWidth: '800px', // Slightly narrower for better readability
-        margin: '0 auto',
         textDecoration: 'none !important',
         lineHeight: '1.75', // Improved line height
     },
@@ -143,11 +147,45 @@ export const editorTheme = EditorView.theme({
         borderRadius: '4px',
         fontSize: '0.9em',
     },
+    '.cm-image-wrapper': {
+        display: 'inline-block',
+        position: 'relative',
+        marginTop: '1em',
+        marginBottom: '1em',
+    },
+    '.cm-image-wrapper:hover .cm-image-resize-handle': {
+        opacity: '1',
+    },
+    '.cm-image-wrapper.resizing .cm-image-resize-handle': {
+        opacity: '1',
+        backgroundColor: 'hsl(var(--primary))',
+    },
     '.cm-image': {
         maxWidth: '100%',
         borderRadius: '8px',
-        marginTop: '1em',
-        marginBottom: '1em',
+        display: 'block',
+    },
+    '.cm-image-resize-handle': {
+        position: 'absolute',
+        right: '0',
+        bottom: '0',
+        width: '16px',
+        height: '16px',
+        backgroundColor: 'hsl(var(--muted-foreground))',
+        borderRadius: '4px 0 8px 0',
+        cursor: 'se-resize',
+        opacity: '0',
+        transition: 'opacity 0.15s ease, background-color 0.15s ease',
+    },
+    '.cm-image-resize-handle::before': {
+        content: '""',
+        position: 'absolute',
+        right: '3px',
+        bottom: '3px',
+        width: '8px',
+        height: '8px',
+        borderRight: '2px solid hsl(var(--background))',
+        borderBottom: '2px solid hsl(var(--background))',
     },
     '.cm-checkbox': {
         marginRight: '0.5em',
@@ -158,7 +196,7 @@ export const editorTheme = EditorView.theme({
     '.cm-hr': {
         border: 'none',
         borderTop: '1px solid hsl(var(--muted))',
-        margin: '0.75em 0',
+        margin: '.25em 0',
     },
     // Minimap Styles
     '.cm-minimap': {

@@ -291,7 +291,9 @@
 }
 
 .cm-minimap-overlay:hover {
-	background-color: hsl(var(--primary) / 0.15) !important; /* Subtle orange highlight */
+	background-color: hsl(
+		var(--primary) / 0.15
+	) !important; /* Subtle orange highlight */
 }
 
 .cm-minimap .cm-line {
@@ -300,15 +302,16 @@
 	white-space: nowrap;
 }
 
-/* Editor Canvas Constraints (Design System: 1024px max-width, centered) */
+/* Editor Canvas - width controlled dynamically via Editor.tsx */
 .cm-editor {
-	max-width: 1024px;
-	margin: 0 auto;
-	padding: var(--spacing-3); /* 24px padding for breathing room */
+	/* max-width and margin controlled via .cm-scroller for resizable content width */
+	width: 100%;
+	padding: 0 1em;
 }
 
 .cm-scroller {
 	overflow-y: auto !important;
+	padding: 0 1em;
 }
 
 .cm-content {
@@ -373,7 +376,9 @@
 
 .text-mono {
 	font-family: var(--font-mono);
-	font-feature-settings: 'liga' 0, 'calt' 0;
+	font-feature-settings:
+		'liga' 0,
+		'calt' 0;
 }
 
 /* Opacity Utilities (Design System: 90%, 70%, 50%) */
@@ -504,7 +509,8 @@
 
 /* Breathing Animation - Subtle pulse for recording state */
 @keyframes breathe {
-	0%, 100% {
+	0%,
+	100% {
 		opacity: 1;
 	}
 	50% {

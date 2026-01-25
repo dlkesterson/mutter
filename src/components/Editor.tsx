@@ -5,8 +5,8 @@ import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorState, Compartment } from '@codemirror/state';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
-import { invoke } from '@tauri-apps/api/core';
+import { readTextFile, writeTextFile, writeFile } from '@tauri-apps/plugin-fs';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { showMinimap } from '@replit/codemirror-minimap';
 import { livePreviewPlugin, cursorPosField } from '../editor/livePreview';
@@ -25,6 +25,7 @@ import {
 } from '../editor/blockIdExtension';
 import { extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
+import { pasteImageExtension } from '../editor/pasteImageExtension';
 import { findNoteIdByPath } from '../crdt/manifestDoc';
 import '../editor/transclusion.css';
 import { useToast } from '../hooks/use-toast';
@@ -107,6 +108,7 @@ export default function Editor({
 	const onBlockChangeRef = useRef(onBlockChange);
 	const vaultPathRef = useRef(vaultPath);
 	const onNavigateRef = useRef(onNavigate);
+	const filePathRef = useRef(filePath);
 	const { manifest } = useVaultMetadata();
 	const manifestRef = useRef(manifest);
 	const [content, setContent] = useState('');
@@ -114,6 +116,14 @@ export default function Editor({
 	const [minimapEnabled, setMinimapEnabled] = useState(false);
 	const [editorFontSize, setEditorFontSize] = useState('16');
 	const [isLoadingFile, setIsLoadingFile] = useState(false);
+	const [viewReady, setViewReady] = useState(false);
+
+	// Content width (readable line length) - controls maxWidth of text area
+	const [contentMaxWidth, setContentMaxWidth] = useState(800);
+	const [isResizingContent, setIsResizingContent] = useState(false);
+	const resizeStartX = useRef(0);
+	const resizeStartWidth = useRef(0);
+	const resizeSide = useRef<'left' | 'right'>('right');
 	const [ambiguityData, setAmbiguityData] = useState<{
 		text: string;
 		command: CommandAction;
@@ -153,7 +163,8 @@ export default function Editor({
 		vaultPathRef.current = vaultPath;
 		onNavigateRef.current = onNavigate;
 		manifestRef.current = manifest;
-	}, [onBlockChange, syncCursor, vaultPath, onNavigate, manifest]);
+		filePathRef.current = filePath;
+	}, [onBlockChange, syncCursor, vaultPath, onNavigate, manifest, filePath]);
 
 	// Get cursor screen position for voice suggestions
 	const cursorScreenPosition = useCursorScreenPosition(viewRef.current);
@@ -175,6 +186,73 @@ export default function Editor({
 			}
 		});
 	}, []);
+
+	// Load content max width from storage (-1 means full width)
+	useEffect(() => {
+		getStorageItem<number>('editor_content_max_width').then((width) => {
+			if (width !== null && (width === -1 || width >= 400)) {
+				setContentMaxWidth(width);
+			}
+		});
+	}, []);
+
+	// Apply content max width to CodeMirror scroller (includes gutters + content)
+	// Use -1 as a sentinel for "full width" (no max)
+	useEffect(() => {
+		if (viewReady && viewRef.current) {
+			const cmScroller = viewRef.current.scrollDOM;
+			const cmEditor = viewRef.current.dom;
+
+			if (contentMaxWidth < 0) {
+				// Full width mode - no constraint, no centering
+				cmScroller.style.maxWidth = 'none';
+				cmScroller.style.margin = '0';
+				cmScroller.style.width = '100%';
+				cmEditor.style.width = '100%';
+			} else {
+				cmScroller.style.maxWidth = `${contentMaxWidth}px`;
+				cmScroller.style.margin = '0 auto';
+				cmScroller.style.width = '';
+				cmEditor.style.width = '';
+			}
+		}
+	}, [viewReady, contentMaxWidth]);
+
+	// Handle content width resize drag
+	useEffect(() => {
+		if (!isResizingContent) return;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			const container = editorRef.current;
+			if (!container) return;
+
+			const containerWidth = container.offsetWidth;
+			const deltaX = e.clientX - resizeStartX.current;
+			// Left handle: drag left = expand, drag right = shrink
+			// Right handle: drag right = expand, drag left = shrink
+			const widthChange = resizeSide.current === 'left' ? -deltaX * 2 : deltaX * 2;
+			const newWidth = Math.max(400, resizeStartWidth.current + widthChange);
+
+			// If width exceeds container (with small margin), switch to full width mode
+			if (newWidth >= containerWidth - 20) {
+				setContentMaxWidth(-1); // -1 = full width
+			} else {
+				setContentMaxWidth(newWidth);
+			}
+		};
+
+		const handleMouseUp = () => {
+			setIsResizingContent(false);
+			setStorageItem('editor_content_max_width', contentMaxWidth);
+		};
+
+		window.addEventListener('mousemove', handleMouseMove);
+		window.addEventListener('mouseup', handleMouseUp);
+		return () => {
+			window.removeEventListener('mousemove', handleMouseMove);
+			window.removeEventListener('mouseup', handleMouseUp);
+		};
+	}, [isResizingContent, contentMaxWidth]);
 
 	// Update minimap when enabled state changes
 	useEffect(() => {
@@ -917,6 +995,50 @@ export default function Editor({
 						onNavigateRef.current?.(target, blockId);
 					},
 				}),
+				// Paste image extension - save images to same folder as note
+				pasteImageExtension({
+					onPasteImage: async (data: Uint8Array, mimeType: string) => {
+						const currentFilePath = filePathRef.current;
+						if (!currentFilePath) {
+							toast({
+								title: 'Cannot paste image',
+								description: 'No file is open. Save the note first.',
+								variant: 'destructive',
+							});
+							return null;
+						}
+
+						try {
+							// Get directory of current file
+							const lastSlash = currentFilePath.lastIndexOf('/');
+							const dir =
+								lastSlash > 0
+									? currentFilePath.substring(0, lastSlash)
+									: vaultPathRef.current;
+							if (!dir) return null;
+
+							// Generate unique filename
+							const ext = mimeType.split('/')[1] || 'png';
+							const filename = `image-${Date.now()}.${ext}`;
+							const fullPath = `${dir}/${filename}`;
+
+							// Save image
+							await writeFile(fullPath, data);
+
+							// Return asset:// URL for the webview to load
+							return convertFileSrc(fullPath);
+						} catch (err) {
+							console.error('Failed to save pasted image:', err);
+							toast({
+								title: 'Failed to paste image',
+								description:
+									err instanceof Error ? err.message : 'Unknown error',
+								variant: 'destructive',
+							});
+							return null;
+						}
+					},
+				}),
 				minimapCompartment.current.of(
 					minimapEnabled
 						? showMinimap.compute(['doc'], (_state) => ({
@@ -960,9 +1082,13 @@ export default function Editor({
 			parent: editorRef.current,
 		});
 
+		// Mark view as ready so dependent effects can run
+		setViewReady(true);
+
 		return () => {
 			viewRef.current?.destroy();
 			viewRef.current = null;
+			setViewReady(false);
 		};
 	}, []);
 
@@ -1039,14 +1165,90 @@ export default function Editor({
 		return () => clearTimeout(timer);
 	}, [content, savedContent, filePath, onContentSaved]);
 
+	// Start resizing content width
+	const startContentResize = (side: 'left' | 'right') => (e: React.MouseEvent) => {
+		e.preventDefault();
+		resizeStartX.current = e.clientX;
+		// If in full-width mode (-1), use actual scroller width as starting point
+		if (contentMaxWidth < 0 && viewRef.current) {
+			resizeStartWidth.current = viewRef.current.scrollDOM.offsetWidth;
+		} else {
+			resizeStartWidth.current = contentMaxWidth;
+		}
+		resizeSide.current = side;
+		setIsResizingContent(true);
+	};
+
+	// Track content element position for resize handles
+	const [contentRect, setContentRect] = useState<{ left: number; right: number } | null>(null);
+
+	useEffect(() => {
+		if (!viewReady || !viewRef.current) return;
+
+		const updateContentRect = () => {
+			// Use scrollDOM which contains both gutters and content
+			const cmScroller = viewRef.current?.scrollDOM;
+			const container = editorRef.current;
+			if (cmScroller && container) {
+				const scrollerBounds = cmScroller.getBoundingClientRect();
+				const containerBounds = container.getBoundingClientRect();
+				// Ensure minimum margin of 4px so handles are always visible/draggable
+				setContentRect({
+					left: Math.max(4, scrollerBounds.left - containerBounds.left),
+					right: Math.max(4, containerBounds.right - scrollerBounds.right),
+				});
+			}
+		};
+
+		// Update positions periodically and on resize
+		updateContentRect();
+		const interval = setInterval(updateContentRect, 500);
+		const observer = new ResizeObserver(updateContentRect);
+		observer.observe(editorRef.current!);
+
+		return () => {
+			clearInterval(interval);
+			observer.disconnect();
+		};
+	}, [viewReady, contentMaxWidth]);
+
 	return (
-		<div className='flex-1 flex flex-col overflow-hidden bg-background'>
+		<div className='flex-1 flex flex-col overflow-hidden bg-background relative w-full'>
 			<div
 				ref={editorRef}
-				className={`flex-1 overflow-auto transition-opacity duration-200 ${
+				className={`flex-1 overflow-auto transition-opacity duration-200 w-full ${
 					audioState === 'processing' || isLoadingFile ? 'opacity-0' : 'opacity-100'
 				}`}
 			/>
+
+			{/* Content width resize handles */}
+			{contentRect && (
+				<>
+					{/* Left handle */}
+					<div
+						className='absolute top-0 bottom-0 w-1.5 cursor-col-resize bg-border/40 hover:bg-primary/60 transition-colors z-10'
+						style={{ left: contentRect.left - 3 }}
+						onMouseDown={startContentResize('left')}
+						onDoubleClick={() => {
+							setContentMaxWidth(800);
+							setStorageItem('editor_content_max_width', 800);
+						}}
+						title="Drag to resize content width, double-click to reset to 800px"
+					/>
+					{/* Right handle */}
+					<div
+						className='absolute top-0 bottom-0 w-1.5 cursor-col-resize bg-border/40 hover:bg-primary/60 transition-colors z-10'
+						style={{ right: contentRect.right - 3 }}
+						onMouseDown={startContentResize('right')}
+						onDoubleClick={() => {
+							setContentMaxWidth(800);
+							setStorageItem('editor_content_max_width', 800);
+						}}
+						title="Drag to resize content width, double-click to reset to 800px"
+					/>
+				</>
+			)}
+
 			{ambiguityData && (
 				<AmbiguityPopover
 					text={ambiguityData.text}

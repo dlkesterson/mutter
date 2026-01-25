@@ -33,7 +33,8 @@
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-unregister",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-read-image"
   ],
   "platforms": ["linux", "macOS", "windows"]
 }

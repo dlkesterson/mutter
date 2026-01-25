@@ -944,7 +944,7 @@ function App() {
 							activeNoteId={vaultMeta.activeNoteId}
 						/>
 
-						<div className='flex-1 flex flex-col overflow-hidden relative'>
+						<div className='flex-1 flex flex-col overflow-hidden relative min-w-0'>
 							<StreamingTranscription
 								isRecording={audioState === 'listening'}
 							/>
