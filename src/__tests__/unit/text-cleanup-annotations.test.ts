@@ -8,6 +8,8 @@ import {
 	applyAnnotations,
 	applyAnnotationsHybrid,
 	validateContentPreservation,
+	parseFillerAnnotations,
+	applyFillerAnnotations,
 } from '@/services/text-cleanup-service';
 
 describe('parseAnnotations', () => {
@@ -358,5 +360,162 @@ describe('validateContentPreservation', () => {
 	it('handles empty original text', () => {
 		const result = validateContentPreservation('', 'output', 'filler-removal');
 		expect(result.valid).toBe(true);
+	});
+});
+
+describe('parseFillerAnnotations', () => {
+	it('parses REMOVE annotations correctly', () => {
+		const response = `REMOVE:1:" um,"
+REMOVE:2:"I I "
+REMOVE:3:" uh,"`;
+
+		const annotations = parseFillerAnnotations(response);
+
+		expect(annotations).toHaveLength(3);
+		expect(annotations[0]).toEqual({ line: 1, textToRemove: ' um,' });
+		expect(annotations[1]).toEqual({ line: 2, textToRemove: 'I I ' });
+		expect(annotations[2]).toEqual({ line: 3, textToRemove: ' uh,' });
+	});
+
+	it('returns empty array for NO_CHANGES_NEEDED', () => {
+		const response = 'NO_CHANGES_NEEDED';
+		const annotations = parseFillerAnnotations(response);
+		expect(annotations).toHaveLength(0);
+	});
+
+	it('handles text with special characters in quotes', () => {
+		const response = `REMOVE:1:", you know,"
+REMOVE:2:"-- I mean"`;
+
+		const annotations = parseFillerAnnotations(response);
+
+		expect(annotations).toHaveLength(2);
+		expect(annotations[0].textToRemove).toBe(', you know,');
+		expect(annotations[1].textToRemove).toBe('-- I mean');
+	});
+
+	it('skips malformed annotations', () => {
+		const response = `REMOVE:1:" um,"
+INVALID:line
+REMOVE:abc:"invalid line number"
+REMOVE:2:missing quotes
+REMOVE:3:" uh,"`;
+
+		const annotations = parseFillerAnnotations(response);
+
+		expect(annotations).toHaveLength(2);
+		expect(annotations[0].line).toBe(1);
+		expect(annotations[1].line).toBe(3);
+	});
+});
+
+describe('applyFillerAnnotations', () => {
+	it('removes fillers from specified lines', () => {
+		const text = `So, um, I was thinking about, uh, the project.
+I I I think we should start earlier.
+It's like, actually really important.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:1:" um,"
+REMOVE:1:" uh,"
+REMOVE:2:"I I "`);
+
+		const { cleaned, removedCount, skippedCount } = applyFillerAnnotations(
+			text,
+			annotations
+		);
+
+		expect(removedCount).toBe(3);
+		expect(skippedCount).toBe(0);
+		expect(cleaned).toBe(`So, I was thinking about, the project.
+I think we should start earlier.
+It's like, actually really important.`);
+	});
+
+	it('handles multiple removals on same line', () => {
+		const text = `Um, well, uh, I guess, um, that works.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:1:"Um, "
+REMOVE:1:" uh,"
+REMOVE:1:" um,"`);
+
+		const { cleaned, removedCount } = applyFillerAnnotations(text, annotations);
+
+		expect(removedCount).toBe(3);
+		expect(cleaned).toBe(`well, I guess, that works.`);
+	});
+
+	it('returns original text when no annotations', () => {
+		const text = 'This is clean text without fillers.';
+		const annotations = parseFillerAnnotations('NO_CHANGES_NEEDED');
+
+		const { cleaned, removedCount } = applyFillerAnnotations(text, annotations);
+
+		expect(cleaned).toBe(text);
+		expect(removedCount).toBe(0);
+	});
+
+	it('tracks skipped annotations when text not found', () => {
+		const text = `This is some text.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:1:" um,"
+REMOVE:1:" nonexistent "`);
+
+		const { cleaned, removedCount, skippedCount } = applyFillerAnnotations(
+			text,
+			annotations
+		);
+
+		expect(removedCount).toBe(0);
+		expect(skippedCount).toBe(2);
+		expect(cleaned).toBe(text);
+	});
+
+	it('cleans up double spaces after removal', () => {
+		const text = `I  um  think this works.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:1:" um "`);
+
+		const { cleaned } = applyFillerAnnotations(text, annotations);
+
+		// Should not have multiple consecutive spaces
+		expect(cleaned).not.toContain('  ');
+		expect(cleaned).toBe(`I think this works.`);
+	});
+
+	it('preserves meaningful content', () => {
+		const text = `I think we should, like, focus on the important stuff.
+The code is actually pretty clean now.
+We basically need to test more.`;
+
+		// LLM correctly identifies no pure fillers - these words carry meaning
+		const annotations = parseFillerAnnotations('NO_CHANGES_NEEDED');
+
+		const { cleaned } = applyFillerAnnotations(text, annotations);
+
+		// All content preserved
+		expect(cleaned).toBe(text);
+	});
+
+	it('handles false starts correctly', () => {
+		const text = `I was going to-- I went to the store yesterday.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:1:"I was going to-- "`);
+
+		const { cleaned, removedCount } = applyFillerAnnotations(text, annotations);
+
+		expect(removedCount).toBe(1);
+		expect(cleaned).toBe(`I went to the store yesterday.`);
+	});
+
+	it('skips annotations for invalid line numbers', () => {
+		const text = `Line one.
+Line two.`;
+
+		const annotations = parseFillerAnnotations(`REMOVE:5:" um,"`);
+
+		const { cleaned, skippedCount } = applyFillerAnnotations(text, annotations);
+
+		expect(skippedCount).toBe(1);
+		expect(cleaned).toBe(text);
 	});
 });

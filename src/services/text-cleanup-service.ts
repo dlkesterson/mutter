@@ -9,6 +9,7 @@ import { queryLLM, type LLMSettings } from './llm-service';
 import {
 	buildCleanupPrompt,
 	buildStructureAnnotationPrompt,
+	buildFillerAnnotationPrompt,
 	shouldUseHybridMode,
 	parseDocumentIntoElements,
 	reconstructDocument,
@@ -41,6 +42,16 @@ export interface FormatAnnotation {
 	level?: number;
 	/** Heading text for heading annotations */
 	text?: string;
+}
+
+/**
+ * Filler removal annotation parsed from LLM response.
+ */
+export interface FillerAnnotation {
+	/** 1-based line number */
+	line: number;
+	/** Exact text to remove (including surrounding spaces/punctuation) */
+	textToRemove: string;
 }
 
 /**
@@ -94,6 +105,118 @@ export function parseAnnotations(response: string): FormatAnnotation[] {
 	// Sort by line number descending so we can insert from bottom to top
 	// without affecting earlier line numbers
 	return annotations.sort((a, b) => b.line - a.line);
+}
+
+/**
+ * Parse filler removal annotations from LLM response.
+ * Format: REMOVE:<line>:"<text to remove>"
+ */
+export function parseFillerAnnotations(response: string): FillerAnnotation[] {
+	const annotations: FillerAnnotation[] = [];
+
+	// Check for no changes needed
+	if (response.trim() === 'NO_CHANGES_NEEDED') {
+		return annotations;
+	}
+
+	const lines = response.trim().split('\n');
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+
+		// Parse REMOVE:<line>:"<text>"
+		// The text is in quotes and may contain special characters
+		const removeMatch = trimmed.match(/^REMOVE:(\d+):"(.+)"$/);
+		if (removeMatch) {
+			const lineNum = parseInt(removeMatch[1], 10);
+			const textToRemove = removeMatch[2];
+
+			if (lineNum > 0 && textToRemove) {
+				annotations.push({
+					line: lineNum,
+					textToRemove,
+				});
+			}
+		}
+	}
+
+	// Group by line number for efficient processing
+	// Within each line, sort by position (we'll find positions during application)
+	return annotations;
+}
+
+/**
+ * Apply filler removal annotations to the original text.
+ * Removes exact quoted text from specified lines.
+ * Returns the cleaned text and stats about what was removed.
+ */
+export function applyFillerAnnotations(
+	text: string,
+	annotations: FillerAnnotation[]
+): { cleaned: string; removedCount: number; skippedCount: number } {
+	if (annotations.length === 0) {
+		return { cleaned: text, removedCount: 0, skippedCount: 0 };
+	}
+
+	const lines = text.split('\n');
+	let removedCount = 0;
+	let skippedCount = 0;
+
+	// Group annotations by line
+	const annotationsByLine = new Map<number, FillerAnnotation[]>();
+	for (const annotation of annotations) {
+		const lineAnnotations = annotationsByLine.get(annotation.line) || [];
+		lineAnnotations.push(annotation);
+		annotationsByLine.set(annotation.line, lineAnnotations);
+	}
+
+	// Process each line that has annotations
+	for (const [lineNum, lineAnnotations] of annotationsByLine) {
+		const lineIndex = lineNum - 1; // Convert to 0-based
+
+		if (lineIndex < 0 || lineIndex >= lines.length) {
+			console.warn(
+				`[TextCleanup] Skipping filler annotation for invalid line ${lineNum}`
+			);
+			skippedCount += lineAnnotations.length;
+			continue;
+		}
+
+		let line = lines[lineIndex];
+
+		// Apply each removal for this line
+		// Sort by position in reverse order so removals don't affect subsequent positions
+		const sortedAnnotations = lineAnnotations
+			.map((a) => ({ ...a, position: line.indexOf(a.textToRemove) }))
+			.filter((a) => a.position !== -1)
+			.sort((a, b) => b.position - a.position);
+
+		// Count skipped (not found in line)
+		skippedCount += lineAnnotations.length - sortedAnnotations.length;
+
+		for (const annotation of sortedAnnotations) {
+			const before = line.substring(0, annotation.position);
+			const after = line.substring(
+				annotation.position + annotation.textToRemove.length
+			);
+			line = before + after;
+			removedCount++;
+
+			console.log(
+				`[TextCleanup] Removed "${annotation.textToRemove}" from line ${lineNum}`
+			);
+		}
+
+		// Clean up any resulting double spaces
+		line = line.replace(/  +/g, ' ').trim();
+		lines[lineIndex] = line;
+	}
+
+	return {
+		cleaned: lines.join('\n'),
+		removedCount,
+		skippedCount,
+	};
 }
 
 /**
@@ -309,15 +432,15 @@ export function validateContentPreservation(
 	return { valid: true, ratio };
 }
 
-/** Word count threshold for using annotation mode */
+/** Word count threshold for using annotation mode (structure) */
 const ANNOTATION_MODE_THRESHOLD = 500;
 
 /**
  * Clean up transcribed text using the configured LLM.
  *
- * Uses annotation mode for structure-only formatting on documents >500 words
- * to guarantee 100% content preservation. For filler removal or shorter documents,
- * uses full-text mode with validation.
+ * Uses annotation mode for both filler removal and structure formatting
+ * to guarantee content preservation. The LLM outputs instructions
+ * (what to remove, where to add breaks) rather than rewriting text.
  *
  * @param text - The raw transcribed text to clean up
  * @param options - What cleanup operations to perform
@@ -342,16 +465,136 @@ export async function cleanupText(
 
 	const wordCount = countWords(text);
 
-	// Use annotation mode for structure-only formatting on longer documents
-	const useAnnotationMode =
-		options.addStructure &&
-		!options.removeFillers &&
-		wordCount >= ANNOTATION_MODE_THRESHOLD;
+	// Determine which annotation modes to use
+	const useFillerAnnotationMode = options.removeFillers;
+	const useStructureAnnotationMode =
+		options.addStructure && wordCount >= ANNOTATION_MODE_THRESHOLD;
 
-	if (useAnnotationMode) {
+	// If both options selected, run them sequentially
+	if (useFillerAnnotationMode && options.addStructure) {
+		// First: remove fillers
+		const fillerResult = await cleanupWithFillerAnnotationMode(
+			text,
+			llmSettings,
+			startTime
+		);
+
+		if (fillerResult.error) {
+			return fillerResult;
+		}
+
+		// Second: add structure (if document is long enough for annotation mode)
+		if (useStructureAnnotationMode) {
+			const structureResult = await cleanupWithAnnotationMode(
+				fillerResult.cleaned,
+				llmSettings,
+				performance.now()
+			);
+
+			return {
+				original: text,
+				cleaned: structureResult.cleaned,
+				processingTimeMs: Math.round(performance.now() - startTime),
+				mode: 'annotation',
+				error: structureResult.error,
+			};
+		} else {
+			// Short document - use full-text mode for structure only
+			const structureResult = await cleanupWithFullTextMode(
+				fillerResult.cleaned,
+				{ removeFillers: false, addStructure: true },
+				llmSettings,
+				performance.now()
+			);
+
+			return {
+				original: text,
+				cleaned: structureResult.cleaned,
+				processingTimeMs: Math.round(performance.now() - startTime),
+				mode: 'annotation',
+				error: structureResult.error,
+				contentLossWarning: structureResult.contentLossWarning,
+			};
+		}
+	}
+
+	// Filler removal only - use annotation mode
+	if (useFillerAnnotationMode) {
+		return cleanupWithFillerAnnotationMode(text, llmSettings, startTime);
+	}
+
+	// Structure only
+	if (useStructureAnnotationMode) {
 		return cleanupWithAnnotationMode(text, llmSettings, startTime);
 	} else {
 		return cleanupWithFullTextMode(text, options, llmSettings, startTime);
+	}
+}
+
+/**
+ * Filler removal using annotation mode.
+ * LLM outputs REMOVE annotations, we apply them programmatically.
+ * Guarantees only specified fillers are removed - no rewriting.
+ */
+async function cleanupWithFillerAnnotationMode(
+	text: string,
+	llmSettings: LLMSettings,
+	startTime: number
+): Promise<CleanupResult> {
+	const prompt = buildFillerAnnotationPrompt(text);
+
+	console.log('[TextCleanup] Using filler annotation mode');
+
+	try {
+		const result = await queryLLM(prompt, llmSettings);
+		const processingTimeMs = Math.round(performance.now() - startTime);
+
+		if (!result) {
+			return {
+				original: text,
+				cleaned: text,
+				processingTimeMs,
+				mode: 'annotation',
+				error: 'LLM returned empty response. Is Ollama running?',
+			};
+		}
+
+		console.log('[TextCleanup] Filler annotation response:', result);
+
+		// Parse annotations from LLM response
+		const annotations = parseFillerAnnotations(result);
+		console.log(
+			`[TextCleanup] Parsed ${annotations.length} filler annotations`
+		);
+
+		// Apply filler removals
+		const { cleaned, removedCount, skippedCount } = applyFillerAnnotations(
+			text,
+			annotations
+		);
+
+		console.log(
+			`[TextCleanup] Removed ${removedCount} fillers, skipped ${skippedCount}`
+		);
+
+		return {
+			original: text,
+			cleaned,
+			processingTimeMs,
+			mode: 'annotation',
+		};
+	} catch (error) {
+		const processingTimeMs = Math.round(performance.now() - startTime);
+		const errorMessage =
+			error instanceof Error ? error.message : 'Unknown error occurred';
+
+		return {
+			original: text,
+			cleaned: text,
+			processingTimeMs,
+			mode: 'annotation',
+			error: errorMessage,
+		};
 	}
 }
 

@@ -6,6 +6,7 @@
 
 /**
  * Prompt for removing filler words and false starts from transcribed text.
+ * DEPRECATED: Use buildFillerAnnotationPrompt for better content preservation.
  */
 export function buildFillerRemovalPrompt(text: string): string {
 	return `You are a transcription editor. Clean up the following dictated text by:
@@ -24,6 +25,66 @@ Text to clean:
 """
 ${text}
 """`;
+}
+
+/**
+ * Annotation-based prompt for filler removal.
+ * Instead of rewriting text, the LLM outputs REMOVE annotations
+ * that we apply programmatically. Guarantees content preservation.
+ */
+export function buildFillerAnnotationPrompt(text: string): string {
+	const lines = text.split('\n');
+	const numberedLines = lines
+		.map((line, i) => `[${i + 1}] ${line}`)
+		.join('\n');
+
+	return `You are a transcription editor. Analyze this text and output ONLY removal annotations for filler words and false starts.
+
+DO NOT rewrite or output the text itself. Only output removal instructions.
+
+ANNOTATION FORMAT (one per line):
+- REMOVE:<line>:"<exact text>" - Remove the exact quoted text from that line
+
+WHAT TO REMOVE (be conservative):
+1. Pure filler sounds: um, uh, ah, er, hmm, mm, uhh, umm
+2. Stammering/repetition: "I I I think" → remove "I I "
+3. False starts: "I was going to-- I went" → remove "I was going to-- "
+4. Trailing filler: ", you know?" or ", right?" at end of sentences (ONLY when meaningless)
+
+WHAT TO KEEP (these often carry meaning):
+- "like" (comparison or emphasis)
+- "so" (causal or transitional)
+- "well" (often meaningful pause)
+- "actually", "basically", "literally" (often intentional emphasis)
+- "I mean" (often clarifying)
+- "kind of", "sort of" (hedging that may be intentional)
+
+CRITICAL RULES:
+1. When in doubt, DO NOT remove - preserve the speaker's voice
+2. Quote the EXACT text to remove including surrounding punctuation/spaces
+3. Include leading/trailing spaces in the quote so removal doesn't create double spaces
+4. Each REMOVE must be on its own line
+5. If nothing needs removal, output: NO_CHANGES_NEEDED
+
+EXAMPLE INPUT:
+[1] So, um, I was thinking about, uh, the project.
+[2] I I I think we should, you know, maybe start earlier.
+[3] It's like, actually really important to me.
+
+EXAMPLE OUTPUT:
+REMOVE:1:" um,"
+REMOVE:1:" uh,"
+REMOVE:2:"I I "
+REMOVE:2:", you know,"
+
+Note: Line 3 keeps "like" and "actually" because they add emphasis, not filler.
+
+TEXT TO ANALYZE:
+"""
+${numberedLines}
+"""
+
+Output ONLY the annotations (or NO_CHANGES_NEEDED if the text is clean):`;
 }
 
 /**
