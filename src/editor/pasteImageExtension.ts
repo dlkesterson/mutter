@@ -48,6 +48,10 @@ async function rgbaToPng(
 export function pasteImageExtension(config: PasteImageConfig) {
 	return EditorView.domEventHandlers({
 		paste: (event: ClipboardEvent, view: EditorView) => {
+			// Capture text synchronously BEFORE any async operations
+			// (clipboardData is only valid during the event)
+			const clipboardText = event.clipboardData?.getData('text') ?? null;
+
 			// Check for image in web clipboard first (works for some cases)
 			const items = event.clipboardData?.items;
 			if (items && items.length > 0) {
@@ -65,7 +69,7 @@ export function pasteImageExtension(config: PasteImageConfig) {
 
 			// Try Tauri's native clipboard for system screenshots
 			event.preventDefault();
-			handleTauriClipboardImage(view, config, event);
+			handleTauriClipboardImage(view, config, clipboardText);
 			return true;
 		},
 	});
@@ -92,7 +96,7 @@ async function handleWebClipboardImage(
 async function handleTauriClipboardImage(
 	view: EditorView,
 	config: PasteImageConfig,
-	originalEvent: ClipboardEvent
+	clipboardText: string | null
 ) {
 	try {
 		const image = await readImage();
@@ -107,15 +111,14 @@ async function handleTauriClipboardImage(
 			insertMarkdownImage(view, relativePath);
 		}
 	} catch {
-		// No image in clipboard - let the original paste through
-		// We already prevented default, so manually handle text paste
-		const text = originalEvent.clipboardData?.getData('text');
-		if (text) {
+		// No image in clipboard - paste text instead
+		// We use pre-captured text since clipboardData is only valid synchronously
+		if (clipboardText) {
 			view.dispatch({
 				changes: {
 					from: view.state.selection.main.from,
 					to: view.state.selection.main.to,
-					insert: text,
+					insert: clipboardText,
 				},
 			});
 		}
