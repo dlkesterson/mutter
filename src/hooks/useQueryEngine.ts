@@ -241,11 +241,6 @@ export function useQueryEngine() {
 export const PRESET_QUERIES = [
   { label: 'All notes', query: '', description: 'Show all notes in the vault' },
   {
-    label: 'With supertags',
-    query: 'has:supertags',
-    description: 'Notes that have any supertag',
-  },
-  {
     label: 'With links',
     query: 'has:links',
     description: 'Notes that link to other notes',

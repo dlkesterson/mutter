@@ -1,9 +1,5 @@
 use anyhow::Result;
-use candle_core::{Device, Tensor};
-use candle_nn::VarBuilder;
-use candle_transformers::models::bert::{BertModel, Config as BertConfig};
 use std::path::PathBuf;
-use tokenizers::Tokenizer;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 /// Model manager for downloading and loading ML models
@@ -26,17 +22,9 @@ impl ModelManager {
         self.models_dir.join(format!("{}.bin", model_name)).exists()
     }
 
-    /// Check if legacy SafeTensors model is downloaded (for backwards compat)
+    /// Check if a model is downloaded (alias for is_ggml_model_downloaded)
     pub fn is_model_downloaded(&self, model_name: &str) -> bool {
-        // First check for GGML format
-        if self.is_ggml_model_downloaded(model_name) {
-            return true;
-        }
-        // Fall back to legacy SafeTensors check (for BERT embeddings)
-        let model_dir = self.get_model_path(model_name);
-        model_dir.join("model.safetensors").exists()
-            && model_dir.join("tokenizer.json").exists()
-            && model_dir.join("config.json").exists()
+        self.is_ggml_model_downloaded(model_name)
     }
 
     pub async fn download_model(
@@ -142,86 +130,6 @@ impl ModelManager {
         Ok(model_path)
     }
 
-    /// Download model files from HuggingFace Hub (for BERT embeddings)
-    pub async fn download_from_hub(
-        &self,
-        model_id: &str,
-        revision: &str,
-    ) -> Result<(PathBuf, PathBuf, PathBuf)> {
-        log::info!(
-            "Downloading {} from HuggingFace Hub (revision: {})",
-            model_id,
-            revision
-        );
-
-        // Create cache directory
-        let cache_dir = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
-            .join(".cache")
-            .join("huggingface")
-            .join("hub")
-            .join(format!("models--{}", model_id.replace("/", "--")));
-
-        std::fs::create_dir_all(&cache_dir)?;
-        log::info!("Cache directory: {:?}", cache_dir);
-
-        // Base URL for HuggingFace
-        let base_url = format!("https://huggingface.co/{}/resolve/{}/", model_id, revision);
-
-        log::info!("Base URL: {}", base_url);
-
-        // Download each file
-        let config = self
-            .download_file(&base_url, "config.json", &cache_dir)
-            .await?;
-        let tokenizer = self
-            .download_file(&base_url, "tokenizer.json", &cache_dir)
-            .await?;
-        let weights = self
-            .download_file(&base_url, "model.safetensors", &cache_dir)
-            .await?;
-
-        log::info!("All model files downloaded successfully");
-        Ok((config, tokenizer, weights))
-    }
-
-    async fn download_file(
-        &self,
-        base_url: &str,
-        filename: &str,
-        cache_dir: &PathBuf,
-    ) -> Result<PathBuf> {
-        let url = format!("{}{}", base_url, filename);
-        let output_path = cache_dir.join(filename);
-
-        // Check if already exists
-        if output_path.exists() {
-            log::info!("{} already exists in cache", filename);
-            return Ok(output_path);
-        }
-
-        log::info!("Downloading {} from {}", filename, url);
-
-        let response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "Failed to download {}: HTTP {}",
-                filename,
-                response.status()
-            ));
-        }
-
-        let bytes = response.bytes().await?;
-        std::fs::write(&output_path, bytes)?;
-
-        log::info!(
-            "Downloaded {} ({} bytes)",
-            filename,
-            output_path.metadata()?.len()
-        );
-        Ok(output_path)
-    }
 }
 
 /// Whisper transcription engine using whisper-rs (whisper.cpp bindings)
@@ -437,108 +345,3 @@ impl WhisperEngine {
     }
 }
 
-/// Embedding engine for semantic similarity using sentence transformers (BERT)
-pub struct EmbeddingEngine {
-    device: Device,
-    model: Option<BertModel>,
-    tokenizer: Option<Tokenizer>,
-    model_id: String,
-    revision: String,
-}
-
-impl EmbeddingEngine {
-    pub fn new() -> Self {
-        // Try to use CUDA GPU if available, fall back to CPU
-        let device = Device::cuda_if_available(0).unwrap_or(Device::Cpu);
-
-        log::info!("Embedding engine using device: {:?}", device);
-
-        Self {
-            device,
-            model: None,
-            tokenizer: None,
-            // A small, fast model excellent for semantic similarity
-            model_id: "sentence-transformers/all-MiniLM-L6-v2".to_string(),
-            revision: "main".to_string(),
-        }
-    }
-
-    pub fn get_model_config(&self) -> (String, String) {
-        (self.model_id.clone(), self.revision.clone())
-    }
-
-    pub fn load_from_files(
-        &mut self,
-        config_path: PathBuf,
-        tokenizer_path: PathBuf,
-        weights_path: PathBuf,
-    ) -> Result<()> {
-        let config: BertConfig = serde_json::from_str(&std::fs::read_to_string(config_path)?)?;
-        let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(|e| anyhow::anyhow!(e))?;
-
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(
-                &[weights_path],
-                candle_core::DType::F32,
-                &self.device,
-            )?
-        };
-
-        let model = BertModel::load(vb, &config)?;
-
-        self.model = Some(model);
-        self.tokenizer = Some(tokenizer);
-
-        log::info!("Embedding model loaded");
-        Ok(())
-    }
-
-    pub fn encode(&self, text: &str) -> Result<Vec<f32>> {
-        if self.model.is_none() || self.tokenizer.is_none() {
-            return Err(anyhow::anyhow!("Embedding model not loaded"));
-        }
-
-        let model = self.model.as_ref().unwrap();
-        let tokenizer = self.tokenizer.as_ref().unwrap();
-
-        // Tokenize
-        let tokens = tokenizer
-            .encode(text, true)
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-        let token_ids = Tensor::new(tokens.get_ids(), &self.device)?.unsqueeze(0)?;
-        let token_type_ids = Tensor::new(tokens.get_type_ids(), &self.device)?.unsqueeze(0)?;
-
-        // Run inference
-        let embeddings = model.forward(&token_ids, &token_type_ids, None)?;
-
-        // Mean Pooling (average of all token vectors) to get sentence embedding
-        let (_n_sentence, n_tokens, _hidden_size) = embeddings.dims3()?;
-        let embeddings = (embeddings.sum(1)? / (n_tokens as f64))?;
-        let embeddings = embeddings.get(0)?; // Get first (and only) sentence
-
-        // Normalize for Cosine Similarity
-        let embeddings_vec = embeddings.to_vec1::<f32>()?;
-        let norm: f32 = embeddings_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-        let normalized = embeddings_vec.iter().map(|x| x / norm).collect();
-        Ok(normalized)
-    }
-}
-
-/// Calculate cosine similarity between two vectors
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return 0.0;
-    }
-
-    dot / (norm_a * norm_b)
-}

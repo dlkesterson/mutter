@@ -7,32 +7,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-// Mock manifest with note paths and supertag definitions
+// Mock manifest with note paths
 const mockManifest = {
   vault_id: 'test-vault',
   id_to_path: {
     'note-1': 'project-alpha.md',
     'note-2': 'meeting-notes.md',
     'note-3': 'personal/journal.md',
-  },
-  supertag_definitions: {
-    'def-project': {
-      id: 'def-project',
-      name: 'project',
-      fields: [
-        { id: 'f1', name: 'status', type: 'text' },
-        { id: 'f2', name: 'priority', type: 'number' },
-      ],
-      created_at: Date.now(),
-      updated_at: Date.now(),
-    },
-    'def-meeting': {
-      id: 'def-meeting',
-      name: 'meeting',
-      fields: [{ id: 'f3', name: 'date', type: 'date' }],
-      created_at: Date.now(),
-      updated_at: Date.now(),
-    },
   },
   last_sync_at: Date.now(),
 };
@@ -136,21 +117,21 @@ describe('Query Engine Integration', () => {
       const { result } = renderHook(() => useQueryEngine());
 
       act(() => {
-        result.current.setQuery('type:project');
+        result.current.setQuery('tag:project');
       });
 
-      expect(result.current.query).toBe('type:project');
+      expect(result.current.query).toBe('tag:project');
     });
 
     it('generates human-readable description', () => {
       const { result } = renderHook(() => useQueryEngine());
 
       act(() => {
-        result.current.setQuery('type:project');
+        result.current.setQuery('tag:project');
       });
 
       expect(result.current.description).toContain('project');
-      expect(result.current.description).toContain('supertag');
+      expect(result.current.description).toContain('tagged');
     });
 
     it('clears state correctly', async () => {
@@ -237,18 +218,8 @@ describe('Query Engine Integration', () => {
       const { result } = renderHook(() => useQueryEngine());
 
       // Initially empty query should have filter suggestions
-      expect(result.current.suggestions).toContain('type:');
-    });
-
-    it('suggests supertag names after type:', () => {
-      const { result } = renderHook(() => useQueryEngine());
-
-      act(() => {
-        result.current.setQuery('type:');
-      });
-
-      expect(result.current.suggestions).toContain('type:project');
-      expect(result.current.suggestions).toContain('type:meeting');
+      expect(result.current.suggestions).toContain('tag:');
+      expect(result.current.suggestions).toContain('linked:');
     });
 
     it('suggests has: properties', () => {
@@ -259,7 +230,8 @@ describe('Query Engine Integration', () => {
       });
 
       expect(result.current.suggestions).toContain('has:blocks');
-      expect(result.current.suggestions).toContain('has:supertags');
+      expect(result.current.suggestions).toContain('has:links');
+      expect(result.current.suggestions).toContain('has:tags');
     });
   });
 

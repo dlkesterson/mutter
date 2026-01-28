@@ -8,7 +8,6 @@
  */
 
 import type { DocHandle } from '@automerge/react';
-import type { SupertagDefinition } from './vaultMetadataDoc';
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
@@ -40,12 +39,6 @@ export type ManifestDoc = {
   id_to_path: Record<string, string>;
 
   /**
-   * Supertag definitions (vault-wide templates)
-   * Kept in manifest because they're small and needed for sidebar queries
-   */
-  supertag_definitions: Record<string, SupertagDefinition>;
-
-  /**
    * Graph cache document URL (optional)
    * Points to a separate document that caches graph edges
    */
@@ -70,7 +63,6 @@ export function createEmptyManifest(vaultId: string): Omit<ManifestDoc, 'schema_
     note_urls: {},
     path_index: {},
     id_to_path: {},
-    supertag_definitions: {},
     graph_cache_url: null,
     migrated_from_single_doc: false,
     migration_completed_at: null,
@@ -87,7 +79,6 @@ export function ensureManifestDocShape(doc: any, vaultId: string): void {
   if (!doc.note_urls) doc.note_urls = {};
   if (!doc.path_index) doc.path_index = {};
   if (!doc.id_to_path) doc.id_to_path = {};
-  if (!doc.supertag_definitions) doc.supertag_definitions = {};
   if (doc.graph_cache_url === undefined) doc.graph_cache_url = null;
   if (doc.migrated_from_single_doc === undefined) doc.migrated_from_single_doc = false;
   if (doc.migration_completed_at === undefined) doc.migration_completed_at = null;
@@ -228,33 +219,3 @@ export function markMigrationComplete(handle: DocHandle<ManifestDoc>): void {
   });
 }
 
-// ============================================================================
-// Supertag Definition Functions (stored in manifest for quick access)
-// ============================================================================
-
-/**
- * Get all supertag definitions from manifest
- */
-export function getSupertagDefinitions(doc: ManifestDoc | null): SupertagDefinition[] {
-  if (!doc) return [];
-  return Object.values(doc.supertag_definitions);
-}
-
-/**
- * Get a specific supertag definition
- */
-export function getSupertagDefinition(doc: ManifestDoc | null, definitionId: string): SupertagDefinition | null {
-  if (!doc) return null;
-  return doc.supertag_definitions[definitionId] || null;
-}
-
-/**
- * Find supertag definition by name
- */
-export function findSupertagByName(doc: ManifestDoc | null, name: string): SupertagDefinition | null {
-  if (!doc) return null;
-  const normalizedName = name.trim().toLowerCase();
-  return Object.values(doc.supertag_definitions).find(
-    def => def.name === normalizedName
-  ) || null;
-}

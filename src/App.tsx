@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { FileText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -29,24 +29,14 @@ import { SearchPanel } from './components/SearchPanel';
 import { OutlinePanel } from './components/OutlinePanel';
 import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
-import type { LLMSettings } from './services/llm-service';
-import { useSettings, useCredentials } from '@/lib/settings';
-import { SupertagCreatorDialog } from './components/dialogs/supertag-creator-dialog';
-import { SupertagApplyDialog } from './components/dialogs/supertag-apply-dialog';
-import { SupertagEditorDialog } from './components/dialogs/supertag-editor-dialog';
 import { TextCleanupDialog } from './components/dialogs/TextCleanupDialog';
 import { CommandsDialog } from './components/dialogs/CommandsDialog';
-import { NoteSuperTags } from './components/supertags/NoteSuperTags';
-import { SupertagsPanel } from './components/supertags/SupertagsPanel';
 import { RightPanel, type RightPanelTab } from './components/RightPanel';
 
 type DialogType =
 	| 'files'
 	| 'voice-log'
 	| 'settings'
-	| 'supertag-creator'
-	| 'supertag-apply'
-	| 'supertag-editor'
 	| 'text-cleanup'
 	| 'commands'
 	| null;
@@ -77,10 +67,6 @@ function App() {
 	const [rightPanel, setRightPanel] = useState<RightPanelTab | null>(null);
 	// Graph dialog state
 	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
-	// Supertag editor state
-	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
-		null,
-	);
 	// Text cleanup dialog state
 	const [textCleanupData, setTextCleanupData] = useState<{
 		text: string;
@@ -93,45 +79,6 @@ function App() {
 	// Navigation history
 	const { canGoBack, canGoForward, recordNavigation, goBack, goForward } =
 		useNavigationHistory();
-
-	// LLM settings derived from config context
-	const { settings } = useSettings();
-	const { credentials } = useCredentials();
-	const llmSettings: LLMSettings = useMemo(() => {
-		// Default fallback when settings not yet loaded
-		if (!settings) {
-			return {
-				provider: 'ollama',
-				apiKey: '',
-				model: 'qwen2.5:3b',
-				ollamaUrl: 'http://localhost:11434',
-				timeoutMs: 30000,
-			};
-		}
-
-		const provider = settings.ai_default_provider;
-		let apiKey = '';
-		let model = '';
-
-		if (provider === 'claude') {
-			apiKey = credentials?.ai_providers.claude.api_key || '';
-			model = settings.ai_providers.claude.model;
-		} else if (provider === 'openai') {
-			apiKey = credentials?.ai_providers.openai.api_key || '';
-			model = settings.ai_providers.openai.model;
-		} else {
-			// Ollama doesn't need an API key
-			model = settings.ai_providers.ollama.model;
-		}
-
-		return {
-			provider,
-			apiKey,
-			model,
-			ollamaUrl: settings.ai_providers.ollama.url,
-			timeoutMs: settings.ai_timeout_ms,
-		};
-	}, [settings, credentials]);
 
 	// Toast notifications
 	const { toast } = useToast();
@@ -205,15 +152,8 @@ function App() {
 				case 'backlinks':
 					setRightPanel('backlinks');
 					break;
-				case 'supertag-creator':
-					setOpenDialog('supertag-creator');
-					break;
-				case 'supertag-apply':
-					setOpenDialog('supertag-apply');
-					break;
-				case 'supertag-query':
 				case 'insert-embed':
-					// These could open dedicated dialogs in the future
+					// This could open a dedicated dialog in the future
 					console.log(`[App] Dialog ${dialog} not yet implemented`);
 					break;
 				case 'text-cleanup':
@@ -536,17 +476,10 @@ function App() {
 	};
 
 	useEffect(() => {
-		// Initialize embeddings on startup
+		// Initialize app on startup
 		const initialize = async () => {
 			console.time('[App] initialize total');
 			try {
-				console.time('[App] load_embedding_model');
-				await invoke('load_embedding_model');
-				console.timeEnd('[App] load_embedding_model');
-				console.time('[App] initialize_embeddings');
-				await invoke('initialize_embeddings');
-				console.timeEnd('[App] initialize_embeddings');
-
 				// Register global hotkey
 				try {
 					await invoke('register_global_hotkey', {
@@ -967,12 +900,6 @@ function App() {
 								<ImageViewer filePath={currentFile} />
 							) : (
 								<>
-									{/* Supertag badges for the current note */}
-									<div className='px-4 border-b border-border bg-background/50'>
-										<NoteSuperTags
-											noteId={vaultMeta.activeNoteId}
-										/>
-									</div>
 									<Editor
 										filePath={currentFile}
 										audioState={audioState}
@@ -1089,8 +1016,6 @@ function App() {
 							)}
 							{rightPanel === 'search' && (
 								<SearchPanel
-									vaultPath={vaultPath}
-									llmSettings={llmSettings}
 									onNavigate={(relPath) => {
 										if (!vaultPath) return;
 										const normalizedVault = vaultPath
@@ -1114,21 +1039,6 @@ function App() {
 										);
 									}}
 									onExpand={() => setGraphDialogOpen(true)}
-								/>
-							)}
-							{rightPanel === 'tags' && (
-								<SupertagsPanel
-									noteId={vaultMeta.activeNoteId}
-									onOpenCreator={() =>
-										setOpenDialog('supertag-creator')
-									}
-									onOpenApply={() =>
-										setOpenDialog('supertag-apply')
-									}
-									onEditTemplate={(id) => {
-										setEditingTemplateId(id);
-										setOpenDialog('supertag-editor');
-									}}
 								/>
 							)}
 						</RightPanel>
@@ -1162,23 +1072,6 @@ function App() {
 					<SettingsDialog
 						open={openDialog === 'settings'}
 						onOpenChange={(open) => !open && setOpenDialog(null)}
-					/>
-					<SupertagCreatorDialog
-						open={openDialog === 'supertag-creator'}
-						onClose={() => setOpenDialog(null)}
-					/>
-					<SupertagApplyDialog
-						open={openDialog === 'supertag-apply'}
-						onClose={() => setOpenDialog(null)}
-						noteId={vaultMeta.activeNoteId}
-					/>
-					<SupertagEditorDialog
-						open={openDialog === 'supertag-editor'}
-						onClose={() => {
-							setOpenDialog(null);
-							setEditingTemplateId(null);
-						}}
-						definitionId={editingTemplateId}
 					/>
 					{textCleanupData && (
 						<TextCleanupDialog

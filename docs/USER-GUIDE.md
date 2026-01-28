@@ -7,9 +7,8 @@ Mutter is a voice-first markdown editor with semantic command recognition. This 
 1. [Getting Started](#getting-started)
 2. [Voice Commands](#voice-commands)
 3. [Query DSL Reference](#query-dsl-reference)
-4. [Supertags](#supertags)
-5. [Keyboard Shortcuts](#keyboard-shortcuts)
-6. [Troubleshooting](#troubleshooting)
+4. [Keyboard Shortcuts](#keyboard-shortcuts)
+5. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -75,17 +74,8 @@ Go to **Settings** (gear icon) **> Model Selector** and choose a model:
 
 | Say This | What Happens |
 |----------|--------------|
-| "Show all projects" | Opens query panel with `type:project` |
-| "Find active tasks" | Queries for `status:active` |
+| "Find work notes" | Opens query panel with `tag:work` |
 | "Search for [term]" | Opens query panel with search term |
-
-### Supertag Commands
-
-| Say This | What Happens |
-|----------|--------------|
-| "Tag this as project" | Applies #project supertag |
-| "Create new supertag" | Opens supertag creation dialog |
-| "Remove supertag" | Removes supertag from current note |
 
 ### AI Commands
 
@@ -115,32 +105,19 @@ key:<=value         # Less than or equal
 
 | Filter | Description | Example |
 |--------|-------------|---------|
-| `type:` | Notes with supertag | `type:project` |
 | `tag:` | Notes with markdown tag | `tag:work` |
 | `linked:` | Notes linking to target | `linked:[[Meeting]]` |
 | `from:` | Notes linked from source | `from:[[Index]]` |
 | `created:` | By creation date | `created:>2024-01-01` |
 | `updated:` | By update date | `updated:>=2024-06-01` |
-| `has:` | Has property | `has:supertags` |
+| `has:` | Has property | `has:links` |
 
 ### Has Properties
 
 ```
 has:blocks      # Notes with block references
-has:supertags   # Notes with any supertag
 has:links       # Notes with outgoing links
 has:tags        # Notes with markdown tags
-```
-
-### Supertag Field Filters
-
-Query specific fields on supertags:
-
-```
-status:active              # Any supertag with status field
-project.status:active      # Only Project supertag's status
-priority:>5                # Numeric comparison
-done:true                  # Boolean field
 ```
 
 ### Text Search
@@ -155,57 +132,19 @@ word1 word2       # All words must appear (AND)
 Combine multiple filters (AND logic):
 
 ```
-type:project status:active
 tag:work created:>2024-01-01
 has:links "meeting notes"
-type:task priority:>3 done:false
+tag:project tag:active
 ```
 
 ### Query Examples
 
 | Query | Returns |
 |-------|---------|
-| `type:project` | All notes with #project supertag |
-| `tag:work status:active` | Work-tagged notes that are active |
+| `tag:work` | All notes tagged #work |
 | `created:>2024-06-01` | Notes created after June 1, 2024 |
-| `has:blocks type:documentation` | Documentation with block refs |
+| `has:links` | Notes with outgoing wiki links |
 | `"weekly meeting"` | Notes with "weekly meeting" in title |
-
----
-
-## Supertags
-
-Supertags add structured metadata to your notes, like database fields.
-
-### Creating a Supertag
-
-1. Open **Settings > Supertags**
-2. Click **"Create New Supertag"**
-3. Enter a name (e.g., "project")
-4. Add fields:
-   - **Text**: Free-form text
-   - **Number**: Numeric values
-   - **Date**: Date picker
-   - **Select**: Dropdown options
-   - **Checkbox**: True/false
-   - **Relation**: Link to another note
-
-### Applying Supertags
-
-1. Open a note
-2. Use **Cmd/Ctrl + K** and type "Apply supertag"
-3. Select the supertag to apply
-4. Fill in field values
-
-### Querying by Supertag
-
-Once applied, query notes by supertag type or field values:
-
-```
-type:project                    # All projects
-type:project status:active      # Active projects
-project.priority:>3             # High-priority projects
-```
 
 ---
 
@@ -270,8 +209,7 @@ project.priority:>3             # High-priority projects
 
 ### Query Returns No Results
 
-1. **Verify notes have expected supertags/tags**
-   - Open a note and check for supertag badges
+1. **Verify notes have expected tags**
    - Check for #hashtags in content
 
 2. **Check date format**
@@ -279,22 +217,8 @@ project.priority:>3             # High-priority projects
    - Example: `created:>2024-01-15`
 
 3. **Try simpler query first**
-   - Start with `type:project` alone
+   - Start with `tag:work` alone
    - Add filters one at a time
-
-### Sync Not Connecting
-
-1. **Check sync server is running**
-   - Settings > Sync > Server Status
-   - Should show "Running" or "Connected"
-
-2. **Verify WebSocket URL**
-   - Default: `ws://localhost:4554`
-   - Custom server needs correct URL
-
-3. **Check firewall settings**
-   - Allow connections on port 4554
-   - May need to whitelist Mutter
 
 ### Editor Performance Issues
 

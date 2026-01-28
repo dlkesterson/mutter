@@ -13,7 +13,7 @@ import { renderHook, act } from '@testing-library/react';
 import { parseQuery, validateQuery } from '@/query/parser';
 import { executeQuery } from '@/query/executor';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type { VaultMetadataDoc, VaultNote, SupertagDefinition, VAULT_METADATA_SCHEMA_VERSION } from '@/crdt/vaultMetadataDoc';
+import type { VaultMetadataDoc, VaultNote, VAULT_METADATA_SCHEMA_VERSION } from '@/crdt/vaultMetadataDoc';
 
 // Helper functions for creating valid test fixtures
 function createTestNote(overrides: Partial<VaultNote> & { id: string; title: string; rel_path: string }): VaultNote {
@@ -22,7 +22,6 @@ function createTestNote(overrides: Partial<VaultNote> & { id: string; title: str
     links: [],
     blocks: {},
     block_order: [],
-    supertags: [],
     created_at: Date.now(),
     updated_at: Date.now(),
     last_opened_at: null,
@@ -32,7 +31,6 @@ function createTestNote(overrides: Partial<VaultNote> & { id: string; title: str
 
 function createTestDoc(overrides: Partial<{
   notes: Record<string, VaultNote>;
-  supertag_definitions: Record<string, SupertagDefinition>;
   graph_edges: Record<string, any>;
   backlink_index: Record<string, string[]>;
   note_id_by_path: Record<string, string>;
@@ -45,18 +43,8 @@ function createTestDoc(overrides: Partial<{
     },
     notes: {},
     note_id_by_path: {},
-    supertag_definitions: {},
     graph_edges: {},
     backlink_index: {},
-    ...overrides,
-  };
-}
-
-function createTestSupertag(overrides: Partial<SupertagDefinition> & { id: string; name: string }): SupertagDefinition {
-  return {
-    fields: [],
-    created_at: Date.now(),
-    updated_at: Date.now(),
     ...overrides,
   };
 }
@@ -122,7 +110,7 @@ describe('Error Handling', () => {
 
     it('handles extremely long queries', () => {
       const longValue = 'a'.repeat(10000);
-      const result = parseQuery(`type:${longValue}`);
+      const result = parseQuery(`tag:${longValue}`);
       expect(result.terms[0].type).toBe('filter');
       expect((result.terms[0] as any).value).toHaveLength(10000);
     });
@@ -171,7 +159,7 @@ describe('Error Handling', () => {
 
   describe('Query Executor Edge Cases', () => {
     it('handles null document', () => {
-      const query = parseQuery('type:project');
+      const query = parseQuery('tag:project');
       const result = executeQuery(query, null);
 
       expect(result.notes).toHaveLength(0);
@@ -181,105 +169,44 @@ describe('Error Handling', () => {
 
     it('handles empty notes object', () => {
       const emptyDoc = createTestDoc();
-      const query = parseQuery('type:project');
+      const query = parseQuery('tag:project');
       const result = executeQuery(query, emptyDoc);
 
       expect(result.notes).toHaveLength(0);
     });
 
-    it('handles notes without supertags array', () => {
+    it('handles notes with empty tags', () => {
       const doc = createTestDoc({
         notes: {
           'note-1': createTestNote({
             id: 'note-1',
             title: 'Test',
             rel_path: 'test.md',
-            supertags: [], // Empty supertags
+            tags: [],
           }),
         },
       });
-      const query = parseQuery('has:supertags');
+      const query = parseQuery('has:tags');
       const result = executeQuery(query, doc);
 
       expect(result.notes).toHaveLength(0);
     });
 
-    it('handles missing supertag definition', () => {
+    it('handles unknown filter key gracefully', () => {
       const doc = createTestDoc({
         notes: {
           'note-1': createTestNote({
             id: 'note-1',
             title: 'Test',
             rel_path: 'test.md',
-            supertags: [{ definitionId: 'non-existent', values: {} }],
           }),
         },
       });
 
-      // Query for type that doesn't exist
-      const query = parseQuery('type:project');
+      // Query for filter key that doesn't exist
+      const query = parseQuery('nonexistent:value');
       const result = executeQuery(query, doc);
 
-      expect(result.notes).toHaveLength(0);
-    });
-
-    it('handles notes with undefined field values', () => {
-      const doc = createTestDoc({
-        notes: {
-          'note-1': createTestNote({
-            id: 'note-1',
-            title: 'Test',
-            rel_path: 'test.md',
-            supertags: [{
-              definitionId: 'def-1',
-              values: {
-                status: undefined as any,
-                priority: null as any,
-              },
-            }],
-          }),
-        },
-        supertag_definitions: {
-          'def-1': createTestSupertag({
-            id: 'def-1',
-            name: 'project',
-          }),
-        },
-      });
-
-      const query = parseQuery('status:active');
-      const result = executeQuery(query, doc);
-
-      // Should not crash, just return no matches
-      expect(result.notes).toHaveLength(0);
-    });
-
-    it('handles numeric comparison with non-numeric value', () => {
-      const doc = createTestDoc({
-        notes: {
-          'note-1': createTestNote({
-            id: 'note-1',
-            title: 'Test',
-            rel_path: 'test.md',
-            supertags: [{
-              definitionId: 'def-1',
-              values: { priority: 5 },
-            }],
-          }),
-        },
-        supertag_definitions: {
-          'def-1': createTestSupertag({
-            id: 'def-1',
-            name: 'project',
-          }),
-        },
-      });
-
-      // Query with non-numeric comparison value
-      const query = parseQuery('priority:>high');
-      const result = executeQuery(query, doc);
-
-      // Should not match since 'high' is not a valid number
       expect(result.notes).toHaveLength(0);
     });
   });
@@ -381,24 +308,15 @@ describe('Error Handling', () => {
           id: `note-${i}`,
           title: `Note ${i}`,
           rel_path: `note-${i}.md`,
-          tags: ['tag1', 'tag2'],
-          supertags: i % 3 === 0 ? [{ definitionId: 'def-1', values: {} }] : [],
+          tags: i % 3 === 0 ? ['project', 'work'] : ['personal'],
           created_at: Date.now() - i * 86400000,
           updated_at: Date.now() - i * 3600000,
         });
       }
 
-      const doc = createTestDoc({
-        notes,
-        supertag_definitions: {
-          'def-1': createTestSupertag({
-            id: 'def-1',
-            name: 'project',
-          }),
-        },
-      });
+      const doc = createTestDoc({ notes });
 
-      const query = parseQuery('type:project');
+      const query = parseQuery('tag:project');
       const startTime = performance.now();
       const result = executeQuery(query, doc);
       const duration = performance.now() - startTime;
@@ -410,7 +328,7 @@ describe('Error Handling', () => {
       expect(result.notes).toHaveLength(334); // 0, 3, 6, ..., 999 = 334 notes
     });
 
-    it('handles deeply nested query combinations', () => {
+    it('handles multi-filter query combinations', () => {
       const notes: Record<string, VaultNote> = {};
 
       for (let i = 0; i < 100; i++) {
@@ -420,27 +338,15 @@ describe('Error Handling', () => {
           rel_path: `note-${i}.md`,
           tags: ['work', `priority${i % 5}`],
           links: [`note-${(i + 1) % 100}`],
-          supertags: [{
-            definitionId: 'def-1',
-            values: { status: i % 2 === 0 ? 'active' : 'paused', priority: i % 10 },
-          }],
           created_at: Date.now() - i * 86400000,
           updated_at: Date.now() - i * 3600000,
         });
       }
 
-      const doc = createTestDoc({
-        notes,
-        supertag_definitions: {
-          'def-1': createTestSupertag({
-            id: 'def-1',
-            name: 'project',
-          }),
-        },
-      });
+      const doc = createTestDoc({ notes });
 
-      // Complex multi-filter query
-      const query = parseQuery('type:project status:active priority:>5 tag:work');
+      // Multi-filter query
+      const query = parseQuery('tag:work tag:priority3');
       const result = executeQuery(query, doc);
 
       // Should complete without error

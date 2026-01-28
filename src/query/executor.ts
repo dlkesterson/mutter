@@ -33,18 +33,6 @@ function matchesFilter(
   doc: VaultMetadataDoc
 ): boolean {
   switch (filter.key) {
-    case 'type': {
-      // Match supertag by definition name
-      const definitions = Object.values(doc.supertag_definitions);
-      const matchingDef = definitions.find(
-        (d) => d.name.toLowerCase() === filter.value.toLowerCase()
-      );
-      if (!matchingDef) return false;
-      return (
-        note.supertags?.some((st) => st.definitionId === matchingDef.id) ?? false
-      );
-    }
-
     case 'tag': {
       // Match markdown tag (case-insensitive)
       return note.tags.some(
@@ -85,9 +73,6 @@ function matchesFilter(
       switch (filter.value.toLowerCase()) {
         case 'blocks':
           return Object.keys(note.blocks).length > 0;
-        case 'supertag':
-        case 'supertags':
-          return (note.supertags?.length ?? 0) > 0;
         case 'links':
           return note.links.length > 0;
         case 'tags':
@@ -97,39 +82,8 @@ function matchesFilter(
       }
     }
 
-    default: {
-      // Check if it's a supertag field filter (e.g., status:active)
-      // Format: fieldName:value or type.fieldName:value
-      const parts = filter.key.split('.');
-      if (parts.length === 2) {
-        // type.field format
-        const [typeName, fieldName] = parts;
-        const def = Object.values(doc.supertag_definitions).find(
-          (d) => d.name.toLowerCase() === typeName.toLowerCase()
-        );
-        if (!def) return false;
-        const instance = note.supertags?.find(
-          (st) => st.definitionId === def.id
-        );
-        if (!instance) return false;
-        return matchFieldValue(
-          instance.values[fieldName],
-          filter.value,
-          filter.operator
-        );
-      }
-
-      // Simple field name - check all supertags on the note
-      for (const instance of note.supertags ?? []) {
-        const fieldValue = instance.values[filter.key];
-        if (fieldValue !== undefined) {
-          if (matchFieldValue(fieldValue, filter.value, filter.operator)) {
-            return true;
-          }
-        }
-      }
+    default:
       return false;
-    }
   }
 }
 
@@ -161,60 +115,6 @@ function compareDates(
 }
 
 /**
- * Match a field value against a filter value
- */
-function matchFieldValue(
-  fieldValue: unknown,
-  filterValue: string,
-  operator: FilterOperator
-): boolean {
-  if (fieldValue === undefined || fieldValue === null) return false;
-
-  // String comparison
-  if (typeof fieldValue === 'string') {
-    if (operator === '=') {
-      return fieldValue.toLowerCase() === filterValue.toLowerCase();
-    }
-    return fieldValue.toLowerCase().includes(filterValue.toLowerCase());
-  }
-
-  // Number comparison
-  if (typeof fieldValue === 'number') {
-    const filterNum = parseFloat(filterValue);
-    if (isNaN(filterNum)) return false;
-
-    switch (operator) {
-      case '>':
-        return fieldValue > filterNum;
-      case '>=':
-        return fieldValue >= filterNum;
-      case '<':
-        return fieldValue < filterNum;
-      case '<=':
-        return fieldValue <= filterNum;
-      case '=':
-        return fieldValue === filterNum;
-      default:
-        return false;
-    }
-  }
-
-  // Boolean comparison
-  if (typeof fieldValue === 'boolean') {
-    return fieldValue === (filterValue.toLowerCase() === 'true');
-  }
-
-  // Array comparison (multi-select)
-  if (Array.isArray(fieldValue)) {
-    return fieldValue.some(
-      (v) => String(v).toLowerCase() === filterValue.toLowerCase()
-    );
-  }
-
-  return false;
-}
-
-/**
  * Check if a note matches a text term (full-text search in title)
  */
 function matchesText(note: VaultNote, text: TextTerm): boolean {
@@ -229,21 +129,6 @@ function matchesText(note: VaultNote, text: TextTerm): boolean {
   // Word match - all words must appear
   const words = searchValue.split(/\s+/);
   return words.every((word) => noteTitle.includes(word));
-}
-
-/**
- * Get notes with a specific supertag (indexed lookup for optimization)
- */
-function getNotesBySupertag(doc: VaultMetadataDoc, tagName: string): VaultNote[] {
-  const def = Object.values(doc.supertag_definitions).find(
-    (d) => d.name.toLowerCase() === tagName.toLowerCase()
-  );
-
-  if (!def) return [];
-
-  return Object.values(doc.notes).filter(
-    (note) => note.supertags?.some((st) => st.definitionId === def.id)
-  );
 }
 
 /**
@@ -274,21 +159,9 @@ export function executeQuery(
     };
   }
 
-  // Optimization: If query has `type:` filter, start from supertag index
-  const typeFilter = query.terms.find(
-    (t) => t.type === 'filter' && (t as FilterTerm).key === 'type'
-  ) as FilterTerm | undefined;
-
   let notes: VaultNote[];
   const indexStart = performance.now();
-
-  if (typeFilter) {
-    // Use supertag index for faster initial filtering
-    notes = getNotesBySupertag(doc, typeFilter.value);
-  } else {
-    notes = Object.values(doc.notes);
-  }
-
+  notes = Object.values(doc.notes);
   timing.indexLookupMs = performance.now() - indexStart;
 
   // If no terms, return all notes
@@ -307,12 +180,10 @@ export function executeQuery(
     };
   }
 
-  // Apply remaining filters (skip type filter if already used for index)
+  // Apply filters
   const filterStart = performance.now();
   for (const term of query.terms) {
     if (term.type === 'filter') {
-      // Skip type filter if we already used it for index lookup
-      if (term === typeFilter) continue;
       notes = notes.filter((note) => matchesFilter(note, term, doc));
     } else {
       notes = notes.filter((note) => matchesText(note, term));
@@ -366,13 +237,7 @@ export function getQuerySuggestions(
 
   // Suggest filter keys if nothing typed
   if (!partialQuery.trim()) {
-    return ['type:', 'tag:', 'linked:', 'created:>', 'has:'];
-  }
-
-  // If ends with "type:", suggest supertag names
-  if (partialQuery.trim().endsWith('type:')) {
-    const defs = Object.values(doc.supertag_definitions);
-    return defs.map((d) => `type:${d.name}`);
+    return ['tag:', 'linked:', 'created:>', 'has:'];
   }
 
   // If ends with "tag:", suggest tags from notes
@@ -390,7 +255,7 @@ export function getQuerySuggestions(
 
   // If ends with "has:", suggest properties
   if (partialQuery.trim().endsWith('has:')) {
-    return ['has:blocks', 'has:supertags', 'has:links', 'has:tags'];
+    return ['has:blocks', 'has:links', 'has:tags'];
   }
 
   return suggestions;

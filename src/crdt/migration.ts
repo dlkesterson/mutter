@@ -108,7 +108,6 @@ export async function migrateToSplitDocuments(
       note_urls: {},
       path_index: {},
       id_to_path: {},
-      supertag_definitions: legacyDoc.supertag_definitions ?? {},
       graph_cache_url: null,
       migrated_from_single_doc: true,
       migration_completed_at: null,
@@ -145,7 +144,6 @@ export async function migrateToSplitDocuments(
             links: oldNote.links ?? [],
             blocks: oldNote.blocks ?? {},
             block_order: oldNote.block_order ?? [],
-            supertags: oldNote.supertags ?? [],
           };
 
           const noteHandle = repo.create<NoteDoc>(noteData);

@@ -5,7 +5,6 @@ mod device;
 mod file_watcher;
 mod ml;
 mod registry;
-mod sync_server;
 mod system;
 mod vault_crdt_fs;
 mod vault_state;
@@ -14,7 +13,6 @@ use commands::*;
 use system::*;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::ShortcutState;
-use tauri_plugin_shell::ShellExt;
 use std::sync::{Arc, Mutex};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -56,7 +54,6 @@ pub fn run() {
         )
         .manage(commands::AppState::default())
         .manage(Arc::new(Mutex::new(file_watcher::FileWatcherState::new())))
-        .manage(sync_server::SyncServerState::default())
         .setup(|app| {
             // Configure logging for both debug and release builds
             // Logs to stdout (dev) and ~/.local/share/mutter/logs/mutter.log (user debugging)
@@ -116,22 +113,6 @@ pub fn run() {
                     .ok();
             }
 
-            // Start the embedding server sidecar
-            log::info!("Starting embedding server sidecar...");
-            let sidecar_command = app
-                .shell()
-                .sidecar("embedding-server")
-                .expect("failed to create embedding-server sidecar command");
-
-            let (_rx, _child) = sidecar_command
-                .spawn()
-                .expect("Failed to spawn embedding server sidecar");
-
-            log::info!("Embedding server sidecar started successfully on port 8080");
-
-            // Store the child process handle so it gets cleaned up on app exit
-            // Tauri automatically kills sidecars when the app closes
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -159,20 +140,16 @@ pub fn run() {
             transcribe_audio,
             transcribe_streaming,
             classify_text,
-            get_embedding,
             get_file_tree,
             create_note,
             rename_note,
             search_notes,
             get_current_context,
             download_model,
-            download_model_from_hub,
             download_whisper_model,
             is_model_downloaded,
             load_whisper_model,
             has_loaded_model,
-            load_embedding_model,
-            initialize_embeddings,
             extract_tasks,
             move_file,
             delete_file,
@@ -181,11 +158,6 @@ pub fn run() {
             open_daily_note,
             file_watcher::start_vault_watcher,
             file_watcher::stop_vault_watcher,
-            sync_server::start_sync_server,
-            sync_server::stop_sync_server,
-            sync_server::get_sync_server_status,
-            sync_server::get_sync_server_url,
-            sync_server::check_sync_server_health,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

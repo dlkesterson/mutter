@@ -16,21 +16,21 @@ describe('Query Parser', () => {
     });
 
     it('parses single filter term', () => {
-      const result = parseQuery('type:project');
+      const result = parseQuery('tag:project');
       expect(result.terms).toHaveLength(1);
       expect(result.terms[0]).toEqual({
         type: 'filter',
-        key: 'type',
+        key: 'tag',
         operator: '=',
         value: 'project',
       });
     });
 
     it('parses multiple filter terms', () => {
-      const result = parseQuery('type:project status:active');
+      const result = parseQuery('tag:project linked:Meeting');
       expect(result.terms).toHaveLength(2);
-      expect(result.terms[0]).toMatchObject({ key: 'type', value: 'project' });
-      expect(result.terms[1]).toMatchObject({ key: 'status', value: 'active' });
+      expect(result.terms[0]).toMatchObject({ key: 'tag', value: 'project' });
+      expect(result.terms[1]).toMatchObject({ key: 'linked', value: 'Meeting' });
     });
 
     it('parses comparison operators', () => {
@@ -65,7 +65,7 @@ describe('Query Parser', () => {
     });
 
     it('parses mixed filters and text', () => {
-      const result = parseQuery('type:project "important" deadline');
+      const result = parseQuery('tag:project "important" deadline');
       expect(result.terms).toHaveLength(3);
       expect(result.terms[0].type).toBe('filter');
       expect(result.terms[1]).toMatchObject({ type: 'text', exact: true });
@@ -99,10 +99,10 @@ describe('Query Parser', () => {
     });
 
     it('parses has: filter', () => {
-      const result = parseQuery('has:supertags');
+      const result = parseQuery('has:tags');
       expect(result.terms[0]).toMatchObject({
         key: 'has',
-        value: 'supertags',
+        value: 'tags',
       });
     });
 
@@ -119,7 +119,7 @@ describe('Query Parser', () => {
 
   describe('validateQuery', () => {
     it('passes for valid query', () => {
-      const parsed = parseQuery('type:project');
+      const parsed = parseQuery('tag:project');
       const errors = validateQuery(parsed);
       expect(errors).toHaveLength(0);
     });
@@ -158,11 +158,6 @@ describe('Query Parser', () => {
       expect(describeQuery(parsed)).toBe('All notes');
     });
 
-    it('describes type filter', () => {
-      const parsed = parseQuery('type:project');
-      expect(describeQuery(parsed)).toBe('Notes with #project supertag');
-    });
-
     it('describes tag filter', () => {
       const parsed = parseQuery('tag:work');
       expect(describeQuery(parsed)).toBe('Notes tagged #work');
@@ -189,7 +184,7 @@ describe('Query Parser', () => {
     });
 
     it('describes multiple terms with and', () => {
-      const parsed = parseQuery('type:project status:active');
+      const parsed = parseQuery('tag:project created:>2024-01-01');
       expect(describeQuery(parsed)).toContain(' and ');
     });
 

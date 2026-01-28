@@ -744,28 +744,10 @@ export default function Editor({
 
 			// Handle different command types
 			switch (command) {
-				case 'open-supertag-dialog':
-					// Dispatch event for App.tsx to handle
-					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
-						detail: { dialog: 'supertag-apply', noteId }
-					}));
-					break;
-				case 'query-supertag':
-					// Open supertag query - handled by App.tsx
-					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
-						detail: { dialog: 'supertag-query' }
-					}));
-					break;
 				case 'insert-embed':
 					// Open embed insertion dialog
 					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
 						detail: { dialog: 'insert-embed' }
-					}));
-					break;
-				case 'ai-query':
-					// Open AI query panel or focus it
-					window.dispatchEvent(new CustomEvent('mutter:open-dialog', {
-						detail: { dialog: 'ai-query', mode: args?.mode }
 					}));
 					break;
 				case 'cleanup-text': {

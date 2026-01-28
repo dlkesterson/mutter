@@ -5,14 +5,13 @@
  * - Voice commands
  * - Query DSL syntax
  * - Keyboard shortcuts
- * - Supertags usage
  *
  * Rendered as a collapsible panel in the sidebar or as a dialog.
  */
 
 import { useState } from 'react';
 
-type HelpSection = 'voice' | 'query' | 'shortcuts' | 'supertags';
+type HelpSection = 'voice' | 'query' | 'shortcuts';
 
 export function HelpPanel() {
   const [section, setSection] = useState<HelpSection>('voice');
@@ -23,7 +22,7 @@ export function HelpPanel() {
 
       {/* Tab navigation */}
       <div className="flex gap-2 border-b border-border pb-2">
-        {(['voice', 'query', 'shortcuts', 'supertags'] as const).map((s) => (
+        {(['voice', 'query', 'shortcuts'] as const).map((s) => (
           <button
             key={s}
             className={`text-xs px-2 py-1 rounded transition-colors ${
@@ -43,7 +42,6 @@ export function HelpPanel() {
         {section === 'voice' && <VoiceHelp />}
         {section === 'query' && <QueryHelp />}
         {section === 'shortcuts' && <ShortcutsHelp />}
-        {section === 'supertags' && <SupertagsHelp />}
       </div>
     </div>
   );
@@ -119,9 +117,6 @@ function QueryHelp() {
         <h4 className="text-xs font-medium text-foreground">Filters</h4>
         <ul className="space-y-1 text-xs text-muted-foreground">
           <li>
-            <code className="bg-muted px-1 rounded">type:project</code> — Notes with supertag
-          </li>
-          <li>
             <code className="bg-muted px-1 rounded">tag:work</code> — Notes with #tag
           </li>
           <li>
@@ -150,9 +145,6 @@ function QueryHelp() {
         <ul className="space-y-1 text-xs text-muted-foreground">
           <li>
             <code className="bg-muted px-1 rounded">has:links</code> — Has outgoing links
-          </li>
-          <li>
-            <code className="bg-muted px-1 rounded">has:supertags</code> — Has any supertag
           </li>
           <li>
             <code className="bg-muted px-1 rounded">has:blocks</code> — Has block refs
@@ -268,61 +260,3 @@ function ShortcutsHelp() {
   );
 }
 
-/**
- * Supertags Help Section
- */
-function SupertagsHelp() {
-  return (
-    <div className="space-y-3">
-      <p className="text-muted-foreground">
-        Supertags add typed metadata to notes, like database fields.
-      </p>
-
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-foreground">Getting Started</h4>
-        <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
-          <li>Create definition (Settings → Supertags)</li>
-          <li>Add fields (text, date, select, etc.)</li>
-          <li>Apply to notes via command palette</li>
-          <li>Query by type or fields</li>
-        </ol>
-      </div>
-
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-foreground">Field Types</h4>
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          <li>
-            <span className="text-foreground">Text</span> — Free-form text
-          </li>
-          <li>
-            <span className="text-foreground">Number</span> — Numeric values
-          </li>
-          <li>
-            <span className="text-foreground">Date</span> — Date picker
-          </li>
-          <li>
-            <span className="text-foreground">Select</span> — Dropdown options
-          </li>
-          <li>
-            <span className="text-foreground">Checkbox</span> — True/false
-          </li>
-          <li>
-            <span className="text-foreground">Relation</span> — Link to note
-          </li>
-        </ul>
-      </div>
-
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-foreground">Voice Commands</h4>
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          <li>
-            <code className="bg-muted px-1 rounded">"tag as project"</code> — Apply supertag
-          </li>
-          <li>
-            <code className="bg-muted px-1 rounded">"create supertag"</code> — New definition
-          </li>
-        </ul>
-      </div>
-    </div>
-  );
-}

@@ -1,14 +1,42 @@
-use crate::ml::cosine_similarity;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandIntent {
     pub id: String,
     pub phrases: Vec<String>,
-    pub embedding: Vec<f32>,
     pub action: CommandAction,
     pub selection_required: bool,
     pub context_filter: Option<String>, // e.g., "code", "browser"
+}
+
+/// Calculate similarity score between input text and a command phrase using keyword matching
+fn phrase_similarity(input: &str, phrase: &str) -> f32 {
+    let input_lower = input.to_lowercase();
+    let phrase_lower = phrase.to_lowercase();
+
+    // Exact match
+    if input_lower == phrase_lower {
+        return 1.0;
+    }
+
+    // Input contains phrase or vice versa
+    if input_lower.contains(&phrase_lower) || phrase_lower.contains(&input_lower) {
+        return 0.85;
+    }
+
+    // Word-based similarity
+    let input_words: std::collections::HashSet<&str> = input_lower.split_whitespace().collect();
+    let phrase_words: std::collections::HashSet<&str> = phrase_lower.split_whitespace().collect();
+
+    if input_words.is_empty() || phrase_words.is_empty() {
+        return 0.0;
+    }
+
+    let intersection = input_words.intersection(&phrase_words).count();
+    let union = input_words.union(&phrase_words).count();
+
+    // Jaccard similarity
+    (intersection as f32) / (union as f32)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +114,6 @@ impl CommandRegistry {
                     "bold text".to_string(),
                     "make it bold".to_string(),
                 ],
-                embedding: vec![], // Will be computed on first run
                 action: CommandAction::Format(FormatType::Bold),
                 selection_required: true,
                 context_filter: None,
@@ -98,7 +125,6 @@ impl CommandRegistry {
                     "italicize this".to_string(),
                     "italic text".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Italic),
                 selection_required: true,
                 context_filter: None,
@@ -112,7 +138,6 @@ impl CommandRegistry {
                     "big heading".to_string(),
                     "title".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 1 }),
                 selection_required: false,
                 context_filter: None,
@@ -124,7 +149,6 @@ impl CommandRegistry {
                     "h2".to_string(),
                     "subheading".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Heading { level: 2 }),
                 selection_required: false,
                 context_filter: None,
@@ -137,7 +161,6 @@ impl CommandRegistry {
                     "turn into list".to_string(),
                     "list items".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::BulletList),
                 selection_required: false,
                 context_filter: None,
@@ -149,7 +172,6 @@ impl CommandRegistry {
                     "make this a quote".to_string(),
                     "block quote".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Quote),
                 selection_required: false,
                 context_filter: None,
@@ -161,7 +183,6 @@ impl CommandRegistry {
                     "go back".to_string(),
                     "revert".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Undo),
                 selection_required: false,
                 context_filter: None,
@@ -173,7 +194,6 @@ impl CommandRegistry {
                     "redo that".to_string(),
                     "go forward".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Editor(EditorAction::Redo),
                 selection_required: false,
                 context_filter: None,
@@ -185,7 +205,6 @@ impl CommandRegistry {
                     "insert link".to_string(),
                     "create link".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Link),
                 selection_required: false,
                 context_filter: None,
@@ -197,7 +216,6 @@ impl CommandRegistry {
                     "insert image".to_string(),
                     "add picture".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Image),
                 selection_required: false,
                 context_filter: None,
@@ -209,7 +227,6 @@ impl CommandRegistry {
                     "insert table".to_string(),
                     "create table".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Table),
                 selection_required: false,
                 context_filter: None,
@@ -221,7 +238,6 @@ impl CommandRegistry {
                     "insert code block".to_string(),
                     "code block".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::CodeBlock),
                 selection_required: false,
                 context_filter: None,
@@ -234,7 +250,6 @@ impl CommandRegistry {
                     "add checkbox".to_string(),
                     "checklist".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Checkbox),
                 selection_required: false,
                 context_filter: None,
@@ -247,7 +262,6 @@ impl CommandRegistry {
                     "add divider".to_string(),
                     "horizontal line".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::HorizontalRule),
                 selection_required: false,
                 context_filter: None,
@@ -259,7 +273,6 @@ impl CommandRegistry {
                     "make this code".to_string(),
                     "inline code".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Format(FormatType::Code),
                 selection_required: true,
                 context_filter: None,
@@ -272,7 +285,6 @@ impl CommandRegistry {
                     "revert that".to_string(),
                     "go back".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::Editor(EditorAction::UndoVoiceCommand),
                 selection_required: false,
                 context_filter: None,
@@ -280,7 +292,6 @@ impl CommandRegistry {
             CommandIntent {
                 id: "vscode_commit".to_string(),
                 phrases: vec!["commit changes".to_string(), "git commit".to_string()],
-                embedding: vec![],
                 action: CommandAction::AppSpecific("git_commit".to_string()),
                 selection_required: false,
                 context_filter: Some("code".to_string()),
@@ -293,7 +304,6 @@ impl CommandRegistry {
                     "go to note".to_string(),
                     "switch to note".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::System(SystemAction::OpenNote {
                     name: "".to_string(),
                 }),
@@ -307,7 +317,6 @@ impl CommandRegistry {
                     "find note".to_string(),
                     "search notes".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::System(SystemAction::Search {
                     query: "".to_string(),
                 }),
@@ -324,7 +333,6 @@ impl CommandRegistry {
                     "create task from selection".to_string(),
                     "send to task tracker".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::AppSpecific("create_task".to_string()),
                 selection_required: false,
                 context_filter: None,
@@ -340,7 +348,6 @@ impl CommandRegistry {
                     "fix transcription".to_string(),
                     "clean up transcription".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::AppSpecific("cleanup-text".to_string()),
                 selection_required: false,
                 context_filter: None,
@@ -356,7 +363,6 @@ impl CommandRegistry {
                     "show help".to_string(),
                     "list commands".to_string(),
                 ],
-                embedding: vec![],
                 action: CommandAction::AppSpecific("show-commands".to_string()),
                 selection_required: false,
                 context_filter: None,
@@ -364,9 +370,10 @@ impl CommandRegistry {
         ]
     }
 
+    /// Find the best matching command for input text using keyword matching
     pub fn find_best_match(
         &self,
-        input_embedding: &[f32],
+        input_text: &str,
         has_selection: bool,
         _cursor_context: &CursorContext,
         system_context: Option<&crate::system::SystemContext>,
@@ -391,14 +398,21 @@ impl CommandRegistry {
                 }
             }
 
-            let similarity = cosine_similarity(input_embedding, &command.embedding);
+            // Find best similarity across all phrases for this command
+            let mut best_phrase_similarity = 0.0f32;
+            for phrase in &command.phrases {
+                let similarity = phrase_similarity(input_text, phrase);
+                if similarity > best_phrase_similarity {
+                    best_phrase_similarity = similarity;
+                }
+            }
 
             if let Some((_, best_similarity)) = &best_match {
-                if similarity > *best_similarity {
-                    best_match = Some((command.clone(), similarity));
+                if best_phrase_similarity > *best_similarity {
+                    best_match = Some((command.clone(), best_phrase_similarity));
                 }
-            } else {
-                best_match = Some((command.clone(), similarity));
+            } else if best_phrase_similarity > 0.0 {
+                best_match = Some((command.clone(), best_phrase_similarity));
             }
         }
 

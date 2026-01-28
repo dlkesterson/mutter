@@ -2,7 +2,6 @@
  * Query DSL Parser for Mutter
  *
  * Parses structured queries against the vault:
- *   type:project status:active
  *   tag:work linked:[[Meeting]]
  *   created:>2024-01-01 "exact phrase"
  */
@@ -33,13 +32,12 @@ export interface ParsedQuery {
  * Known filter keys with special handling
  */
 const KNOWN_FILTERS = new Set([
-  'type', // Supertag type
   'tag', // Markdown tag
   'linked', // Links to note
   'from', // Links from note
   'created', // Creation date
   'updated', // Update date
-  'has', // Has property (has:blocks, has:supertag)
+  'has', // Has property (has:blocks, has:links)
 ]);
 
 /**
@@ -155,11 +153,11 @@ export function parseQuery(query: string): ParsedQuery {
 
   for (const token of tokens) {
     const filter = parseFilterToken(token);
-    // Accept known filters or dot-notation field filters (e.g., project.status)
-    if (filter && (KNOWN_FILTERS.has(filter.key) || filter.key.includes('.'))) {
+    // Accept known filters or any key:value pattern
+    if (filter && KNOWN_FILTERS.has(filter.key)) {
       terms.push(filter);
     } else if (token.includes(':') && parseFilterToken(token)) {
-      // Also accept any key:value pattern for supertag field queries
+      // Accept custom key:value filters for extensibility
       const customFilter = parseFilterToken(token);
       if (customFilter) {
         terms.push(customFilter);
@@ -217,9 +215,6 @@ export function describeQuery(parsed: ParsedQuery): string {
   for (const term of parsed.terms) {
     if (term.type === 'filter') {
       switch (term.key) {
-        case 'type':
-          parts.push(`with #${term.value} supertag`);
-          break;
         case 'tag':
           parts.push(`tagged #${term.value}`);
           break;

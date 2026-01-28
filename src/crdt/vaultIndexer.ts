@@ -140,7 +140,6 @@ export async function indexVaultFiles(params: {
           last_opened_at: null,
           blocks: {},
           block_order: [],
-          supertags: [],
         };
         result.newNotesAdded++;
       }

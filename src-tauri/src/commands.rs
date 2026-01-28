@@ -1,5 +1,5 @@
 use crate::audio::{AudioBuffer, VadEvent, VadState};
-use crate::ml::{EmbeddingEngine, ModelManager, WhisperEngine};
+use crate::ml::{ModelManager, WhisperEngine};
 use crate::registry::{
     ClassificationAction, ClassificationResult, CommandAction, CommandRegistry, CursorContext,
     EditorAction, FormatType,
@@ -13,7 +13,6 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub registry: Mutex<CommandRegistry>,
-    pub embedding_engine: Mutex<EmbeddingEngine>,
     pub whisper_engine: Mutex<WhisperEngine>,
     pub audio_buffer: Mutex<AudioBuffer>,
     pub vad_state: Mutex<VadState>,
@@ -23,7 +22,6 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             registry: Mutex::new(CommandRegistry::new()),
-            embedding_engine: Mutex::new(EmbeddingEngine::new()),
             whisper_engine: Mutex::new(WhisperEngine::new()),
             audio_buffer: Mutex::new(AudioBuffer::new()),
             vad_state: Mutex::new(VadState::new()),
@@ -586,26 +584,18 @@ pub async fn classify_text(
         });
     }
 
-    // Get actual embedding from ML model
-    let embed_start = std::time::Instant::now();
-    let engine = state.embedding_engine.lock().unwrap();
-    let input_embedding = engine
-        .encode(&text)
-        .map_err(|e| format!("Failed to encode input: {}", e))?;
-    drop(engine); // Release lock
-    let embed_duration_ms = embed_start.elapsed().as_millis() as u64;
-
-    // Search for best matching command
+    // Search for best matching command using keyword matching
     let search_start = std::time::Instant::now();
     let registry = state.registry.lock().unwrap();
 
     let best_match = registry.find_best_match(
-        &input_embedding,
+        &text,
         has_selection,
         &cursor_context,
         system_context.as_ref(),
     );
     let search_duration_ms = search_start.elapsed().as_millis() as u64;
+    let embed_duration_ms = 0u64; // No embedding needed
 
     if let Some((command, similarity)) = best_match {
         log::info!(
@@ -835,95 +825,6 @@ pub struct PerformanceTimings {
     pub total_ms: u64,
 }
 
-/// Get embedding vector for text
-#[tauri::command]
-pub async fn get_embedding(text: String, state: State<'_, AppState>) -> Result<Vec<f32>, String> {
-    log::debug!("Getting embedding for: {}", text);
-
-    let engine = state.embedding_engine.lock().unwrap();
-
-    engine
-        .encode(&text)
-        .map_err(|e| format!("Failed to encode text: {}", e))
-}
-
-/// Load the embedding model (BERT)
-#[tauri::command]
-pub async fn load_embedding_model(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    log::info!("Loading embedding model...");
-
-    let (model_id, revision) = {
-        let engine = state.embedding_engine.lock().unwrap();
-        engine.get_model_config()
-    };
-
-    let models_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?
-        .join("models");
-
-    let manager = ModelManager::new(models_dir);
-
-    let (config_path, tokenizer_path, weights_path) = manager
-        .download_from_hub(&model_id, &revision)
-        .await
-        .map_err(|e| format!("Failed to download embedding model: {}", e))?;
-
-    let mut engine = state.embedding_engine.lock().unwrap();
-    engine
-        .load_from_files(config_path, tokenizer_path, weights_path)
-        .map_err(|e| format!("Failed to load embedding model: {}", e))?;
-    Ok(())
-}
-
-/// Initialize command registry embeddings
-#[tauri::command]
-pub async fn initialize_embeddings(state: State<'_, AppState>) -> Result<(), String> {
-    log::info!("Initializing command embeddings");
-
-    let mut registry = state.registry.lock().unwrap();
-    let engine = state.embedding_engine.lock().unwrap();
-
-    // Generate embeddings for all command phrases
-    for command in registry.commands.iter_mut() {
-        let mut embeddings = Vec::new();
-
-        for phrase in &command.phrases {
-            match engine.encode(phrase) {
-                Ok(embedding) => embeddings.push(embedding),
-                Err(e) => {
-                    log::error!("Failed to encode phrase '{}': {}", phrase, e);
-                }
-            }
-        }
-
-        // Average the embeddings (centroid)
-        if !embeddings.is_empty() {
-            let dim = embeddings[0].len();
-            let mut centroid = vec![0.0; dim];
-
-            for emb in &embeddings {
-                for (i, &val) in emb.iter().enumerate() {
-                    centroid[i] += val;
-                }
-            }
-
-            for val in centroid.iter_mut() {
-                *val /= embeddings.len() as f32;
-            }
-
-            command.embedding = centroid;
-        }
-    }
-
-    log::info!("Command embeddings initialized successfully");
-    Ok(())
-}
-
 /// Download ML model from URL with progress events
 #[derive(Clone, Serialize)]
 struct DownloadProgress {
@@ -973,45 +874,6 @@ pub async fn download_model(
         .map_err(|e| format!("Download failed: {}", e))?;
 
     Ok(path.to_string_lossy().to_string())
-}
-
-/// Download model from HuggingFace Hub
-#[tauri::command]
-pub async fn download_model_from_hub(
-    model_id: String,
-    model_name: String,
-    revision: String,
-    app: tauri::AppHandle,
-) -> Result<String, String> {
-    log::info!("Downloading model {} from HuggingFace Hub", model_id);
-
-    let models_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?
-        .join("models");
-
-    let manager = ModelManager::new(models_dir.clone());
-
-    let (config, tokenizer, weights) = manager
-        .download_from_hub(&model_id, &revision)
-        .await
-        .map_err(|e| format!("Failed to download from hub: {}", e))?;
-
-    // Copy files to our models directory
-    let model_dir = models_dir.join(&model_name);
-    std::fs::create_dir_all(&model_dir)
-        .map_err(|e| format!("Failed to create model directory: {}", e))?;
-
-    std::fs::copy(&config, model_dir.join("config.json"))
-        .map_err(|e| format!("Failed to copy config: {}", e))?;
-    std::fs::copy(&tokenizer, model_dir.join("tokenizer.json"))
-        .map_err(|e| format!("Failed to copy tokenizer: {}", e))?;
-    std::fs::copy(&weights, model_dir.join("model.safetensors"))
-        .map_err(|e| format!("Failed to copy weights: {}", e))?;
-
-    log::info!("Model downloaded successfully to {:?}", model_dir);
-    Ok(model_dir.to_string_lossy().to_string())
 }
 
 /// Check if a model is downloaded

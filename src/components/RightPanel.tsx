@@ -11,20 +11,18 @@ import {
 	Link,
 	Search,
 	GitBranch,
-	Tag,
 	HelpCircle,
 	Sparkles,
 } from 'lucide-react';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
-export type RightPanelTab = 'outline' | 'backlinks' | 'search' | 'graph' | 'tags';
+export type RightPanelTab = 'outline' | 'backlinks' | 'search' | 'graph';
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
 	outline: 'Outline',
 	backlinks: 'Backlinks',
 	search: 'Search',
 	graph: 'Graph',
-	tags: 'Tags',
 };
 
 const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
@@ -32,7 +30,6 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 	{ id: 'backlinks', icon: <Link size={20} />, label: 'Backlinks' },
 	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
 	{ id: 'graph', icon: <GitBranch size={20} />, label: 'Graph' },
-	{ id: 'tags', icon: <Tag size={20} />, label: 'Tags' },
 ];
 
 const FOOTER_ITEMS: ActivityBarItem[] = [
@@ -59,7 +56,7 @@ export function RightPanel({
 	activeTab,
 	onTabChange,
 	children,
-	availableTabs = ['outline', 'backlinks', 'search', 'graph', 'tags'],
+	availableTabs = ['outline', 'backlinks', 'search', 'graph'],
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);

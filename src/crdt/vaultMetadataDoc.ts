@@ -15,45 +15,6 @@ export type StoredBlockInfo = {
 };
 
 // ============================================================================
-// Supertag Types (v3)
-// ============================================================================
-
-/**
- * Field definition within a supertag template
- * Defines the schema for structured note data
- */
-export type SupertagFieldType = 'text' | 'number' | 'date' | 'select' | 'multi-select' | 'checkbox';
-
-export type SupertagField = {
-  name: string;
-  type: SupertagFieldType;
-  options?: string[]; // For select/multi-select
-  default?: string | number | boolean;
-};
-
-/**
- * Supertag definition - a reusable template for structured notes
- * Example: #project, #meeting, #person
- */
-export type SupertagDefinition = {
-  id: string;
-  name: string; // e.g., "project", "meeting", "person"
-  icon?: string; // Emoji or icon name
-  fields: SupertagField[];
-  created_at: number;
-  updated_at: number;
-};
-
-/**
- * Applied supertag instance on a note
- * Contains the definition reference and actual field values
- */
-export type SupertagInstance = {
-  definitionId: string;
-  values: Record<string, string | number | boolean | string[]>;
-};
-
-// ============================================================================
 // Graph Edge Types (v3)
 // ============================================================================
 
@@ -88,8 +49,6 @@ export type VaultNote = {
   // v2: Block-level tracking
   blocks: Record<string, StoredBlockInfo>;
   block_order: string[]; // Ordered list of block IDs
-  // v3: Supertags
-  supertags: SupertagInstance[]; // Multiple supertags per note
 };
 
 export type VaultMetadataDoc = {
@@ -100,8 +59,6 @@ export type VaultMetadataDoc = {
   };
   notes: Record<string, VaultNote>;
   note_id_by_path: Record<string, string>;
-  // v3: Supertag definitions (vault-wide templates)
-  supertag_definitions: Record<string, SupertagDefinition>;
   // v3: Graph edges for link tracking
   graph_edges: Record<string, GraphEdge>;
   // v3: Bidirectional index for fast backlink queries
@@ -176,20 +133,13 @@ function migrateVaultMetadataDoc(doc: any): void {
     doc.schema_version = 2;
   }
 
-  // v2 → v3: Add supertags and graph edges
+  // v2 → v3: Add graph edges
   if (doc.schema_version < 3) {
     console.log('[CRDT] Migrating vault metadata v2 -> v3');
 
     // Add new top-level fields
-    if (!doc.supertag_definitions) doc.supertag_definitions = {};
     if (!doc.graph_edges) doc.graph_edges = {};
     if (!doc.backlink_index) doc.backlink_index = {};
-
-    // Add supertags array to existing notes
-    for (const noteId of Object.keys(doc.notes ?? {})) {
-      const note = doc.notes[noteId];
-      if (!note.supertags) note.supertags = [];
-    }
 
     doc.schema_version = 3;
   }
@@ -212,7 +162,6 @@ export function ensureVaultMetadataDocShape(doc: any, vaultId: string): void {
   if (!doc.note_id_by_path) doc.note_id_by_path = {};
 
   // Ensure v3 fields
-  if (!doc.supertag_definitions) doc.supertag_definitions = {};
   if (!doc.graph_edges) doc.graph_edges = {};
   if (!doc.backlink_index) doc.backlink_index = {};
 }
@@ -247,7 +196,6 @@ export async function ensureNoteForRelPath(
         last_opened_at: null,
         blocks: {},
         block_order: [],
-        supertags: [], // v3
       };
     } else {
       doc.notes[id].rel_path = rel;
@@ -413,178 +361,6 @@ export function findNoteByBlockId(doc: VaultMetadataDoc, blockId: string): { not
     }
   }
   return null;
-}
-
-// ============================================================================
-// Supertag Management Functions (v3)
-// ============================================================================
-
-/**
- * Create a new supertag definition (vault-wide template)
- * Returns the definition ID
- */
-export function createSupertagDefinition(params: {
-  handle: DocHandle<VaultMetadataDoc>;
-  name: string;
-  fields: SupertagField[];
-  icon?: string;
-}): string {
-  const id = newId();
-  const now = Date.now();
-
-  params.handle.change((doc: any) => {
-    ensureVaultMetadataDocShape(doc, doc?.meta?.vault_id ?? 'unknown');
-
-    doc.supertag_definitions[id] = {
-      id,
-      name: params.name.trim().toLowerCase(),
-      icon: params.icon,
-      fields: params.fields,
-      created_at: now,
-      updated_at: now,
-    };
-  });
-
-  return id;
-}
-
-/**
- * Update an existing supertag definition
- */
-export function updateSupertagDefinition(params: {
-  handle: DocHandle<VaultMetadataDoc>;
-  definitionId: string;
-  name?: string;
-  fields?: SupertagField[];
-  icon?: string;
-}): void {
-  const now = Date.now();
-
-  params.handle.change((doc: any) => {
-    ensureVaultMetadataDocShape(doc, doc?.meta?.vault_id ?? 'unknown');
-
-    const def = doc.supertag_definitions[params.definitionId];
-    if (!def) return;
-
-    if (params.name !== undefined) def.name = params.name.trim().toLowerCase();
-    if (params.fields !== undefined) def.fields = params.fields;
-    if (params.icon !== undefined) def.icon = params.icon;
-    def.updated_at = now;
-  });
-}
-
-/**
- * Delete a supertag definition
- * Also removes all instances from notes
- */
-export function deleteSupertagDefinition(params: {
-  handle: DocHandle<VaultMetadataDoc>;
-  definitionId: string;
-}): void {
-  params.handle.change((doc: any) => {
-    ensureVaultMetadataDocShape(doc, doc?.meta?.vault_id ?? 'unknown');
-
-    // Remove definition
-    delete doc.supertag_definitions[params.definitionId];
-
-    // Remove instances from all notes
-    for (const note of Object.values(doc.notes) as VaultNote[]) {
-      if (note.supertags) {
-        note.supertags = note.supertags.filter(
-          (st: SupertagInstance) => st.definitionId !== params.definitionId
-        );
-      }
-    }
-  });
-}
-
-/**
- * Apply a supertag to a note with field values
- */
-export function applySupertagToNote(params: {
-  handle: DocHandle<VaultMetadataDoc>;
-  noteId: string;
-  definitionId: string;
-  values: Record<string, string | number | boolean | string[]>;
-}): void {
-  const now = Date.now();
-
-  params.handle.change((doc: any) => {
-    ensureVaultMetadataDocShape(doc, doc?.meta?.vault_id ?? 'unknown');
-
-    const note = doc.notes[params.noteId];
-    if (!note) return;
-
-    // Check if supertag definition exists
-    if (!doc.supertag_definitions[params.definitionId]) return;
-
-    // Ensure supertags array exists
-    if (!note.supertags) note.supertags = [];
-
-    // Check if already applied
-    const existingIndex = note.supertags.findIndex(
-      (st: SupertagInstance) => st.definitionId === params.definitionId
-    );
-
-    if (existingIndex >= 0) {
-      // Update existing instance
-      note.supertags[existingIndex].values = params.values;
-    } else {
-      // Add new instance
-      note.supertags.push({
-        definitionId: params.definitionId,
-        values: params.values,
-      });
-    }
-
-    note.updated_at = now;
-  });
-}
-
-/**
- * Remove a supertag from a note
- */
-export function removeSupertagFromNote(params: {
-  handle: DocHandle<VaultMetadataDoc>;
-  noteId: string;
-  definitionId: string;
-}): void {
-  const now = Date.now();
-
-  params.handle.change((doc: any) => {
-    ensureVaultMetadataDocShape(doc, doc?.meta?.vault_id ?? 'unknown');
-
-    const note = doc.notes[params.noteId];
-    if (!note || !note.supertags) return;
-
-    note.supertags = note.supertags.filter(
-      (st: SupertagInstance) => st.definitionId !== params.definitionId
-    );
-    note.updated_at = now;
-  });
-}
-
-/**
- * Get a supertag definition by ID
- */
-export function getSupertagDefinition(doc: VaultMetadataDoc, definitionId: string): SupertagDefinition | null {
-  return doc.supertag_definitions[definitionId] || null;
-}
-
-/**
- * Get all supertag definitions
- */
-export function getAllSupertagDefinitions(doc: VaultMetadataDoc): SupertagDefinition[] {
-  return Object.values(doc.supertag_definitions);
-}
-
-/**
- * Get supertags applied to a note
- */
-export function getNoteSupertagInstances(doc: VaultMetadataDoc, noteId: string): SupertagInstance[] {
-  const note = doc.notes[noteId];
-  if (!note) return [];
-  return note.supertags || [];
 }
 
 // ============================================================================
@@ -758,39 +534,6 @@ export function hasLinkBetween(params: {
 // ============================================================================
 // Query Helper Functions (v3)
 // ============================================================================
-
-/**
- * Find notes by supertag definition
- */
-export function findNotesBySupertag(params: {
-  doc: VaultMetadataDoc;
-  definitionId: string;
-}): VaultNote[] {
-  return Object.values(params.doc.notes).filter(note =>
-    note.supertags?.some(st => st.definitionId === params.definitionId)
-  );
-}
-
-/**
- * Find notes by supertag field value
- */
-export function findNotesBySupertagField(params: {
-  doc: VaultMetadataDoc;
-  definitionId: string;
-  fieldName: string;
-  value: string | number | boolean | string[];
-}): VaultNote[] {
-  return Object.values(params.doc.notes).filter(note => {
-    const instance = note.supertags?.find(st => st.definitionId === params.definitionId);
-    if (!instance) return false;
-    const fieldValue = instance.values[params.fieldName];
-    if (Array.isArray(params.value) && Array.isArray(fieldValue)) {
-      // Compare arrays
-      return JSON.stringify(params.value.sort()) === JSON.stringify(fieldValue.sort());
-    }
-    return fieldValue === params.value;
-  });
-}
 
 /**
  * Get all notes that link to a specific note (convenience wrapper)

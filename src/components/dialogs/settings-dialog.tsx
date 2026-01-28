@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/select';
 import { useTheme } from '@/components/ThemeProvider';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
-import { SyncSettingsPanel } from '@/components/sync/SyncSettingsPanel';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
@@ -635,10 +634,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 				)}
 			</div>
 
-			{/* FULL-WIDTH SECTION: Sync Settings */}
-			<div className='border-t border-border pt-6 mt-6'>
-				<SyncSettingsPanel />
-			</div>
 		</BaseDialog>
 	);
 }

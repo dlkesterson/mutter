@@ -37,7 +37,7 @@ function formatRelativeDate(timestamp: number): string {
 /**
  * Note result item component
  *
- * Uses QueryNoteInfo which is a lightweight type without tags/supertags.
+ * Uses QueryNoteInfo which is a lightweight type.
  * This is intentional - the split format avoids loading NoteDocs for query results.
  */
 function NoteResultItem({
@@ -205,7 +205,7 @@ export function QueryPanel({ onNavigate }: QueryPanelProps) {
 					onBlur={() =>
 						setTimeout(() => setShowSuggestions(false), 150)
 					}
-					placeholder='type:project status:active ...'
+					placeholder='tag:work created:>2024-01 ...'
 					className='w-full px-3 py-2 border border-border bg-background rounded text-sm
                      focus:outline-none focus:ring-2 focus:ring-ring'
 					disabled={isExecuting}
@@ -331,12 +331,6 @@ export function QueryPanel({ onNavigate }: QueryPanelProps) {
 					<div className='text-xs text-muted-foreground space-y-1'>
 						<p>
 							<code className='px-1 py-0.5 bg-muted rounded'>
-								type:project
-							</code>{' '}
-							— Notes with a supertag
-						</p>
-						<p>
-							<code className='px-1 py-0.5 bg-muted rounded'>
 								tag:work
 							</code>{' '}
 							— Notes with a markdown tag
@@ -346,12 +340,6 @@ export function QueryPanel({ onNavigate }: QueryPanelProps) {
 								linked:[[Note]]
 							</code>{' '}
 							— Notes linking to Note
-						</p>
-						<p>
-							<code className='px-1 py-0.5 bg-muted rounded'>
-								has:supertags
-							</code>{' '}
-							— Notes with any supertag
 						</p>
 					</div>
 				</div>

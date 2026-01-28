@@ -8,11 +8,10 @@
  * Note documents contain all metadata for a single note:
  * - Identity (id, path, title)
  * - Content metadata (tags, links, blocks)
- * - Supertag instances (references to definitions in manifest)
  */
 
 import type { DocHandle } from '@automerge/react';
-import type { StoredBlockInfo, SupertagInstance } from './vaultMetadataDoc';
+import type { StoredBlockInfo } from './vaultMetadataDoc';
 
 export const NOTE_SCHEMA_VERSION = 1;
 
@@ -71,20 +70,10 @@ export type NoteDoc = {
 
   /** Ordered list of block IDs for sequential access */
   block_order: string[];
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Supertags
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Supertag instances applied to this note
-   * Each instance references a definition in the manifest and stores field values
-   */
-  supertags: SupertagInstance[];
 };
 
 // Re-export shared types for convenience
-export type { StoredBlockInfo, SupertagInstance } from './vaultMetadataDoc';
+export type { StoredBlockInfo } from './vaultMetadataDoc';
 
 /**
  * Create a new note document with default values
@@ -107,7 +96,6 @@ export function createNoteDoc(params: {
     links: [],
     blocks: {},
     block_order: [],
-    supertags: [],
   };
 }
 
@@ -134,7 +122,6 @@ export function ensureNoteDocShape(doc: any): void {
   if (!doc.links) doc.links = [];
   if (!doc.blocks) doc.blocks = {};
   if (!doc.block_order) doc.block_order = [];
-  if (!doc.supertags) doc.supertags = [];
 }
 
 // ============================================================================
@@ -288,81 +275,3 @@ export function getBlocksInOrder(doc: NoteDoc | null): StoredBlockInfo[] {
     .filter((block): block is StoredBlockInfo => block !== undefined);
 }
 
-// ============================================================================
-// Supertag Instance Functions
-// ============================================================================
-
-/**
- * Apply a supertag to this note
- */
-export function applySupertagToNote(handle: DocHandle<NoteDoc>, params: {
-  definitionId: string;
-  values: Record<string, string | number | boolean | string[]>;
-}): void {
-  const now = Date.now();
-  handle.change((doc: any) => {
-    ensureNoteDocShape(doc);
-
-    // Check if already applied
-    const existingIndex = doc.supertags.findIndex(
-      (st: SupertagInstance) => st.definitionId === params.definitionId
-    );
-
-    if (existingIndex >= 0) {
-      // Update existing instance
-      doc.supertags[existingIndex].values = params.values;
-    } else {
-      // Add new instance
-      doc.supertags.push({
-        definitionId: params.definitionId,
-        values: params.values,
-      });
-    }
-
-    doc.updated_at = now;
-  });
-}
-
-/**
- * Remove a supertag from this note
- */
-export function removeSupertagFromNote(handle: DocHandle<NoteDoc>, definitionId: string): void {
-  const now = Date.now();
-  handle.change((doc: any) => {
-    ensureNoteDocShape(doc);
-    doc.supertags = doc.supertags.filter(
-      (st: SupertagInstance) => st.definitionId !== definitionId
-    );
-    doc.updated_at = now;
-  });
-}
-
-/**
- * Get supertag instances for this note
- */
-export function getSupertagInstances(doc: NoteDoc | null): SupertagInstance[] {
-  if (!doc) return [];
-  return doc.supertags || [];
-}
-
-/**
- * Check if note has a specific supertag applied
- */
-export function hasSupertag(doc: NoteDoc | null, definitionId: string): boolean {
-  if (!doc) return false;
-  return doc.supertags.some(st => st.definitionId === definitionId);
-}
-
-/**
- * Get field value from a supertag instance
- */
-export function getSupertagFieldValue(
-  doc: NoteDoc | null,
-  definitionId: string,
-  fieldName: string
-): string | number | boolean | string[] | null {
-  if (!doc) return null;
-  const instance = doc.supertags.find(st => st.definitionId === definitionId);
-  if (!instance) return null;
-  return instance.values[fieldName] ?? null;
-}

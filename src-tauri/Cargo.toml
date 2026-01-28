@@ -43,13 +43,6 @@ ringbuf = "0.3"
 # Whisper speech-to-text via whisper.cpp (with CUDA GPU acceleration)
 whisper-rs = { version = "0.14", features = ["cuda"] }
 
-# ML inference with Candle for BERT embeddings (with CUDA GPU support)
-candle-core = { version = "0.8", features = ["cuda"] }
-candle-nn = { version = "0.8", features = ["cuda"] }
-candle-transformers = { version = "0.8", features = ["cuda"] }
-tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
-safetensors = "0.4"
-
 # File system watcher
 notify = "6.1"
 notify-debouncer-full = "0.3"

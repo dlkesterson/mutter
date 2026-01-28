@@ -4,7 +4,7 @@
  * Executes parsed queries against the split document format:
  * - ManifestDoc: For path/title matching (instant)
  * - GraphCacheDoc: For link queries (instant)
- * - NoteDocs: For supertag/tag/date filters (requires loading)
+ * - NoteDocs: For tag/date filters (requires loading)
  *
  * Strategy: Progressive filtering to minimize document loads
  * 1. Apply manifest filters (title text search)
@@ -57,7 +57,7 @@ function filterRequiresNoteDoc(filter: FilterTerm): boolean {
   // has:links is handled by graph cache
   if (filter.key === 'has' && filter.value.toLowerCase() === 'links') return false;
 
-  // Everything else (type, tag, has:supertags, dates, field values) requires NoteDoc
+  // Everything else (tag, dates, has:blocks/tags) requires NoteDoc
   return true;
 }
 
@@ -155,21 +155,8 @@ function matchesGraphFilter(
 /**
  * Apply NoteDoc filter
  */
-function matchesNoteDocFilter(
-  noteDoc: NoteDoc,
-  filter: FilterTerm,
-  supertagDefinitions: Record<string, { id: string; name: string }>
-): boolean {
+function matchesNoteDocFilter(noteDoc: NoteDoc, filter: FilterTerm): boolean {
   switch (filter.key) {
-    case 'type': {
-      // Match supertag by definition name
-      const matchingDef = Object.values(supertagDefinitions).find(
-        (d) => d.name.toLowerCase() === filter.value.toLowerCase()
-      );
-      if (!matchingDef) return false;
-      return noteDoc.supertags.some((st) => st.definitionId === matchingDef.id);
-    }
-
     case 'tag': {
       return noteDoc.tags.some(
         (t) => t.toLowerCase() === filter.value.toLowerCase()
@@ -192,9 +179,6 @@ function matchesNoteDocFilter(
       switch (filter.value.toLowerCase()) {
         case 'blocks':
           return Object.keys(noteDoc.blocks).length > 0;
-        case 'supertag':
-        case 'supertags':
-          return noteDoc.supertags.length > 0;
         case 'tags':
           return noteDoc.tags.length > 0;
         default:
@@ -202,45 +186,9 @@ function matchesNoteDocFilter(
       }
     }
 
-    default: {
-      // Check if it's a supertag field filter
-      return matchesSupertagField(noteDoc, filter, supertagDefinitions);
-    }
+    default:
+      return false;
   }
-}
-
-/**
- * Match supertag field value
- */
-function matchesSupertagField(
-  noteDoc: NoteDoc,
-  filter: FilterTerm,
-  supertagDefinitions: Record<string, { id: string; name: string }>
-): boolean {
-  const parts = filter.key.split('.');
-
-  if (parts.length === 2) {
-    // type.field format
-    const [typeName, fieldName] = parts;
-    const def = Object.values(supertagDefinitions).find(
-      (d) => d.name.toLowerCase() === typeName.toLowerCase()
-    );
-    if (!def) return false;
-    const instance = noteDoc.supertags.find((st) => st.definitionId === def.id);
-    if (!instance) return false;
-    return matchFieldValue(instance.values[fieldName], filter.value, filter.operator);
-  }
-
-  // Simple field name - check all supertags
-  for (const instance of noteDoc.supertags) {
-    const fieldValue = instance.values[filter.key];
-    if (fieldValue !== undefined) {
-      if (matchFieldValue(fieldValue, filter.value, filter.operator)) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 /**
@@ -268,56 +216,6 @@ function compareDates(
     default:
       return false;
   }
-}
-
-/**
- * Match a field value against a filter value
- */
-function matchFieldValue(
-  fieldValue: unknown,
-  filterValue: string,
-  operator: FilterOperator
-): boolean {
-  if (fieldValue === undefined || fieldValue === null) return false;
-
-  if (typeof fieldValue === 'string') {
-    if (operator === '=') {
-      return fieldValue.toLowerCase() === filterValue.toLowerCase();
-    }
-    return fieldValue.toLowerCase().includes(filterValue.toLowerCase());
-  }
-
-  if (typeof fieldValue === 'number') {
-    const filterNum = parseFloat(filterValue);
-    if (isNaN(filterNum)) return false;
-
-    switch (operator) {
-      case '>':
-        return fieldValue > filterNum;
-      case '>=':
-        return fieldValue >= filterNum;
-      case '<':
-        return fieldValue < filterNum;
-      case '<=':
-        return fieldValue <= filterNum;
-      case '=':
-        return fieldValue === filterNum;
-      default:
-        return false;
-    }
-  }
-
-  if (typeof fieldValue === 'boolean') {
-    return fieldValue === (filterValue.toLowerCase() === 'true');
-  }
-
-  if (Array.isArray(fieldValue)) {
-    return fieldValue.some(
-      (v) => String(v).toLowerCase() === filterValue.toLowerCase()
-    );
-  }
-
-  return false;
 }
 
 /**
@@ -409,7 +307,7 @@ export async function executeSplitQuery(params: {
 
         let matches = true;
         for (const filter of noteDocFilters) {
-          if (!matchesNoteDocFilter(noteDoc, filter, manifest.supertag_definitions)) {
+          if (!matchesNoteDocFilter(noteDoc, filter)) {
             matches = false;
             break;
           }
@@ -458,16 +356,11 @@ export function getSplitQuerySuggestions(
   if (!manifest) return suggestions;
 
   if (!partialQuery.trim()) {
-    return ['type:', 'tag:', 'linked:', 'created:>', 'has:'];
-  }
-
-  if (partialQuery.trim().endsWith('type:')) {
-    const defs = Object.values(manifest.supertag_definitions);
-    return defs.map((d) => `type:${d.name}`);
+    return ['tag:', 'linked:', 'created:>', 'has:'];
   }
 
   if (partialQuery.trim().endsWith('has:')) {
-    return ['has:blocks', 'has:supertags', 'has:links', 'has:tags'];
+    return ['has:blocks', 'has:links', 'has:tags'];
   }
 
   return suggestions;

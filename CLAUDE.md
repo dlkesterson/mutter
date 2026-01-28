@@ -298,7 +298,7 @@ pnpm tauri:dev
 
 ### Adding a Voice Command
 
-Voice commands are defined in TypeScript in `src/voice/commands/`. There are 7 command categories:
+Voice commands are defined in TypeScript in `src/voice/commands/`. There are 6 command categories:
 
 | File | Category | Examples |
 |------|----------|----------|
@@ -306,7 +306,6 @@ Voice commands are defined in TypeScript in `src/voice/commands/`. There are 7 c
 | `navigation.ts` | Cursor/document navigation | go to line, scroll, search |
 | `linking.ts` | Links and references | wiki links, embeds, backlinks |
 | `meta.ts` | App control | undo, save, new note, view toggles |
-| `supertags.ts` | Metadata/tagging | apply tag, set field, query tags |
 | `query.ts` | AI queries | ask about selection, explain |
 | `graphNavigation.ts` | Graph traversal | follow link, go back |
 
