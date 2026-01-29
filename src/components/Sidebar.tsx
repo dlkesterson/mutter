@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { FileTree } from './FileTree';
+import { LEDMatrix } from './LEDMatrix';
 import { FileNode, SearchResult } from '@/types';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,8 @@ interface SidebarProps {
 	onQuickSwitcherOpen?: () => void;
 	vaultId?: string | null;
 	activeNoteId?: string | null;
+	audioSamples?: number[];
+	isRecording?: boolean;
 }
 
 const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
@@ -56,6 +59,8 @@ export function Sidebar({
 	onQuickSwitcherOpen,
 	vaultId: _vaultId,
 	activeNoteId: _activeNoteId,
+	audioSamples = [],
+	isRecording = false,
 }: SidebarProps) {
 	// Panel state
 	const [activeTab, setActiveTab] = useState<LeftPanelTab | null>('files');
@@ -422,15 +427,26 @@ export function Sidebar({
 								Type at least 3 characters to search
 							</div>
 						) : (
-							<FileTree
-								nodes={fileTree}
-								onSelect={onFileSelect}
-								onOpenInNewTab={onOpenInNewTab}
-								onRename={handleRename}
-								onFileTreeUpdate={() => loadFileTree(vaultPath)}
-								className="h-full px-1 py-1"
-								activePath={activePath}
-							/>
+							<>
+								{/* LED Matrix Voice Visualizer */}
+								<div className="px-2 py-2 border-b border-border/20 shrink-0">
+									<LEDMatrix
+										audioSamples={audioSamples}
+										isRecording={isRecording}
+										width={panelWidth - 16}
+										height={64}
+									/>
+								</div>
+								<FileTree
+									nodes={fileTree}
+									onSelect={onFileSelect}
+									onOpenInNewTab={onOpenInNewTab}
+									onRename={handleRename}
+									onFileTreeUpdate={() => loadFileTree(vaultPath)}
+									className="h-full px-1 py-1"
+									activePath={activePath}
+								/>
+							</>
 						)}
 					</div>
 

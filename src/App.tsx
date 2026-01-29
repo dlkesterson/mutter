@@ -875,6 +875,8 @@ function App() {
 							onQuickSwitcherOpen={() => setOpenDialog('files')}
 							vaultId={vaultMeta.vaultId}
 							activeNoteId={vaultMeta.activeNoteId}
+							audioSamples={recentAudioSamples}
+							isRecording={audioState === 'listening'}
 						/>
 
 						<div className='flex-1 flex flex-col overflow-hidden relative min-w-0'>
