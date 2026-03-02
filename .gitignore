@@ -22,3 +22,12 @@ repomix-output.xml
 
 # Agent Tracker test directory
 .agent-tracker-test/
+
+# Coverage reports
+coverage/
+
+# Credentials and secrets
+.env*
+credentials.json
+*.key
+*.pem

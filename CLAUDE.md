@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mutter is a voice-first markdown editor with semantic command recognition, built with Tauri v2, React, and Rust + Candle ML. It provides a live preview markdown editor with voice control for hands-free writing and editing.
+Mutter is a voice-first markdown editor with semantic command recognition, built with Tauri v2, React, and Rust. It provides a live preview markdown editor with voice control for hands-free writing and editing.
 
 **Current Status:** Feature-complete, needs release pipeline (Forgejo CI/CD created but runners not configured)
 
@@ -88,7 +88,6 @@ pnpm lint
 **Backend (src-tauri/):**
 - Rust + Tauri v2
 - whisper-rs 0.14 (whisper.cpp bindings for speech-to-text)
-- Candle 0.8 (ML framework for BERT embeddings, with CUDA GPU support)
 - Tokio (async runtime)
 - Tauri plugins:
   - `plugin-dialog` - File/folder dialogs
@@ -100,7 +99,6 @@ pnpm lint
 
 **ML Models (Local):**
 - Whisper (speech-to-text): GGML format models via whisper.cpp (Tiny, Base, Small, Medium, Large v3)
-- BERT (semantic embeddings): sentence-transformers/all-MiniLM-L6-v2 for command understanding
 
 ### Project Structure
 
@@ -116,9 +114,9 @@ pnpm lint
 - `services/` - LLM integration (llm-service.ts supports Claude/OpenAI/Ollama), text cleanup with annotation parsing
 
 **Backend (src-tauri/src/):**
-- `ml.rs` - Whisper (whisper-rs) + BERT (Candle) ML inference
+- `ml.rs` - Whisper speech-to-text inference via whisper-rs
 - `audio.rs` - Audio processing (VAD, ring buffer)
-- `registry.rs` - Voice command registry with BERT embeddings
+- `registry.rs` - Voice command registry with keyword/phrase matching
 - `config.rs` - Settings management (XDG config files)
 - `commands.rs` - Tauri command exports
 - `file_watcher.rs` - File system change detection
@@ -127,14 +125,14 @@ pnpm lint
 
 The core architecture for voice-to-command:
 
-1. **Audio Capture** (`audio.rs`): Web Audio API → ring buffer → VAD detects ~800ms silence
+1. **Audio Capture** (`audio.rs`): Web Audio API → ring buffer → VAD detects ~500ms silence
 2. **Transcription** (`ml.rs`): Whisper model runs locally via whisper-rs (no cloud API)
-3. **Command Matching** (`registry.rs`): BERT embeddings compare to command registry
+3. **Command Matching** (`registry.rs`): Keyword/phrase similarity matching (Jaccard)
 4. **Execution**: High confidence → execute; ambiguous → disambiguation UI
 
 **Command Execution Flow:**
 ```
-Voice → Whisper transcription → BERT embedding → cosine similarity → execute/disambiguate
+Voice → Whisper transcription → phrase similarity (Jaccard) → execute/disambiguate
 ```
 
 ### Live Preview Editor
@@ -369,9 +367,9 @@ pnpm tauri:build
 
 **Speech-to-Text:** Uses **whisper-rs** (Rust bindings to whisper.cpp) for Whisper inference. GGML format models are single files (~75MB-3GB). whisper.cpp handles long audio natively.
 
-**Semantic Embeddings:** Uses **Candle** (pure Rust ML) for BERT embeddings, with CUDA GPU support. Falls back to CPU automatically.
+**Command Matching:** Uses keyword-based phrase similarity (Jaccard word matching) in `registry.rs`. No ML required for command classification.
 
-**Critical**: `Cargo.toml` has `[profile.dev.package."*"] opt-level = 3` to optimize ML dependencies in debug builds.
+**Critical**: `Cargo.toml` has `[profile.dev.package."*"] opt-level = 3` to optimize Whisper inference in debug builds.
 
 ### CRDT Sync (Experimental)
 
@@ -386,7 +384,7 @@ Vault metadata uses Automerge 3.2.1. See `docs/CRDT-CONVENTIONS.md` for sync str
 
 ### Rust Version
 
-Requires Rust 1.77.2+ (specified in `Cargo.toml`). The Candle ML framework and whisper-rs have specific compiler requirements.
+Requires Rust 1.77.2+ (specified in `Cargo.toml`). whisper-rs has specific compiler requirements.
 
 ### Linux Dependencies
 
@@ -423,8 +421,7 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 5. **Selection required**: Some commands (bold, italic) require text selection first
 6. **Microphone permissions**: Browser/OS must grant microphone access
 7. **File watcher flooding**: The watcher deliberately ignores content modifications to prevent constant reloads while editing
-8. **CUDA build errors**: If GPU acceleration fails to build, remove `features = ["cuda"]` from Cargo.toml dependencies
-9. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
+8. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
 10. **Tab state loss**: Tab state is ephemeral; closing a tab loses unsaved changes unless auto-saved
 11. **Design system violations**: Use 8px spacing multiples; arbitrary spacing breaks the grid
 12. **Auto-save loops**: Editor auto-save effect must check `content !== savedContent` to prevent CRDT spam
