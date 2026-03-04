@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mutter is a voice-first markdown editor with semantic command recognition, built with Tauri v2, React, and Rust. It provides a live preview markdown editor with voice control for hands-free writing and editing.
+Mutter is a voice-first markdown editor built with Tauri v2, React, and Rust. It provides a live preview markdown editor with local voice dictation via Whisper for hands-free writing.
 
-**Current Status:** Feature-complete, needs release pipeline (Forgejo CI/CD created but runners not configured)
+**Current Status:** Feature-complete with GitHub Actions CI/CD pipeline
 
 **Version:** 0.3.0
 
@@ -108,7 +108,6 @@ pnpm lint
 - `components/graph/` - Graph visualization (react-force-graph-2d)
 - `editor/` - CodeMirror extensions (livePreview.ts, theme.ts, commands.ts, autoPairs.ts, transclusionExtension.ts, blockIdExtension.ts)
 - `hooks/` - Custom React hooks (useAudioRecorder.ts, useVaultMetadataCrdt.ts, useGraphData.ts)
-- `voice/` - Voice command system (108 commands across 7 categories)
 - `graph/` - Link parsing and graph building utilities
 - `context/` - React contexts (VaultMetadataContext, EditorContextProvider)
 - `services/` - LLM integration (llm-service.ts supports Claude/OpenAI/Ollama), text cleanup with annotation parsing
@@ -116,23 +115,18 @@ pnpm lint
 **Backend (src-tauri/src/):**
 - `ml.rs` - Whisper speech-to-text inference via whisper-rs
 - `audio.rs` - Audio processing (VAD, ring buffer)
-- `registry.rs` - Voice command registry with keyword/phrase matching
 - `config.rs` - Settings management (XDG config files)
 - `commands.rs` - Tauri command exports
 - `file_watcher.rs` - File system change detection
 
-### Voice Command Pipeline
-
-The core architecture for voice-to-command:
+### Voice Dictation Pipeline
 
 1. **Audio Capture** (`audio.rs`): Web Audio API → ring buffer → VAD detects ~500ms silence
 2. **Transcription** (`ml.rs`): Whisper model runs locally via whisper-rs (no cloud API)
-3. **Command Matching** (`registry.rs`): Keyword/phrase similarity matching (Jaccard)
-4. **Execution**: High confidence → execute; ambiguous → disambiguation UI
+3. **Insertion**: Transcribed text inserted at cursor position in the editor
 
-**Command Execution Flow:**
 ```
-Voice → Whisper transcription → phrase similarity (Jaccard) → execute/disambiguate
+Voice → Whisper transcription → insert at cursor
 ```
 
 ### Live Preview Editor
@@ -294,51 +288,6 @@ pnpm tauri:dev
 4. Download Whisper model (Settings → Model Selector)
 ```
 
-### Adding a Voice Command
-
-Voice commands are defined in TypeScript in `src/voice/commands/`. There are 6 command categories:
-
-| File | Category | Examples |
-|------|----------|----------|
-| `formatting.ts` | Text formatting | bold, italic, headings, lists, tables |
-| `navigation.ts` | Cursor/document navigation | go to line, scroll, search |
-| `linking.ts` | Links and references | wiki links, embeds, backlinks |
-| `meta.ts` | App control | undo, save, new note, view toggles |
-| `query.ts` | AI queries | ask about selection, explain |
-| `graphNavigation.ts` | Graph traversal | follow link, go back |
-
-**To add a new command:**
-
-1. **Define command** in the appropriate `src/voice/commands/*.ts` file:
-   ```typescript
-   {
-     id: 'format-my-command',
-     name: 'My Command',
-     examples: ['my command', 'do my thing', 'make it happen'],
-     bucket: 'format-text',
-     requiresSelection: true,
-     requiresNote: true,
-     allowedLocations: ['paragraph', 'heading'],
-     allowedViewModes: ['editor', 'split'],
-     allowedVoicePhases: ['listening', 'command-recognized'],
-     destructiveness: 'none',
-     scope: 'inline',
-     reversible: true,
-     action: () => dispatchEditorCommand('myCommand'),
-   }
-   ```
-
-2. **Handle the event** in `src/components/Editor.tsx`:
-   ```typescript
-   case 'myCommand':
-     // Implement the action
-     break;
-   ```
-
-3. **Run tests** to verify registration: `pnpm test:run -t "voice coverage"`
-
-Commands dispatch via `CustomEvent('mutter:execute-command')` which Editor.tsx listens for.
-
 ### Building for Release
 
 ```bash
@@ -348,26 +297,23 @@ pnpm tauri:build
 # Artifacts in: src-tauri/target/release/bundle/
 ```
 
-**CI/CD (Forgejo):**
-- Workflow created: `.forgejo/workflows/release.yml`
-- Builds: Linux (AppImage, deb), Windows (MSI), macOS (DMG)
-- **Blocker:** Forgejo runners not yet configured
+**CI/CD (GitHub Actions):**
+- **CI** (`.github/workflows/ci.yml`): Runs on PRs to `main` — lint, test, frontend build, cargo check
+- **Release** (`.github/workflows/release.yml`): Runs on push to `main` — builds Linux, Windows, macOS via `tauri-apps/tauri-action`
+- **Branch protection**: `main` requires PR with passing CI checks; use `release/*` branches for release PRs
 
-### Testing Voice Commands
+### Testing Voice Dictation
 
 1. **Enable microphone** (click mic icon)
-2. **Select text** (for commands that require selection)
-3. **Speak command** clearly
-4. **Wait for silence** (~800ms)
-5. **Check voice log** (right sidebar) for confidence scores
+2. **Speak naturally** — words are transcribed and inserted at cursor
+3. **Wait for silence** (~800ms) to trigger transcription
+4. **Check voice log** (right sidebar) for transcription history
 
 ## Important Notes
 
 ### ML Framework Architecture
 
 **Speech-to-Text:** Uses **whisper-rs** (Rust bindings to whisper.cpp) for Whisper inference. GGML format models are single files (~75MB-3GB). whisper.cpp handles long audio natively.
-
-**Command Matching:** Uses keyword-based phrase similarity (Jaccard word matching) in `registry.rs`. No ML required for command classification.
 
 **Critical**: `Cargo.toml` has `[profile.dev.package."*"] opt-level = 3` to optimize Whisper inference in debug builds.
 
@@ -406,11 +352,12 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ## Related Documentation
 
 - `README.md` - User-facing documentation with quick start guide
-- `docs/USER-GUIDE.md` - Comprehensive user guide (voice commands, query DSL, shortcuts)
+- `docs/USER-GUIDE.md` - Comprehensive user guide (voice dictation, query DSL, shortcuts)
 - `docs/CONFIG_DESIGN.md` - Configuration architecture and XDG standards
 - `docs/DESIGN_SYSTEM.md` - Design principles, typography, spacing, colors
 - `docs/CRDT-CONVENTIONS.md` - Automerge conventions and sync strategy
-- `.forgejo/workflows/release.yml` - CI/CD workflow (pending runners)
+- `.github/workflows/ci.yml` - CI checks (lint, test, build, cargo check)
+- `.github/workflows/release.yml` - Release builds via tauri-apps/tauri-action
 
 ## Common Pitfalls
 
@@ -433,7 +380,7 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 
 **Config files**: `~/.config/mutter/{settings,credentials,state}.json`
 
-**Voice commands**: Open Voice Log dialog (right sidebar) to see transcription text, matched command, and confidence scores (0.0-1.0).
+**Voice dictation**: Open Voice Log dialog (right sidebar) to see transcription history.
 
 **CRDT state**: Check `<vault-path>/.mutter/state.json` and `.mutter/crdt/*/snapshots/`
 

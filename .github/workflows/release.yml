@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Gate: re-run all checks even though branch protection should enforce them.
+  # Belt-and-suspenders — a merge to main IS a release, so we must be sure.
+  lint:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: TypeScript typecheck
+        run: pnpm lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test:run
+
+  # Extract version from tauri.conf.json to decide if we need a new release.
+  version:
+    name: Check Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag_exists: ${{ steps.check_tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tauri.conf.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag already exists
+        id: check_tag
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [lint, test, version]
+    if: needs.version.outputs.tag_exists == 'false'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: ''
+          - platform: windows-latest
+            target: ''
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Linux system deps
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev \
+            libclang-dev \
+            cmake
+
+      # macOS: cmake for whisper.cpp
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos-latest'
+        run: brew install cmake
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Mutter v__VERSION__'
+          releaseBody: |
+            ## Downloads
+
+            | Platform | File |
+            |----------|------|
+            | **Linux** | `.AppImage` (portable) or `.deb` (Debian/Ubuntu) |
+            | **Windows** | `.msi` (installer) or `.exe` (NSIS setup) |
+            | **macOS** | `.dmg` (Apple Silicon & Intel) |
+
+            ### First Run
+            1. Open a vault folder containing your markdown files
+            2. Go to **Settings → Whisper Model** and download a model (`ggml-base.en` recommended)
+            3. Click the microphone icon to start voice dictation
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.target && format('--target {0}', matrix.target) }}
+
+  # If the tag already exists, this was a non-version-bump merge — skip silently.
+  skip-notice:
+    name: Skip (no version change)
+    needs: [lint, test, version]
+    if: needs.version.outputs.tag_exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Tag v$VERSION already exists — no release needed."
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
