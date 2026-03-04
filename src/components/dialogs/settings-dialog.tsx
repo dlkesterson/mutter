@@ -19,7 +19,6 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
   ExpertiseLevel,
-  EXPERTISE_THRESHOLDS,
   getExpertiseLabel,
   getExpertiseDescription,
 } from '@/types/userProfile';
@@ -358,7 +357,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 					<div className='space-y-4 border-t border-border pt-4'>
 						<h3 className='text-base font-semibold border-b border-border pb-2'>Expertise Level</h3>
 						<p className='text-sm text-muted-foreground'>
-							Your expertise level affects which voice commands require confirmation before executing.
+							Your expertise level affects which actions require confirmation before executing.
 						</p>
 
 						<div className='space-y-2'>
@@ -389,22 +388,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							))}
 						</div>
 
-						<div className='text-xs text-muted-foreground space-y-1 mt-3'>
-							<p>
-								Commands executed: <span className='font-mono'>{profile.commandsExecuted}</span>
-							</p>
-							<p>
-								Next level at: <span className='font-mono'>
-									{profile.expertiseLevel === 'expert'
-										? 'Max level reached'
-										: profile.expertiseLevel === 'intermediate'
-											? `${EXPERTISE_THRESHOLDS.expert} commands`
-											: `${EXPERTISE_THRESHOLDS.intermediate} commands`
-									}
-								</span>
-							</p>
 						</div>
-					</div>
 				</div>
 			</div>
 

@@ -219,7 +219,6 @@ describe('Error Handling', () => {
       const { result } = renderHook(() => useUserProfile());
 
       expect(result.current.profile.expertiseLevel).toBe('novice');
-      expect(result.current.profile.commandsExecuted).toBe(0);
     });
 
     it('handles missing localStorage gracefully', () => {

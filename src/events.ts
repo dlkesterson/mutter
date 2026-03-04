@@ -32,14 +32,6 @@ export interface MutterEventMap {
 	'mutter:transcription-result': { text: string };
 	'mutter:toggle-minimap': { enabled: boolean };
 	'mutter:update-editor-font-size': { size: string };
-	// Experimental / less-used events (kept for completeness)
-	'mutter:query-executed': {
-		executionTimeMs: number;
-		timing: unknown;
-		noteCount: number;
-	};
-	'mutter:navigate': { target: string; blockId: string | null };
-	'mutter:edit-embed': { target: string; blockId: string | null };
 }
 
 // ---------------------------------------------------------------------------

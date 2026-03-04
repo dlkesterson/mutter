@@ -84,7 +84,6 @@ function App() {
 		voiceLogEntries,
 		voiceEnabled,
 		recentAudioSamples,
-		handleVoiceCommand,
 		toggleListening,
 	} = useVoicePipeline({ onModelSelectorOpen: () => setModelSelectorOpen(true) });
 
@@ -95,26 +94,6 @@ function App() {
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
-
-	useEffect(() => {
-		const syncModeFromHash = () => {
-			const hash = window.location.hash;
-			setIsQuickCapture(hash.startsWith('#/quick-capture'));
-			setIsCrdtSpike(hash.startsWith('#/crdt'));
-		};
-
-		syncModeFromHash();
-		window.addEventListener('hashchange', syncModeFromHash);
-		return () => window.removeEventListener('hashchange', syncModeFromHash);
-	}, []);
-
-	if (isQuickCapture) {
-		return <QuickCapture />;
-	}
-
-	if (isCrdtSpike) {
-		return <CrdtSpike />;
-	}
 
 	// Handle navigation history events (from keyboard shortcuts)
 	useMutterEvent('mutter:navigate-history', ({ path }) => {
@@ -162,6 +141,26 @@ function App() {
 		window.addEventListener('keydown', handleZoom);
 		return () => window.removeEventListener('keydown', handleZoom);
 	}, []);
+
+	useEffect(() => {
+		const syncModeFromHash = () => {
+			const hash = window.location.hash;
+			setIsQuickCapture(hash.startsWith('#/quick-capture'));
+			setIsCrdtSpike(hash.startsWith('#/crdt'));
+		};
+
+		syncModeFromHash();
+		window.addEventListener('hashchange', syncModeFromHash);
+		return () => window.removeEventListener('hashchange', syncModeFromHash);
+	}, []);
+
+	if (isQuickCapture) {
+		return <QuickCapture />;
+	}
+
+	if (isCrdtSpike) {
+		return <CrdtSpike />;
+	}
 
 	useEffect(() => {
 		// Initialize app on startup
@@ -212,6 +211,18 @@ function App() {
 		vaultPath,
 		activeFilePath: currentFile,
 	});
+
+	// Shared helper: resolve relative vault path to absolute and navigate
+	const navigateToRelPath = useCallback(
+		(relPath: string) => {
+			if (!vaultPath) return;
+			const normalizedVault = vaultPath
+				.replaceAll('\\', '/')
+				.replace(/\/+$/g, '');
+			handleFileSelect(`${normalizedVault}/${relPath}`);
+		},
+		[vaultPath, handleFileSelect],
+	);
 
 	const onOpenNoteById = useCallback(() => {
 		const id = window.prompt('Note ID (uuid)', '')?.trim() ?? '';
@@ -497,7 +508,6 @@ function App() {
 							/>
 
 							<Omnibox
-								onCommand={handleVoiceCommand}
 								onDialogOpen={setOpenDialog}
 								isListening={audioState === 'listening'}
 								onToggleListening={toggleListening}
@@ -539,41 +549,17 @@ function App() {
 							{rightPanel === 'backlinks' && (
 								<BacklinksPanel
 									noteId={vaultMeta.activeNoteId}
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath
-											.replaceAll('\\', '/')
-											.replace(/\/+$/g, '');
-										handleFileSelect(
-											`${normalizedVault}/${relPath}`,
-										);
-									}}
+									onNavigate={navigateToRelPath}
 								/>
 							)}
 							{rightPanel === 'search' && (
 								<SearchPanel
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath
-											.replaceAll('\\', '/')
-											.replace(/\/+$/g, '');
-										handleFileSelect(
-											`${normalizedVault}/${relPath}`,
-										);
-									}}
+									onNavigate={navigateToRelPath}
 								/>
 							)}
 							{rightPanel === 'graph' && (
 								<GraphPanel
-									onNavigate={(relPath) => {
-										if (!vaultPath) return;
-										const normalizedVault = vaultPath
-											.replaceAll('\\', '/')
-											.replace(/\/+$/g, '');
-										handleFileSelect(
-											`${normalizedVault}/${relPath}`,
-										);
-									}}
+									onNavigate={navigateToRelPath}
 									onExpand={() => setGraphDialogOpen(true)}
 								/>
 							)}
@@ -631,13 +617,7 @@ function App() {
 					<GraphDialog
 						open={graphDialogOpen}
 						onOpenChange={setGraphDialogOpen}
-						onNavigate={(relPath) => {
-							if (!vaultPath) return;
-							const normalizedVault = vaultPath
-								.replaceAll('\\', '/')
-								.replace(/\/+$/g, '');
-							handleFileSelect(`${normalizedVault}/${relPath}`);
-						}}
+						onNavigate={navigateToRelPath}
 					/>
 					<Toaster />
 				</div>

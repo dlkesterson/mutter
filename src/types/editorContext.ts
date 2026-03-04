@@ -1,14 +1,12 @@
 /**
  * Editor Context Types for Mutter
  *
- * These types define the context signals used for:
- * - Smart command ranking (surface relevant commands)
- * - Tiered UI (show context-appropriate options)
- * - Voice intelligence (understand user intent)
+ * These types define the context signals used for cursor tracking
+ * and document metadata.
  */
 
 /**
- * Cursor/Selection state - highest weight for command ranking
+ * Cursor/Selection state
  */
 export type CursorState =
   | { type: 'no-selection' }
@@ -29,62 +27,13 @@ export type CursorLocation =
   | 'empty';
 
 /**
- * Voice session state machine phases
- *
- * Flow: idle → listening → processing → command-recognized/ambiguous
- *       → awaiting-confirmation (optional) → executed → undo-window → idle
- */
-export type VoicePhase =
-  | 'idle'
-  | 'listening'
-  | 'processing'
-  | 'command-recognized'
-  | 'command-ambiguous'
-  | 'awaiting-confirmation'
-  | 'executed'
-  | 'undo-window';
-
-/**
- * View mode for the editor
- */
-export type ViewMode =
-  | 'editor'
-  | 'preview'
-  | 'split'
-  | 'graph'
-  | 'canvas';
-
-/**
- * Intent buckets for tracking recent user actions
- * Used to predict likely next commands
- */
-export type IntentBucket =
-  | 'edit-selection'      // Bold, italic, delete selection
-  | 'format-text'         // Heading, quote, code
-  | 'structure-document'  // Lists, sections, reorganize
-  | 'navigate'            // Jump to, find, open note
-  | 'link-reference'      // Wiki links, embeds, backlinks
-  | 'query-ai'            // Ask AI, summarize, explain
-  | 'meta';               // Undo, help, cancel, settings
-
-/**
  * Complete editor context snapshot
- * Used for command ranking and UI decisions
  */
 export interface EditorContext {
-  // Cursor/Selection (highest weight for ranking)
+  // Cursor/Selection
   cursor: CursorState;
   cursorLocation: CursorLocation;
   currentBlockId: string | null;
-
-  // Voice session state
-  voicePhase: VoicePhase;
-
-  // Recent intent (last 3 actions for prediction)
-  recentIntents: IntentBucket[];
-
-  // Document/View mode
-  viewMode: ViewMode;
 
   // Document metadata
   noteId: string | null;
@@ -99,11 +48,7 @@ export const DEFAULT_EDITOR_CONTEXT: EditorContext = {
   cursor: { type: 'no-selection' },
   cursorLocation: 'empty',
   currentBlockId: null,
-  voicePhase: 'idle',
-  recentIntents: [],
-  viewMode: 'editor',
   noteId: null,
   notePath: null,
   hasUnsavedChanges: false,
 };
-

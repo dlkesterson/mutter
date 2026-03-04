@@ -71,7 +71,7 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 	const addVoiceLogEntry = useCallback(
 		(transcript: string) => {
 			setVoiceLogEntries((prev) => [
-				...prev,
+				...prev.slice(-99),
 				{
 					transcript,
 					id: `${Date.now()}-${Math.random()}`,
@@ -80,18 +80,6 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 			]);
 		},
 		[],
-	);
-
-	const handleVoiceCommand = useCallback(
-		async (command: string, transcription: string) => {
-			console.log('Voice command:', command, transcription);
-			const text = transcription || command;
-			setAudioState('executing');
-			emitMutterEvent('mutter:transcription-result', { text });
-			addVoiceLogEntry(text);
-			setAudioState('idle');
-		},
-		[addVoiceLogEntry],
 	);
 
 	const toggleListening = useCallback(async () => {
@@ -173,8 +161,6 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 		voiceLogEntries,
 		voiceEnabled,
 		recentAudioSamples,
-		addVoiceLogEntry,
-		handleVoiceCommand,
 		toggleListening,
 	};
 }

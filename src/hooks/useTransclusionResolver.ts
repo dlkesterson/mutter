@@ -146,22 +146,20 @@ export function useTransclusionResolver(
 
   /**
    * Navigate to the source note/block
-   * Dispatches a custom event that App.tsx listens for
    */
   const jumpToSource = useCallback(
     (target: string, blockId: string | null) => {
-      emitMutterEvent('mutter:navigate', { target, blockId });
+      emitMutterEvent('mutter:navigate-wikilink', { target, blockId });
     },
     []
   );
 
   /**
-   * Open source for editing
-   * For now, same as jumpToSource - future could open inline editor
+   * Open source for editing (same as jump for now)
    */
   const editInPlace = useCallback(
     (target: string, blockId: string | null) => {
-      emitMutterEvent('mutter:edit-embed', { target, blockId });
+      emitMutterEvent('mutter:navigate-wikilink', { target, blockId });
     },
     []
   );

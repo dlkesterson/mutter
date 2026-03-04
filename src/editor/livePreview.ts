@@ -2,6 +2,18 @@ import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetTy
 import { StateField, Range } from '@codemirror/state';
 import { emitMutterEvent } from '../events';
 
+// Hoisted regex constants — avoid re-compilation on every line/cursor move.
+// These are /g regexes, so lastIndex must be reset before each use.
+const HEADER_REGEX = /^(#{1,6})\s+(.+)$/;
+const TASK_REGEX = /^(\s*)- \[(x| )\] /;
+const LIST_REGEX = /^(\s*)([-*])\s+(.+)$/;
+const BOLD_REGEX = /\*\*([^*\n]+)\*\*/g;
+const ITALIC_REGEX = /(?<!\*)\*(?!\s)([^*\n]+)\*(?!\*)/g;
+const LINK_REGEX = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+const IMAGE_REGEX = /!\[([^\]|\n]*)(?:\|(\d+))?\]\(([^)\n]+)\)/g;
+const INLINE_CODE_REGEX = /`([^`\n]+)`/g;
+const WIKILINK_REGEX = /(?<!!)\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g;
+
 class ImageWidget extends WidgetType {
     constructor(
         readonly url: string,
@@ -273,7 +285,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     // --- Block Level Elements ---
 
                     // Headers
-                    const headerMatch = text.match(/^(#{1,6})\s+(.+)$/);
+                    const headerMatch = text.match(HEADER_REGEX);
                     if (headerMatch) {
                         const start = lineStart;
                         const hashEnd = start + headerMatch[1].length + 1;
@@ -296,7 +308,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
 
                     // Task Lists
-                    const taskMatch = text.match(/^(\s*)- \[(x| )\] /);
+                    const taskMatch = text.match(TASK_REGEX);
                     if (taskMatch) {
                         const start = lineStart + taskMatch[1].length;
                         const end = start + 6;
@@ -307,7 +319,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
                     // Bullet Lists (only if not a task list)
                     else {
-                        const listMatch = text.match(/^(\s*)([-*])\s+(.+)$/);
+                        const listMatch = text.match(LIST_REGEX);
                         if (listMatch) {
                             const start = lineStart + listMatch[1].length;
                             const bulletEnd = start + 2;
@@ -321,9 +333,9 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     // --- Inline Elements (Processed per line to avoid multi-line glitches) ---
 
                     // Bold
-                    const boldRegex = /\*\*([^*\n]+)\*\*/g;
+                    BOLD_REGEX.lastIndex = 0;
                     let match;
-                    while ((match = boldRegex.exec(text)) !== null) {
+                    while ((match = BOLD_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         if (cursorPos < start || cursorPos > end) {
@@ -334,8 +346,8 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
 
                     // Italic
-                    const italicRegex = /(?<!\*)\*(?!\s)([^*\n]+)\*(?!\*)/g;
-                    while ((match = italicRegex.exec(text)) !== null) {
+                    ITALIC_REGEX.lastIndex = 0;
+                    while ((match = ITALIC_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         if (cursorPos < start || cursorPos > end) {
@@ -346,8 +358,8 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
 
                     // Links
-                    const linkRegex = /\[([^\]\n]+)\]\(([^)\n]+)\)/g;
-                    while ((match = linkRegex.exec(text)) !== null) {
+                    LINK_REGEX.lastIndex = 0;
+                    while ((match = LINK_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         const linkText = match[1];
@@ -361,8 +373,8 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
 
                     // Images: ![alt](url) or ![alt|width](url)
-                    const imageRegex = /!\[([^\]|\n]*)(?:\|(\d+))?\]\(([^)\n]+)\)/g;
-                    while ((match = imageRegex.exec(text)) !== null) {
+                    IMAGE_REGEX.lastIndex = 0;
+                    while ((match = IMAGE_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         const alt = match[1];
@@ -374,8 +386,8 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     }
 
                     // Inline Code
-                    const inlineCodeRegex = /`([^`\n]+)`/g;
-                    while ((match = inlineCodeRegex.exec(text)) !== null) {
+                    INLINE_CODE_REGEX.lastIndex = 0;
+                    while ((match = INLINE_CODE_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         if (cursorPos < start || cursorPos > end) {
@@ -387,8 +399,8 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
 
                     // Wiki Links: [[Note Name]] or [[Note Name|Alias]]
                     // Skip embeds (handled by transclusion extension)
-                    const wikiLinkRegex = /(?<!!)\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g;
-                    while ((match = wikiLinkRegex.exec(text)) !== null) {
+                    WIKILINK_REGEX.lastIndex = 0;
+                    while ((match = WIKILINK_REGEX.exec(text)) !== null) {
                         const start = lineStart + match.index;
                         const end = start + match[0].length;
                         const target = match[1]; // Note name

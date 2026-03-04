@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Search, Mic } from 'lucide-react';
 
 interface OmniboxProps {
-	onCommand: (command: string, transcription: string) => void;
 	onDialogOpen: (type: 'files' | 'voice-log' | 'settings') => void;
 	isListening: boolean;
 	onToggleListening: () => void;
@@ -15,23 +14,6 @@ interface OmniboxProps {
 }
 
 const commands = [
-	{
-		label: 'Make bold',
-		description: 'Format selection as bold',
-		command: 'bold',
-	},
-	{
-		label: 'Make italic',
-		description: 'Format selection as italic',
-		command: 'italic',
-	},
-	{ label: 'Add heading', description: 'Insert heading', command: 'heading' },
-	{
-		label: 'Insert code',
-		description: 'Insert inline code',
-		command: 'code',
-	},
-	{ label: 'Undo', description: 'Undo last action', command: 'undo' },
 	{
 		label: 'Open file',
 		description: 'Navigate to a file',
@@ -49,7 +31,6 @@ const commands = [
 // These features are accessible via Settings or developer tools.
 
 export function Omnibox({
-	onCommand,
 	onDialogOpen,
 	isListening,
 	onToggleListening,
@@ -91,8 +72,6 @@ export function Omnibox({
 			onConfigureCrdtWebSocket?.();
 		} else if (command === 'clear crdt websocket') {
 			onClearCrdtWebSocket?.();
-		} else {
-			onCommand(command, `Voice command: ${command}`);
 		}
 		setOpen(false);
 		setSearchValue('');
@@ -118,8 +97,6 @@ export function Omnibox({
 	if (!open) {
 		return null;
 	}
-
-	if (!open) return null;
 
 	return (
 		<div

@@ -23,7 +23,7 @@ import {
 	blockIdExtensionWithStyles,
 	getBlockAtCursor,
 } from '../editor/blockIdExtension';
-import { extractBlocks, findBlockById, type BlockInfo } from '../editor/blockIds';
+import { extractBlocks, findBlockById } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
 import { pasteImageExtension } from '../editor/pasteImageExtension';
 import { findNoteIdByPath } from '../crdt/manifestDoc';
@@ -48,8 +48,6 @@ interface EditorProps {
 	onContentSaved?: (content: string) => void;
 	onContentChange?: (content: string) => void;
 	onDirtyChange?: (isDirty: boolean) => void;
-	/** Called when the cursor moves to a different block */
-	onBlockChange?: (block: BlockInfo | null) => void;
 	/** Note ID from CRDT for context tracking */
 	noteId?: string | null;
 	/** Vault path for transclusion resolution */
@@ -70,7 +68,6 @@ export default function Editor({
 	onContentSaved,
 	onContentChange,
 	onDirtyChange,
-	onBlockChange,
 	noteId,
 	vaultPath,
 	onNavigate,
@@ -81,7 +78,6 @@ export default function Editor({
 	const minimapCompartment = useRef(new Compartment());
 	const fontSizeCompartment = useRef(new Compartment());
 	const lastBlockIdRef = useRef<string | null>(null);
-	const onBlockChangeRef = useRef(onBlockChange);
 	const vaultPathRef = useRef(vaultPath);
 	const onNavigateRef = useRef(onNavigate);
 	const filePathRef = useRef(filePath);
@@ -113,13 +109,12 @@ export default function Editor({
 
 	// Keep refs in sync
 	useEffect(() => {
-		onBlockChangeRef.current = onBlockChange;
 		syncCursorRef.current = syncCursor;
 		vaultPathRef.current = vaultPath;
 		onNavigateRef.current = onNavigate;
 		manifestRef.current = manifest;
 		filePathRef.current = filePath;
-	}, [onBlockChange, syncCursor, vaultPath, onNavigate, manifest, filePath]);
+	}, [syncCursor, vaultPath, onNavigate, manifest, filePath]);
 
 	// Load minimap setting from storage
 	useEffect(() => {
@@ -579,10 +574,7 @@ export default function Editor({
 						const blockId = block?.id ?? null;
 
 						// Only fire callback if block changed
-						if (blockId !== lastBlockIdRef.current) {
-							lastBlockIdRef.current = blockId;
-							onBlockChangeRef.current?.(block);
-						}
+						lastBlockIdRef.current = blockId;
 
 						// Sync cursor state to EditorContext
 						syncCursorRef.current?.();
@@ -711,14 +703,12 @@ export default function Editor({
 			}
 		};
 
-		// Update positions periodically and on resize
+		// Update on resize
 		updateContentRect();
-		const interval = setInterval(updateContentRect, 500);
 		const observer = new ResizeObserver(updateContentRect);
 		observer.observe(editorRef.current!);
 
 		return () => {
-			clearInterval(interval);
 			observer.disconnect();
 		};
 	}, [viewReady, contentMaxWidth]);

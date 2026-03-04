@@ -1,11 +1,7 @@
 import { EditorView } from '@codemirror/view';
-import { undo, redo } from '@codemirror/commands';
 
 export interface CommandAction {
     Format?: FormatType;
-    Editor?: EditorAction;
-    System?: SystemAction;
-    AppSpecific?: string;
 }
 
 export interface FormatType {
@@ -25,29 +21,9 @@ export interface FormatType {
     HorizontalRule?: boolean;
 }
 
-export interface EditorAction {
-    Undo?: boolean;
-    Redo?: boolean;
-    NewLine?: boolean;
-    Delete?: boolean;
-    SelectAll?: boolean;
-}
-
-export interface SystemAction {
-    CreateNote?: { name: string };
-    OpenNote?: { name: string };
-    Search?: { query: string };
-    SaveNote?: boolean;
-}
-
 export function executeCommand(view: EditorView, action: CommandAction): boolean {
     if (action.Format) {
         return executeFormatCommand(view, action.Format);
-    } else if (action.Editor) {
-        return executeEditorCommand(view, action.Editor);
-    } else if (action.System || action.AppSpecific) {
-        // System and AppSpecific commands need to be handled by the parent component
-        return false;
     }
     return false;
 }
@@ -80,7 +56,6 @@ function executeFormatCommand(view: EditorView, format: FormatType): boolean {
         const lineEnd = state.doc.lineAt(from).to;
         const lineText = state.doc.sliceString(lineStart, lineEnd);
 
-        // Remove existing heading markers if any
         const cleanText = lineText.replace(/^#{1,6}\s+/, '');
         const headingPrefix = '#'.repeat(level) + ' ';
 
@@ -188,44 +163,6 @@ ${selectedText}
     if (format.HorizontalRule !== undefined) {
         view.dispatch({
             changes: { from, to, insert: `\n---\n` }
-        });
-        return true;
-    }
-
-    return false;
-}
-
-function executeEditorCommand(view: EditorView, action: EditorAction): boolean {
-    if (action.Undo !== undefined) {
-        return undo(view);
-    }
-
-    if (action.Redo !== undefined) {
-        return redo(view);
-    }
-
-    if (action.NewLine !== undefined) {
-        const { from } = view.state.selection.main;
-        view.dispatch({
-            changes: { from, insert: '\n' },
-            selection: { anchor: from + 1 }
-        });
-        return true;
-    }
-
-    if (action.Delete !== undefined) {
-        const { from, to } = view.state.selection.main;
-        if (from !== to) {
-            view.dispatch({
-                changes: { from, to }
-            });
-        }
-        return true;
-    }
-
-    if (action.SelectAll !== undefined) {
-        view.dispatch({
-            selection: { anchor: 0, head: view.state.doc.length }
         });
         return true;
     }
