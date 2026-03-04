@@ -115,10 +115,25 @@ jobs:
             libclang-dev \
             cmake
 
-      # macOS: cmake for whisper.cpp
+      # macOS: cmake for whisper.cpp, disable native CPU detection to avoid
+      # i8mm feature errors on GitHub Actions ARM runners (whisper.cpp #3427)
       - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'
         run: brew install cmake
+
+      - name: Configure whisper.cpp build flags (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
+          if [ "$TARGET" = "x86_64-apple-darwin" ]; then
+            echo "CMAKE_C_FLAGS=-march=x86-64" >> "$GITHUB_ENV"
+            echo "CMAKE_CXX_FLAGS=-march=x86-64" >> "$GITHUB_ENV"
+          else
+            echo "CMAKE_C_FLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
+            echo "CMAKE_CXX_FLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
+          fi
 
       - uses: pnpm/action-setup@v4
 
