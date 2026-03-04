@@ -23,23 +23,6 @@ interface SearchPanelProps {
 }
 
 /**
- * Format a timestamp as a relative date
- */
-function formatRelativeDate(timestamp: number): string {
-	const now = Date.now();
-	const diff = now - timestamp;
-	const seconds = Math.floor(diff / 1000);
-	const minutes = Math.floor(seconds / 60);
-	const hours = Math.floor(minutes / 60);
-	const days = Math.floor(hours / 24);
-
-	if (days > 0) return `${days}d ago`;
-	if (hours > 0) return `${hours}h ago`;
-	if (minutes > 0) return `${minutes}m ago`;
-	return 'just now';
-}
-
-/**
  * Note result item component
  */
 function NoteResultItem({
@@ -55,16 +38,9 @@ function NoteResultItem({
 				className='w-full text-left px-3 py-2 rounded hover:bg-muted transition-colors group'
 				onClick={() => onNavigate(note.relPath)}
 			>
-				<div className='flex items-center justify-between'>
-					<span className='text-sm font-medium group-hover:text-accent transition-colors'>
-						{note.title}
-					</span>
-					{note.updatedAt && (
-						<span className='text-xs text-muted-foreground'>
-							{formatRelativeDate(note.updatedAt)}
-						</span>
-					)}
-				</div>
+				<span className='text-sm font-medium group-hover:text-accent transition-colors'>
+					{note.title}
+				</span>
 				<span className='text-xs text-muted-foreground truncate block'>
 					{note.relPath}
 				</span>

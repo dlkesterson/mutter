@@ -1,7 +1,7 @@
 /**
  * Query Engine Integration Tests
  *
- * Tests the split format query engine with ManifestDoc and GraphCacheDoc.
+ * Tests the split format query engine with manifest and graphCache shims.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,13 +9,16 @@ import { renderHook, act } from '@testing-library/react';
 
 // Mock manifest with note paths
 const mockManifest = {
-  vault_id: 'test-vault',
   id_to_path: {
     'note-1': 'project-alpha.md',
     'note-2': 'meeting-notes.md',
     'note-3': 'personal/journal.md',
   },
-  last_sync_at: Date.now(),
+  path_index: {
+    'project-alpha.md': 'note-1',
+    'meeting-notes.md': 'note-2',
+    'personal/journal.md': 'note-3',
+  },
 };
 
 const mockGraphCache = {
@@ -39,7 +42,6 @@ vi.mock('@/context/VaultMetadataContext', () => ({
   useVaultMetadata: () => ({
     manifest: mockManifest,
     graphCache: mockGraphCache,
-    noteManager: null,
   }),
 }));
 
@@ -218,8 +220,8 @@ describe('Query Engine Integration', () => {
       const { result } = renderHook(() => useQueryEngine());
 
       // Initially empty query should have filter suggestions
-      expect(result.current.suggestions).toContain('tag:');
       expect(result.current.suggestions).toContain('linked:');
+      expect(result.current.suggestions).toContain('has:links');
     });
 
     it('suggests has: properties', () => {
@@ -229,9 +231,7 @@ describe('Query Engine Integration', () => {
         result.current.setQuery('has:');
       });
 
-      expect(result.current.suggestions).toContain('has:blocks');
       expect(result.current.suggestions).toContain('has:links');
-      expect(result.current.suggestions).toContain('has:tags');
     });
   });
 

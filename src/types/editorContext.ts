@@ -33,7 +33,6 @@ export interface EditorContext {
   // Cursor/Selection
   cursor: CursorState;
   cursorLocation: CursorLocation;
-  currentBlockId: string | null;
 
   // Document metadata
   noteId: string | null;
@@ -47,7 +46,6 @@ export interface EditorContext {
 export const DEFAULT_EDITOR_CONTEXT: EditorContext = {
   cursor: { type: 'no-selection' },
   cursorLocation: 'empty',
-  currentBlockId: null,
   noteId: null,
   notePath: null,
   hasUnsavedChanges: false,

@@ -1,16 +1,15 @@
 /**
  * useGraphData Hook
  *
- * Transforms vault CRDT data into graph format for visualization.
- * Uses ManifestDoc for note metadata and GraphCacheDoc for edges.
+ * Transforms vault index data into graph format for visualization.
+ * Uses manifest shim for note metadata and graphCache shim for edges.
  * Supports both full vault graphs and local graphs (limited by depth).
  */
 
 import { useMemo } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import type { GraphNode, GraphLink, GraphData, GraphViewOptions } from '@/components/graph/types';
-import type { ManifestDoc } from '@/crdt/manifestDoc';
-import type { GraphCacheDoc, GraphEdge } from '@/crdt/graphCacheDoc';
+import { titleFromPath } from '@/vault/vaultIndex';
 
 const DEFAULT_OPTIONS: GraphViewOptions = {
   depth: 2,
@@ -20,17 +19,9 @@ const DEFAULT_OPTIONS: GraphViewOptions = {
 };
 
 /**
- * Derive a note title from its path (basename without extension)
+ * Build notes map from manifest shim for graph building
  */
-function titleFromPath(relPath: string): string {
-  const basename = relPath.split('/').pop() || relPath;
-  return basename.replace(/\.md$/i, '');
-}
-
-/**
- * Build notes map from manifest for graph building
- */
-function buildNotesFromManifest(manifest: ManifestDoc): Record<string, { id: string; rel_path: string; title: string }> {
+function buildNotesFromManifest(manifest: { id_to_path: Record<string, string> }): Record<string, { id: string; rel_path: string; title: string }> {
   const notes: Record<string, { id: string; rel_path: string; title: string }> = {};
   for (const [noteId, relPath] of Object.entries(manifest.id_to_path)) {
     notes[noteId] = {
@@ -40,13 +31,6 @@ function buildNotesFromManifest(manifest: ManifestDoc): Record<string, { id: str
     };
   }
   return notes;
-}
-
-/**
- * Build edges map from graph cache for graph building
- */
-function buildEdgesFromCache(graphCache: GraphCacheDoc): Record<string, GraphEdge> {
-  return graphCache.edges;
 }
 
 /**
@@ -240,8 +224,6 @@ function buildLocalGraph(
 
 /**
  * Hook to get full vault graph data
- *
- * Uses ManifestDoc for note metadata and GraphCacheDoc for edges.
  */
 export function useFullGraphData(options: Partial<GraphViewOptions> = {}): {
   graphData: GraphData;
@@ -250,7 +232,6 @@ export function useFullGraphData(options: Partial<GraphViewOptions> = {}): {
   edgeCount: number;
 } {
   const { ready, activeNoteId, manifest, graphCache } = useVaultMetadata();
-  // Extract only the options we need to avoid object recreation in deps
   const showOrphans = options.showOrphans ?? DEFAULT_OPTIONS.showOrphans;
   const nodeScale = options.nodeScale ?? DEFAULT_OPTIONS.nodeScale;
 
@@ -260,13 +241,12 @@ export function useFullGraphData(options: Partial<GraphViewOptions> = {}): {
     }
 
     const notes = buildNotesFromManifest(manifest);
-    const edges = graphCache ? buildEdgesFromCache(graphCache) : {};
+    const edges = graphCache ? graphCache.edges : {};
 
     const mergedOptions = { ...DEFAULT_OPTIONS, showOrphans, nodeScale };
     return buildFullGraph(notes, edges, activeNoteId, mergedOptions);
   }, [manifest, graphCache, ready, activeNoteId, showOrphans, nodeScale]);
 
-  // Memoize return object to prevent consumer re-renders
   return useMemo(() => ({
     graphData,
     loading: !ready,
@@ -277,8 +257,6 @@ export function useFullGraphData(options: Partial<GraphViewOptions> = {}): {
 
 /**
  * Hook to get local graph data (centered on current note)
- *
- * Uses ManifestDoc for note metadata and GraphCacheDoc for edges.
  */
 export function useLocalGraphData(options: Partial<GraphViewOptions> = {}): {
   graphData: GraphData;
@@ -287,7 +265,6 @@ export function useLocalGraphData(options: Partial<GraphViewOptions> = {}): {
   edgeCount: number;
 } {
   const { ready, activeNoteId, manifest, graphCache } = useVaultMetadata();
-  // Extract only the option we need to avoid object recreation in deps
   const depth = options.depth ?? DEFAULT_OPTIONS.depth;
 
   const graphData = useMemo(() => {
@@ -296,12 +273,11 @@ export function useLocalGraphData(options: Partial<GraphViewOptions> = {}): {
     }
 
     const notes = buildNotesFromManifest(manifest);
-    const edges = graphCache ? buildEdgesFromCache(graphCache) : {};
+    const edges = graphCache ? graphCache.edges : {};
 
     return buildLocalGraph(notes, edges, activeNoteId, depth);
   }, [manifest, graphCache, ready, activeNoteId, depth]);
 
-  // Memoize return object to prevent consumer re-renders
   return useMemo(() => ({
     graphData,
     loading: !ready,
@@ -309,17 +285,3 @@ export function useLocalGraphData(options: Partial<GraphViewOptions> = {}): {
     edgeCount: graphData.links.length,
   }), [graphData, ready]);
 }
-
-/**
- * REMOVED: Combined useGraphData hook
- *
- * The previous implementation called BOTH useFullGraphData and useLocalGraphData
- * unconditionally, wasting computation. Components should use the specific hooks:
- *
- * - useLocalGraphData() - For sidebar panels, shows notes within N degrees of current
- * - useFullGraphData()  - For fullscreen graph dialog, shows entire vault
- *
- * React hooks cannot be called conditionally, so a "mode" parameter doesn't help -
- * both hooks would still execute. Using the specific hook directly is the only way
- * to avoid wasted computation.
- */

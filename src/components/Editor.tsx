@@ -26,7 +26,6 @@ import {
 import { extractBlocks, findBlockById } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
 import { pasteImageExtension } from '../editor/pasteImageExtension';
-import { findNoteIdByPath } from '../crdt/manifestDoc';
 import '../editor/transclusion.css';
 import { emitMutterEvent, useMutterEvent } from '../events';
 import { useToast } from '../hooks/use-toast';
@@ -48,7 +47,7 @@ interface EditorProps {
 	onContentSaved?: (content: string) => void;
 	onContentChange?: (content: string) => void;
 	onDirtyChange?: (isDirty: boolean) => void;
-	/** Note ID from CRDT for context tracking */
+	/** Note ID for context tracking */
 	noteId?: string | null;
 	/** Vault path for transclusion resolution */
 	vaultPath?: string | null;
@@ -464,7 +463,7 @@ export default function Editor({
 						}
 						const normalizedVault = vp.replaceAll('\\', '/').replace(/\/+$/g, '');
 						const targetPath = target.endsWith('.md') ? target : target + '.md';
-						const noteId = findNoteIdByPath(currentManifest, targetPath);
+						const noteId = currentManifest.path_index[targetPath] ?? null;
 						if (!noteId) {
 							throw new Error(`Note not found: ${target}`);
 						}

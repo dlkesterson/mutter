@@ -3,7 +3,7 @@
  *
  * Provides stable IDs for blocks within markdown documents.
  * IDs are stored inline in markdown (Obsidian-compatible format: ^abc123)
- * and indexed in the CRDT for fast lookup.
+ * and indexed in the vault index for fast lookup.
  */
 
 export type BlockType = 'heading' | 'paragraph' | 'list-item' | 'code-block' | 'blockquote';
@@ -23,8 +23,7 @@ const BLOCK_ID_LENGTH = 6;
 
 // Regex to match block IDs at end of line: space + ^abc123
 const BLOCK_ID_REGEX = / \^([a-z0-9]{6})$/;
-// Regex to find block ID anywhere (for validation)
-const BLOCK_ID_ANYWHERE_REGEX = /\^([a-z0-9]{6})/g;
+
 
 /**
  * Generate a new random block ID
@@ -182,133 +181,6 @@ export function extractBlocks(content: string): BlockInfo[] {
   }
 
   return blocks;
-}
-
-/**
- * Find all existing block IDs in a document
- * Used for duplicate detection
- */
-export function findAllBlockIds(content: string): Set<string> {
-  const ids = new Set<string>();
-  const matches = content.matchAll(BLOCK_ID_ANYWHERE_REGEX);
-  for (const match of matches) {
-    ids.add(match[1]);
-  }
-  return ids;
-}
-
-/**
- * Generate a unique block ID that doesn't exist in the document
- */
-export function generateUniqueBlockId(existingIds: Set<string>): string {
-  let id = generateBlockId();
-  let attempts = 0;
-  while (existingIds.has(id) && attempts < 100) {
-    id = generateBlockId();
-    attempts++;
-  }
-  return id;
-}
-
-/**
- * Ensure all content blocks have unique IDs
- * Returns the modified content and block info
- */
-export function ensureBlockIds(content: string): {
-  content: string;
-  blocks: BlockInfo[];
-  modified: boolean;
-  duplicatesFixed: number;
-} {
-  const lines = content.split('\n');
-  const existingIds = findAllBlockIds(content);
-  const seenIds = new Set<string>();
-  let modified = false;
-  let duplicatesFixed = 0;
-
-  let inCodeBlock = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Track code block state
-    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
-      if (!inCodeBlock) {
-        inCodeBlock = true;
-      } else {
-        // End of code block - add ID to closing fence if needed
-        const existingId = parseBlockId(line);
-        if (existingId) {
-          if (seenIds.has(existingId)) {
-            // Duplicate! Regenerate
-            const newId = generateUniqueBlockId(existingIds);
-            lines[i] = removeBlockId(line) + ` ^${newId}`;
-            existingIds.add(newId);
-            seenIds.add(newId);
-            modified = true;
-            duplicatesFixed++;
-          } else {
-            seenIds.add(existingId);
-          }
-        } else {
-          // Add new ID
-          const newId = generateUniqueBlockId(existingIds);
-          lines[i] = `${line} ^${newId}`;
-          existingIds.add(newId);
-          seenIds.add(newId);
-          modified = true;
-        }
-        inCodeBlock = false;
-      }
-      continue;
-    }
-
-    // Skip lines inside code blocks
-    if (inCodeBlock) {
-      continue;
-    }
-
-    // Check if this line should have a block ID
-    const blockType = detectBlockType(line);
-    if (!blockType) {
-      continue; // Empty line, fence, or hr - no ID needed
-    }
-
-    const existingId = parseBlockId(line);
-
-    if (existingId) {
-      if (seenIds.has(existingId)) {
-        // Duplicate ID - regenerate (keep first occurrence)
-        const newId = generateUniqueBlockId(existingIds);
-        lines[i] = removeBlockId(line) + ` ^${newId}`;
-        existingIds.add(newId);
-        seenIds.add(newId);
-        modified = true;
-        duplicatesFixed++;
-        console.log(`[BlockIds] Regenerated duplicate ID ^${existingId} -> ^${newId} on line ${i + 1}`);
-      } else {
-        seenIds.add(existingId);
-      }
-    } else {
-      // No ID - add one
-      const newId = generateUniqueBlockId(existingIds);
-      lines[i] = appendBlockId(line, newId);
-      existingIds.add(newId);
-      seenIds.add(newId);
-      modified = true;
-    }
-  }
-
-  const newContent = lines.join('\n');
-  const blocks = extractBlocks(newContent);
-
-  return {
-    content: newContent,
-    blocks,
-    modified,
-    duplicatesFixed,
-  };
 }
 
 /**

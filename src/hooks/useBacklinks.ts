@@ -1,13 +1,13 @@
 /**
  * useBacklinks Hook
  *
- * Provides backlink information for a note using the GraphCacheDoc.
+ * Provides backlink information for a note using the vault index.
  * Uses the pre-computed backlink_index for O(1) lookups.
  */
 
 import { useMemo } from 'react';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
-import type { GraphEdge } from '@/crdt/graphCacheDoc';
+import type { GraphEdge } from '@/types/vault';
 
 /**
  * Backlink information with source note metadata

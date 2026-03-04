@@ -307,9 +307,9 @@ describe('Render Tracking: Audio Recorder State Updates', () => {
   });
 });
 
-describe('Performance: CRDT Document Operations', () => {
+describe('Performance: Document Lookup Operations', () => {
   it('should measure cost of document changes', () => {
-    // Simulate CRDT change operations
+    // Simulate document lookup operations
     const doc: any = {
       notes: {},
       graph_edges: {},
@@ -338,7 +338,7 @@ describe('Performance: CRDT Document Operations', () => {
     }
     const lookupTime = performance.now() - start;
 
-    console.log('\nCRDT Document Operations:');
+    console.log('\nDocument Lookup Operations:');
     console.log(`  Lookups: ${lookupIterations} in ${lookupTime.toFixed(2)}ms`);
     console.log(`  Per lookup: ${(lookupTime / lookupIterations).toFixed(4)}ms`);
 

@@ -6,7 +6,7 @@
  * - Recent query history
  * - Query suggestions/autocomplete
  *
- * Uses the split document format (ManifestDoc + GraphCacheDoc + NoteDocs).
+ * Uses the vault index (manifest + graph cache shims).
  */
 
 import { useState, useCallback, useMemo } from 'react';
@@ -59,7 +59,7 @@ function saveRecentQueries(queries: string[]): void {
  * Hook for executing queries against the vault metadata
  */
 export function useQueryEngine() {
-  const { manifest, graphCache, noteManager } = useVaultMetadata();
+  const { manifest, graphCache } = useVaultMetadata();
 
   const [state, setState] = useState<QueryEngineState>({
     query: '',
@@ -134,7 +134,6 @@ export function useQueryEngine() {
           query: parsed,
           manifest,
           graphCache,
-          noteManager,
         });
 
         setState((prev) => ({
@@ -164,7 +163,7 @@ export function useQueryEngine() {
         return null;
       }
     },
-    [state.query, manifest, graphCache, noteManager, recentQueries]
+    [state.query, manifest, graphCache, recentQueries]
   );
 
   /**
@@ -244,15 +243,5 @@ export const PRESET_QUERIES = [
     label: 'With links',
     query: 'has:links',
     description: 'Notes that link to other notes',
-  },
-  {
-    label: 'With blocks',
-    query: 'has:blocks',
-    description: 'Notes that have block references',
-  },
-  {
-    label: 'Recent (7 days)',
-    query: `updated:>=${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
-    description: 'Notes updated in the last week',
   },
 ];

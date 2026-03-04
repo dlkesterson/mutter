@@ -21,8 +21,8 @@ import { Toaster } from './components/ui/toaster';
 import { getStorageItem, setStorageItem } from './utils/storage';
 import { QuickCapture } from './components/QuickCapture';
 import { Sidebar } from './components/Sidebar';
-import { CrdtSpike } from './components/CrdtSpike';
-import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
+import { useVaultIndex } from '@/hooks/useVaultIndex';
+import { normalizePath } from '@/vault/vaultIndex';
 import { TabBar } from './components/TabBar';
 import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
@@ -33,8 +33,6 @@ import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
 import { TextCleanupDialog } from './components/dialogs/TextCleanupDialog';
 import { RightPanel } from './components/RightPanel';
-
-const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
 function App() {
 	// Navigation history
@@ -90,7 +88,6 @@ function App() {
 	const [vaultPath, setVaultPath] = useState<string | null>(null);
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [isQuickCapture, setIsQuickCapture] = useState(false);
-	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
@@ -146,7 +143,6 @@ function App() {
 		const syncModeFromHash = () => {
 			const hash = window.location.hash;
 			setIsQuickCapture(hash.startsWith('#/quick-capture'));
-			setIsCrdtSpike(hash.startsWith('#/crdt'));
 		};
 
 		syncModeFromHash();
@@ -154,15 +150,8 @@ function App() {
 		return () => window.removeEventListener('hashchange', syncModeFromHash);
 	}, []);
 
-	if (isQuickCapture) {
-		return <QuickCapture />;
-	}
-
-	if (isCrdtSpike) {
-		return <CrdtSpike />;
-	}
-
 	useEffect(() => {
+		if (isQuickCapture) return; // Skip initialization in quick-capture mode
 		// Initialize app on startup
 		const initialize = async () => {
 			console.time('[App] initialize total');
@@ -187,18 +176,15 @@ function App() {
 					handleFileSelect(lastFile);
 				}
 				console.timeEnd('[App] restore last file');
-
-				// TODO: Restore full tab session if we decide to persist it
 			} catch (error) {
 				console.timeEnd('[App] initialize total');
-				console.error('Failed to initialize embeddings:', error);
-				// Still allow the app to run
+				console.error('Failed to initialize:', error);
 				setIsInitialized(true);
 			}
 		};
 
 		initialize();
-	}, []);
+	}, [isQuickCapture]);
 
 	// Save current file to storage when it changes
 	useEffect(() => {
@@ -207,7 +193,7 @@ function App() {
 		}
 	}, [currentFile]);
 
-	const vaultMeta = useVaultMetadataCrdt({
+	const vaultMeta = useVaultIndex({
 		vaultPath,
 		activeFilePath: currentFile,
 	});
@@ -216,70 +202,15 @@ function App() {
 	const navigateToRelPath = useCallback(
 		(relPath: string) => {
 			if (!vaultPath) return;
-			const normalizedVault = vaultPath
-				.replaceAll('\\', '/')
-				.replace(/\/+$/g, '');
-			handleFileSelect(`${normalizedVault}/${relPath}`);
+			handleFileSelect(`${normalizePath(vaultPath)}/${relPath}`);
 		},
 		[vaultPath, handleFileSelect],
 	);
-
-	const onOpenNoteById = useCallback(() => {
-		const id = window.prompt('Note ID (uuid)', '')?.trim() ?? '';
-		if (!id) return;
-		const path = vaultMeta.openNoteById(id);
-		if (!path) {
-			window.alert('Note not found in vault metadata.');
-			return;
-		}
-		handleFileSelect(path);
-	}, [vaultMeta]);
-
-	const onSetActiveNoteTags = useCallback(() => {
-		if (!vaultMeta.activeNoteId) {
-			window.alert('No active note.');
-			return;
-		}
-		const raw = window.prompt('Tags (comma-separated)', '') ?? '';
-		const tags = raw
-			.split(',')
-			.map((t) => t.trim())
-			.filter(Boolean);
-		vaultMeta.setActiveNoteTags(tags);
-	}, [vaultMeta]);
-
-	const onConfigureCrdtWebSocket = useCallback(() => {
-		const current = window.localStorage.getItem(CRDT_WS_URL_KEY) ?? '';
-		const raw = window.prompt(
-			'CRDT WebSocket URL (e.g. ws://127.0.0.1:3030)',
-			current || 'ws://127.0.0.1:3030',
-		);
-		if (raw === null) return;
-
-		const trimmed = raw.trim();
-		if (!trimmed) {
-			window.localStorage.removeItem(CRDT_WS_URL_KEY);
-		} else {
-			window.localStorage.setItem(CRDT_WS_URL_KEY, trimmed);
-		}
-		window.location.reload();
-	}, []);
-
-	const onClearCrdtWebSocket = useCallback(() => {
-		const ok = window.confirm(
-			'Clear CRDT WebSocket URL for this install? (requires reload)',
-		);
-		if (!ok) return;
-		window.localStorage.removeItem(CRDT_WS_URL_KEY);
-		window.location.reload();
-	}, []);
 
 	// Open model selector on first launch if no model is loaded
 	useEffect(() => {
 		const checkModel = async () => {
 			try {
-				// Always check if a model is actually loaded, regardless of saved preference
-				// The saved preference might exist but the model file could be missing/corrupt
 				const hasModel = await hasLoadedModel();
 
 				if (hasModel) {
@@ -289,7 +220,6 @@ function App() {
 					return;
 				}
 
-				// Check if we have a saved model preference to try auto-loading
 				const savedModelId = await getStorageItem<string>(
 					'selected_whisper_model',
 				);
@@ -301,7 +231,7 @@ function App() {
 					try {
 						await loadWhisperModel(savedModelId);
 						console.log(
-							`[Model Check] ✓ Successfully loaded saved model: ${savedModelId}`,
+							`[Model Check] Successfully loaded saved model: ${savedModelId}`,
 						);
 						return;
 					} catch (loadError) {
@@ -309,16 +239,13 @@ function App() {
 							`[Model Check] Failed to load saved model ${savedModelId}:`,
 							loadError,
 						);
-						// Fall through to open selector
 					}
 				}
 
-				// No model loaded and either no saved preference or load failed
 				console.log('[Model Check] No model loaded, opening selector');
 				setModelSelectorOpen(true);
 			} catch (err) {
 				console.error('Failed to check model status:', err);
-				// Open selector anyway if check fails
 				setModelSelectorOpen(true);
 			}
 		};
@@ -331,39 +258,32 @@ function App() {
 	// Handle keyboard shortcuts for dialogs and tabs
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			// Ctrl/Cmd + O for file navigation (Quick Switcher)
 			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
 				e.preventDefault();
 				setOpenDialog('files');
 			}
-			// Ctrl/Cmd + W to close current tab
 			if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
 				e.preventDefault();
 				if (activeTabId) {
-					// Create a synthetic mouse event for the handler
 					handleTabClose(activeTabId, {
 						stopPropagation: () => {},
 					} as React.MouseEvent);
 				}
 			}
-			// Ctrl/Cmd + N to create new note (dispatches event to Sidebar)
 			if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
 				e.preventDefault();
 				emitMutterEvent('mutter:create-note');
 			}
-			// Ctrl/Cmd + , for settings (common pattern)
 			if ((e.ctrlKey || e.metaKey) && e.key === ',') {
 				e.preventDefault();
 				setOpenDialog('settings');
 			}
-			// Ctrl/Cmd + Shift + L for text cleanup
 			if (
 				(e.ctrlKey || e.metaKey) &&
 				e.shiftKey &&
 				e.key.toLowerCase() === 'l'
 			) {
 				e.preventDefault();
-				// Dispatch event to get text from editor
 				emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
 			}
 		};
@@ -373,24 +293,21 @@ function App() {
 	}, [activeTabId]);
 
 
+	if (isQuickCapture) {
+		return <QuickCapture />;
+	}
+
 	return (
 		<EditorContextProvider>
 			<VaultMetadataProvider
 				ready={vaultMeta.ready}
-				vaultId={vaultMeta.vaultId}
 				activeNoteId={vaultMeta.activeNoteId}
 				vaultPath={vaultPath}
 				normalizedVaultPath={vaultMeta.normalizedVaultPath}
 				loadingPhase={vaultMeta.loadingPhase}
 				manifest={vaultMeta.manifest}
-				manifestHandle={vaultMeta.manifestHandle}
-				noteManager={vaultMeta.noteManager}
-				activeNoteDoc={vaultMeta.activeNoteDoc}
-				activeNoteHandle={vaultMeta.activeNoteHandle}
 				noteCount={vaultMeta.noteCount}
-				migrationProgress={vaultMeta.migrationProgress}
 				graphCache={vaultMeta.graphCache}
-				graphCacheHandle={vaultMeta.graphCacheHandle}
 			>
 				<div className='flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground'>
 					{/* Full-width titlebar with tabs and window controls */}
@@ -427,7 +344,6 @@ function App() {
 								handleNoteRename(oldPath, newPath);
 							}}
 							onQuickSwitcherOpen={() => setOpenDialog('files')}
-							vaultId={vaultMeta.vaultId}
 							activeNoteId={vaultMeta.activeNoteId}
 							audioSamples={recentAudioSamples}
 							isRecording={audioState === 'listening'}
@@ -476,11 +392,8 @@ function App() {
 										noteId={vaultMeta.activeNoteId}
 										vaultPath={vaultPath}
 										onNavigate={(target, _blockId, newTab) => {
-											// Navigate to the target note from wiki link or transclusion
 											if (!vaultPath) return;
-											const normalizedVault = vaultPath
-												.replaceAll('\\', '/')
-												.replace(/\/+$/g, '');
+											const normalizedVault = normalizePath(vaultPath);
 											const targetPath = target.endsWith(
 												'.md',
 											)
@@ -488,7 +401,6 @@ function App() {
 												: target + '.md';
 											const fullPath = `${normalizedVault}/${targetPath}`;
 
-											// Ctrl/Cmd+click opens in new tab
 											if (newTab) {
 												handleOpenInNewTab(fullPath);
 											} else {
@@ -511,12 +423,6 @@ function App() {
 								onDialogOpen={setOpenDialog}
 								isListening={audioState === 'listening'}
 								onToggleListening={toggleListening}
-								onOpenNoteById={onOpenNoteById}
-								onSetActiveNoteTags={onSetActiveNoteTags}
-								onConfigureCrdtWebSocket={
-									onConfigureCrdtWebSocket
-								}
-								onClearCrdtWebSocket={onClearCrdtWebSocket}
 							/>
 
 							{voiceEnabled && (

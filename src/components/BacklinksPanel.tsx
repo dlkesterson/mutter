@@ -2,7 +2,7 @@
  * BacklinksPanel Component
  *
  * Displays all notes that link to the currently open note.
- * Uses the CRDT backlink_index for fast lookups.
+ * Uses the backlink_index for fast lookups.
  */
 
 import { useBacklinks } from '@/hooks/useBacklinks';

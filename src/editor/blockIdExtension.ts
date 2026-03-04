@@ -82,21 +82,6 @@ export function findBlockInView(view: EditorView, blockId: string): BlockInfo | 
 }
 
 /**
- * Scroll to a specific block by ID
- */
-export function scrollToBlock(view: EditorView, blockId: string): boolean {
-  const block = findBlockInView(view, blockId);
-  if (!block) return false;
-
-  const line = view.state.doc.line(block.lineStart + 1); // Convert to 1-indexed
-  view.dispatch({
-    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
-    selection: { anchor: line.from },
-  });
-  return true;
-}
-
-/**
  * Debug flag to show block IDs (for development only)
  * Access via window.__MUTTER_DEBUG__.showBlockIds = true
  */

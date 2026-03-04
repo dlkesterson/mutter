@@ -1,22 +1,17 @@
 /**
  * Split Format Query Executor
  *
- * Executes parsed queries against the split document format:
- * - ManifestDoc: For path/title matching (instant)
- * - GraphCacheDoc: For link queries (instant)
- * - NoteDocs: For tag/date filters (requires loading)
+ * Executes parsed queries against the vault index shims:
+ * - manifest: For path/title matching (instant)
+ * - graphCache: For link queries (instant)
  *
- * Strategy: Progressive filtering to minimize document loads
- * 1. Apply manifest filters (title text search)
- * 2. Apply graph cache filters (linked:, from:, has:links)
- * 3. Only load NoteDocs for filters that require them
+ * Tags are not currently supported.
+ * Date filters (created:/updated:) are not supported without per-note metadata.
  */
 
-import type { ParsedQuery, FilterTerm, TextTerm, FilterOperator } from './parser';
-import type { ManifestDoc } from '@/crdt/manifestDoc';
-import type { GraphCacheDoc } from '@/crdt/graphCacheDoc';
-import type { NoteDocManager } from '@/crdt/noteDocManager';
-import type { NoteDoc } from '@/crdt/noteDoc';
+import type { ParsedQuery, FilterTerm, TextTerm } from './parser';
+import type { GraphEdge } from '@/types/vault';
+import { titleFromPath } from '@/vault/vaultIndex';
 
 /**
  * Lightweight note info for query results
@@ -25,8 +20,6 @@ export interface QueryNoteInfo {
   id: string;
   relPath: string;
   title: string;
-  /** Only populated if NoteDoc was loaded */
-  updatedAt?: number;
 }
 
 export interface SplitQueryResult {
@@ -36,41 +29,6 @@ export interface SplitQueryResult {
   query: ParsedQuery;
   /** Whether any NoteDocs were loaded */
   requiredNoteLoading: boolean;
-}
-
-/**
- * Helper to derive title from file path
- */
-function titleFromPath(relPath: string): string {
-  const basename = relPath.split('/').pop() || relPath;
-  return basename.replace(/\.md$/i, '') || 'Untitled';
-}
-
-/**
- * Check if a filter requires loading NoteDoc
- */
-function filterRequiresNoteDoc(filter: FilterTerm): boolean {
-  // Graph cache handles link-related filters
-  const graphOnlyKeys = ['linked', 'from'];
-  if (graphOnlyKeys.includes(filter.key)) return false;
-
-  // has:links is handled by graph cache
-  if (filter.key === 'has' && filter.value.toLowerCase() === 'links') return false;
-
-  // Everything else (tag, dates, has:blocks/tags) requires NoteDoc
-  return true;
-}
-
-/**
- * Check if query requires loading any NoteDocs
- */
-function queryRequiresNoteDoc(query: ParsedQuery): boolean {
-  for (const term of query.terms) {
-    if (term.type === 'filter' && filterRequiresNoteDoc(term)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -95,10 +53,10 @@ function matchesText(title: string, text: TextTerm): boolean {
 function matchesGraphFilter(
   noteId: string,
   filter: FilterTerm,
-  graphCache: GraphCacheDoc | null,
-  manifest: ManifestDoc
+  graphCache: { edges: Record<string, GraphEdge>; backlink_index: Record<string, string[]> } | null,
+  manifest: { id_to_path: Record<string, string>; path_index: Record<string, string> }
 ): boolean | null {
-  if (!graphCache) return null; // Can't apply, skip
+  if (!graphCache) return null;
 
   switch (filter.key) {
     case 'linked': {
@@ -106,7 +64,6 @@ function matchesGraphFilter(
       const edges = Object.values(graphCache.edges).filter(
         (e) => e.sourceNoteId === noteId
       );
-      // Find target note by title/path
       const targetNotes = Object.entries(manifest.id_to_path).filter(
         ([, path]) => {
           const title = titleFromPath(path);
@@ -123,7 +80,6 @@ function matchesGraphFilter(
     case 'from': {
       // Note is linked FROM the specified source
       const backlinks = graphCache.backlink_index[noteId] ?? [];
-      // Find source note by title/path
       const sourceNotes = Object.entries(manifest.id_to_path).filter(
         ([, path]) => {
           const title = titleFromPath(path);
@@ -139,96 +95,28 @@ function matchesGraphFilter(
 
     case 'has': {
       if (filter.value.toLowerCase() === 'links') {
-        // Has outgoing links
         return Object.values(graphCache.edges).some(
           (e) => e.sourceNoteId === noteId
         );
       }
-      return null; // Other has: values need NoteDoc
+      return null;
     }
 
     default:
-      return null; // Not a graph filter
+      return null;
   }
 }
 
 /**
- * Apply NoteDoc filter
- */
-function matchesNoteDocFilter(noteDoc: NoteDoc, filter: FilterTerm): boolean {
-  switch (filter.key) {
-    case 'tag': {
-      return noteDoc.tags.some(
-        (t) => t.toLowerCase() === filter.value.toLowerCase()
-      );
-    }
-
-    case 'created': {
-      const noteDate = new Date(noteDoc.created_at);
-      const filterDate = new Date(filter.value);
-      return compareDates(noteDate, filterDate, filter.operator);
-    }
-
-    case 'updated': {
-      const noteDate = new Date(noteDoc.updated_at);
-      const filterDate = new Date(filter.value);
-      return compareDates(noteDate, filterDate, filter.operator);
-    }
-
-    case 'has': {
-      switch (filter.value.toLowerCase()) {
-        case 'blocks':
-          return Object.keys(noteDoc.blocks).length > 0;
-        case 'tags':
-          return noteDoc.tags.length > 0;
-        default:
-          return false;
-      }
-    }
-
-    default:
-      return false;
-  }
-}
-
-/**
- * Compare two dates based on operator
- */
-function compareDates(
-  noteDate: Date,
-  filterDate: Date,
-  operator: FilterOperator
-): boolean {
-  const noteTime = noteDate.getTime();
-  const filterTime = filterDate.getTime();
-
-  switch (operator) {
-    case '>':
-      return noteTime > filterTime;
-    case '>=':
-      return noteTime >= filterTime;
-    case '<':
-      return noteTime < filterTime;
-    case '<=':
-      return noteTime <= filterTime;
-    case '=':
-      return noteDate.toDateString() === filterDate.toDateString();
-    default:
-      return false;
-  }
-}
-
-/**
- * Execute a parsed query against the split document format
+ * Execute a parsed query against the vault index shims
  */
 export async function executeSplitQuery(params: {
   query: ParsedQuery;
-  manifest: ManifestDoc;
-  graphCache: GraphCacheDoc | null;
-  noteManager: NoteDocManager | null;
+  manifest: { id_to_path: Record<string, string>; path_index: Record<string, string> };
+  graphCache: { edges: Record<string, GraphEdge>; backlink_index: Record<string, string[]> } | null;
 }): Promise<SplitQueryResult> {
   const startTime = performance.now();
-  const { query, manifest, graphCache, noteManager } = params;
+  const { query, manifest, graphCache } = params;
 
   // Start with all note IDs from manifest
   let candidateIds = Object.keys(manifest.id_to_path);
@@ -253,7 +141,7 @@ export async function executeSplitQuery(params: {
     };
   }
 
-  // Apply text filters (title matching) - no loading needed
+  // Apply text filters (title matching)
   for (const term of query.terms) {
     if (term.type === 'text') {
       candidateIds = candidateIds.filter((id) => {
@@ -264,7 +152,7 @@ export async function executeSplitQuery(params: {
     }
   }
 
-  // Apply graph cache filters - no loading needed
+  // Apply graph cache filters
   const graphFilters = query.terms.filter(
     (t) => t.type === 'filter' && ['linked', 'from'].includes((t as FilterTerm).key)
   ) as FilterTerm[];
@@ -280,50 +168,13 @@ export async function executeSplitQuery(params: {
     for (const filter of [...graphFilters, ...(hasLinksFilter ? [hasLinksFilter as FilterTerm] : [])]) {
       candidateIds = candidateIds.filter((id) => {
         const result = matchesGraphFilter(id, filter, graphCache, manifest);
-        return result !== null ? result : true; // If can't apply, don't filter
+        return result !== null ? result : true;
       });
     }
   }
 
-  // Check if we need to load NoteDocs
-  const needsNoteDoc = queryRequiresNoteDoc(query);
-  let requiredNoteLoading = false;
-
-  if (needsNoteDoc && noteManager) {
-    requiredNoteLoading = true;
-
-    // Load NoteDocs and apply remaining filters
-    const noteDocFilters = query.terms.filter(
-      (t) => t.type === 'filter' && filterRequiresNoteDoc(t as FilterTerm)
-    ) as FilterTerm[];
-
-    const filteredIds: string[] = [];
-
-    for (const id of candidateIds) {
-      try {
-        const noteHandle = await noteManager.loadNote(id);
-        const noteDoc = noteHandle.doc();
-        if (!noteDoc) continue;
-
-        let matches = true;
-        for (const filter of noteDocFilters) {
-          if (!matchesNoteDocFilter(noteDoc, filter)) {
-            matches = false;
-            break;
-          }
-        }
-
-        if (matches) {
-          filteredIds.push(id);
-        }
-      } catch (err) {
-        // Note doesn't exist or failed to load, skip it
-        console.warn(`[SplitExecutor] Failed to load note ${id}:`, err);
-      }
-    }
-
-    candidateIds = filteredIds;
-  }
+  // Skip unsupported filters (tag:, created:, updated:, has:tags, has:blocks)
+  // These require per-note metadata that no longer exists
 
   // Build result
   const notes = candidateIds.map((id) => {
@@ -340,7 +191,7 @@ export async function executeSplitQuery(params: {
     totalCount: notes.length,
     executionTimeMs: performance.now() - startTime,
     query,
-    requiredNoteLoading,
+    requiredNoteLoading: false,
   };
 }
 
@@ -349,18 +200,18 @@ export async function executeSplitQuery(params: {
  */
 export function getSplitQuerySuggestions(
   partialQuery: string,
-  manifest: ManifestDoc | null
+  manifest: { id_to_path: Record<string, string>; path_index: Record<string, string> } | null
 ): string[] {
   const suggestions: string[] = [];
 
   if (!manifest) return suggestions;
 
   if (!partialQuery.trim()) {
-    return ['tag:', 'linked:', 'created:>', 'has:'];
+    return ['linked:', 'from:', 'has:links'];
   }
 
   if (partialQuery.trim().endsWith('has:')) {
-    return ['has:blocks', 'has:links', 'has:tags'];
+    return ['has:links'];
   }
 
   return suggestions;

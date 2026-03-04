@@ -7,10 +7,6 @@ interface OmniboxProps {
 	onDialogOpen: (type: 'files' | 'voice-log' | 'settings') => void;
 	isListening: boolean;
 	onToggleListening: () => void;
-	onOpenNoteById?: () => void;
-	onSetActiveNoteTags?: () => void;
-	onConfigureCrdtWebSocket?: () => void;
-	onClearCrdtWebSocket?: () => void;
 }
 
 const commands = [
@@ -26,18 +22,10 @@ const commands = [
 	},
 ];
 
-// Note: Advanced commands (open note by ID, set note tags, CRDT config)
-// have been removed from the command palette to avoid exposing internal concepts.
-// These features are accessible via Settings or developer tools.
-
 export function Omnibox({
 	onDialogOpen,
 	isListening,
 	onToggleListening,
-	onOpenNoteById,
-	onSetActiveNoteTags,
-	onConfigureCrdtWebSocket,
-	onClearCrdtWebSocket,
 }: OmniboxProps) {
 	const [open, setOpen] = useState(false);
 	const [searchValue, setSearchValue] = useState('');
@@ -64,14 +52,6 @@ export function Omnibox({
 			onDialogOpen('settings');
 		} else if (command === 'open file') {
 			onDialogOpen('files');
-		} else if (command === 'open note by id') {
-			onOpenNoteById?.();
-		} else if (command === 'set note tags') {
-			onSetActiveNoteTags?.();
-		} else if (command === 'configure crdt websocket') {
-			onConfigureCrdtWebSocket?.();
-		} else if (command === 'clear crdt websocket') {
-			onClearCrdtWebSocket?.();
 		}
 		setOpen(false);
 		setSearchValue('');
@@ -79,7 +59,6 @@ export function Omnibox({
 
 	const startVoiceInput = () => {
 		onToggleListening();
-		// The actual listening logic is handled by the parent via StreamingTranscription
 	};
 
 	const filteredCommands = searchValue

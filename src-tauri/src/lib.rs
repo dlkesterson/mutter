@@ -1,11 +1,8 @@
 mod audio;
 mod commands;
 mod config;
-mod device;
 mod file_watcher;
 mod ml;
-mod vault_crdt_fs;
-mod vault_state;
 
 use commands::*;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -113,15 +110,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            device::get_mutter_device_id_cmd,
-            vault_state::get_or_create_vault_state_cmd,
-            vault_state::set_vault_metadata_doc_url_cmd,
-            vault_state::set_manifest_doc_url_cmd,
-            vault_crdt_fs::write_vault_crdt_snapshot_cmd,
-            vault_crdt_fs::list_vault_crdt_snapshots_cmd,
-            vault_crdt_fs::read_vault_crdt_snapshot_cmd,
-            vault_crdt_fs::vault_crdt_snapshot_relative_path_cmd,
-            vault_crdt_fs::prune_vault_crdt_snapshots_cmd,
             config::get_settings_cmd,
             config::save_settings_cmd,
             config::get_credentials_cmd,

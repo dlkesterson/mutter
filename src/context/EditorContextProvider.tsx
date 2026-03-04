@@ -23,7 +23,6 @@ interface EditorContextValue {
   updateCursor: (
     cursor: CursorState,
     location: CursorLocation,
-    blockId: string | null
   ) => void;
 
   // Document metadata updates
@@ -44,12 +43,11 @@ export function EditorContextProvider({ children }: EditorContextProviderProps) 
   const [context, setContext] = useState<EditorContext>(DEFAULT_EDITOR_CONTEXT);
 
   const updateCursor = useCallback(
-    (cursor: CursorState, location: CursorLocation, blockId: string | null) => {
+    (cursor: CursorState, location: CursorLocation) => {
       setContext((prev) => ({
         ...prev,
         cursor,
         cursorLocation: location,
-        currentBlockId: blockId,
       }));
     },
     []

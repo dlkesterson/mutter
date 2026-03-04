@@ -2,7 +2,7 @@
  * useGraphStats Hook
  *
  * Provides graph statistics for a note or the entire vault.
- * Uses ManifestDoc for note metadata and GraphCacheDoc for edge data.
+ * Uses the vault index manifest for note metadata and graph cache for edge data.
  */
 
 import { useMemo } from 'react';
