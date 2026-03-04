@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState};
 
 /// Model manager for downloading and loading ML models
 pub struct ModelManager {
@@ -140,6 +140,9 @@ impl ModelManager {
 /// - GPU acceleration via CUDA
 pub struct WhisperEngine {
     context: Option<WhisperContext>,
+    /// Pre-allocated inference state — reused across transcriptions to avoid
+    /// re-allocating ~500MB of compute buffers on every call.
+    state: Option<WhisperState>,
     model_path: Option<PathBuf>,
 }
 
@@ -148,6 +151,7 @@ impl WhisperEngine {
         log::info!("Creating new WhisperEngine (whisper-rs/whisper.cpp)");
         Self {
             context: None,
+            state: None,
             model_path: None,
         }
     }
@@ -164,18 +168,22 @@ impl WhisperEngine {
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid model path (non-UTF8)"))?;
 
-        // Create context parameters
-        // GPU support is automatically enabled when whisper-rs is compiled with the "cuda" feature
         let params = WhisperContextParameters::default();
 
-        // Note: CUDA acceleration is enabled via whisper-rs feature flag in Cargo.toml
-        // If GPU is available, whisper.cpp will use it automatically
         log::info!("Creating Whisper context (GPU acceleration enabled if CUDA available)");
 
         let ctx = WhisperContext::new_with_params(path_str, params)
             .map_err(|e| anyhow::anyhow!("Failed to create Whisper context: {}", e))?;
 
+        // Pre-allocate inference state once (this is the expensive ~500MB allocation)
+        log::info!("Pre-allocating Whisper inference state...");
+        let state = ctx
+            .create_state()
+            .map_err(|e| anyhow::anyhow!("Failed to create Whisper state: {}", e))?;
+        log::info!("Whisper state pre-allocated successfully");
+
         self.context = Some(ctx);
+        self.state = Some(state);
         self.model_path = Some(model_path.clone());
 
         log::info!("Whisper model loaded successfully from {:?}", model_path);
@@ -190,13 +198,13 @@ impl WhisperEngine {
     ///
     /// whisper.cpp handles long audio natively via timestamp tokens,
     /// so there's no need for manual chunking or merging.
-    pub fn transcribe(&self, audio: &[f32]) -> Result<String> {
+    /// Reuses the pre-allocated state to avoid ~500MB allocation per call.
+    pub fn transcribe(&mut self, audio: &[f32]) -> Result<String> {
         let start_time = std::time::Instant::now();
 
-        let ctx = self
-            .context
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Whisper model not loaded"))?;
+        if self.state.is_none() {
+            return Err(anyhow::anyhow!("Whisper model not loaded"));
+        }
 
         // Calculate audio stats for logging
         let max_amp = audio.iter().map(|x| x.abs()).fold(0.0f32, |a, b| a.max(b));
@@ -218,13 +226,18 @@ impl WhisperEngine {
             return Ok(String::new());
         }
 
-        // Create a new state for this transcription
-        let mut state = ctx
-            .create_state()
-            .map_err(|e| anyhow::anyhow!("Failed to create Whisper state: {}", e))?;
+        let state = self.state.as_mut().unwrap();
 
         // Configure transcription parameters
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+
+        // Use half the available cores for inference (leaves headroom for UI/audio threads)
+        let available = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        let n_threads = std::cmp::max(1, (available / 2) as i32);
+        params.set_n_threads(n_threads);
+        log::info!("Using {} threads for Whisper inference", n_threads);
 
         // Set language to English (can be made configurable later)
         params.set_language(Some("en"));

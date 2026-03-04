@@ -4,6 +4,13 @@ Most markdown editors expect your hands on the keyboard 100% of the time. **Mutt
 
 It's built with a Rust backend (Tauri v2) to keep things fast and runs Whisper models locally via whisper.cpp, so your voice data never leaves your machine.
 
+<!-- Replace these src URLs with GitHub asset URLs after uploading via a GitHub issue -->
+<p align="center">
+  <video src="demo-assets/videos/demo-editing.webm" width="720" autoplay loop muted playsinline>
+    Your browser does not support video. <a href="demo-assets/videos/demo-editing.webm">Watch the editing demo</a>.
+  </video>
+</p>
+
 ---
 
 ## Why Mutter?
@@ -15,6 +22,12 @@ I built this because I found myself constantly breaking my flow to toggle format
 * **Plain Markdown:** Your notes are plain `.md` files in a folder (vault). No proprietary format, no lock-in.
 
 ## Features
+
+<p align="center">
+  <video src="demo-assets/videos/demo-voice.webm" width="720" autoplay loop muted playsinline>
+    Your browser does not support video. <a href="demo-assets/videos/demo-voice.webm">Watch the voice dictation demo</a>.
+  </video>
+</p>
 
 * **Live Preview Editor:** CodeMirror 6 with a distraction-free mode — markdown syntax (`**`, `#`, etc.) fades away when you aren't editing that line.
 * **Voice Dictation:** Speak and your words are transcribed locally via Whisper, then inserted at the cursor. See the voice log for transcription history.

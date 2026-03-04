@@ -7,13 +7,13 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { FileText, Type, Clock, Mic, MicOff, Cloud, CloudOff, AlertCircle } from 'lucide-react';
+import { FileText, Type, Clock, Mic, MicOff } from 'lucide-react';
 
 interface StatusBarProps {
     content: string;
     filePath: string | null;
     isRecording?: boolean;
-    syncStatus?: 'synced' | 'syncing' | 'offline' | 'error';
+
     isDirty?: boolean;
     className?: string;
 }
@@ -51,7 +51,7 @@ export function StatusBar({
     content,
     filePath,
     isRecording = false,
-    syncStatus = 'synced',
+
     isDirty = false,
     className,
 }: StatusBarProps) {
@@ -59,31 +59,6 @@ export function StatusBar({
 
     const fileName = filePath ? filePath.split('/').pop() : null;
 
-    const getSyncIcon = () => {
-        switch (syncStatus) {
-            case 'synced':
-                return <Cloud size={12} className="text-green-500" />;
-            case 'syncing':
-                return <Cloud size={12} className="text-blue-500 animate-pulse" />;
-            case 'offline':
-                return <CloudOff size={12} className="text-muted-foreground" />;
-            case 'error':
-                return <AlertCircle size={12} className="text-red-500" />;
-        }
-    };
-
-    const getSyncLabel = () => {
-        switch (syncStatus) {
-            case 'synced':
-                return 'Synced';
-            case 'syncing':
-                return 'Syncing...';
-            case 'offline':
-                return 'Offline';
-            case 'error':
-                return 'Sync error';
-        }
-    };
 
     return (
         <div
@@ -145,14 +120,6 @@ export function StatusBar({
                     )}
                 </div>
 
-                {/* File sync status */}
-                <div
-                    className="flex items-center gap-1.5"
-                    title={getSyncLabel()}
-                >
-                    {getSyncIcon()}
-                    <span>{getSyncLabel()}</span>
-                </div>
             </div>
         </div>
     );

@@ -39,8 +39,8 @@ walkdir = "2.5.0"
 hound = "3.5"
 ringbuf = "0.3"
 
-# Whisper speech-to-text via whisper.cpp (CPU-only)
-whisper-rs = "0.14"
+# Whisper speech-to-text via whisper.cpp (CUDA GPU acceleration)
+whisper-rs = { version = "0.14", features = ["cuda"] }
 
 # File system watcher
 notify = "6.1"

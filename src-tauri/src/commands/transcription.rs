@@ -1,6 +1,7 @@
-use super::AppState;
+use super::{AppState, StreamingResult};
 use crate::audio::VadEvent;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::Ordering;
 use tauri::{Emitter, Manager, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -87,10 +88,14 @@ pub async fn transcribe_audio(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<TranscriptionResult, String> {
-    log::info!("Transcribing audio buffer: {} samples", audio_buffer.len());
+    let sample_count = audio_buffer.len();
+    log::info!("Transcribing audio buffer: {} samples ({:.1}s)",
+        sample_count, sample_count as f32 / 16000.0);
+
+    // Signal streaming transcription to not start new work
+    state.final_pending.store(true, Ordering::SeqCst);
 
     // --- START DEBUG BLOCK ---
-    // Save to "debug_audio.wav" in the app data folder to verify quality
     if let Ok(app_dir) = app.path().app_data_dir() {
         let debug_path = app_dir.join("debug_recording.wav");
         let spec = hound::WavSpec {
@@ -111,37 +116,70 @@ pub async fn transcribe_audio(
     }
     // --- END DEBUG BLOCK ---
 
-    let start = std::time::Instant::now();
+    let wait_start = std::time::Instant::now();
 
     log::info!("Acquiring Whisper engine lock...");
-    let engine = state
+    let mut engine = state
         .whisper_engine
         .lock()
         .map_err(|_| "Whisper engine lock poisoned".to_string())?;
-    log::info!("Lock acquired. Model loaded: {}", engine.is_loaded());
+
+    let lock_wait_ms = wait_start.elapsed().as_millis();
+    if lock_wait_ms > 100 {
+        log::info!("Lock acquired after {}ms wait (streaming was running)", lock_wait_ms);
+    }
 
     if !engine.is_loaded() {
-        log::error!("❌ Whisper model is NOT loaded! User needs to select a model in Settings.");
+        state.final_pending.store(false, Ordering::SeqCst);
+        log::error!("❌ Whisper model is NOT loaded!");
         return Err("Whisper model not loaded. Please select a model in Settings → Whisper Model.".to_string());
     }
 
-    // whisper-rs/whisper.cpp handles long audio natively via timestamp tokens!
-    // No need for manual chunking or merging.
+    // Check if streaming already produced a usable result for similar audio.
+    // If the lock wait was significant, streaming just finished transcribing
+    // essentially the same audio — no need to re-run inference.
+    if lock_wait_ms > 1000 {
+        if let Ok(cached) = state.last_streaming_result.lock() {
+            if let Some(ref result) = *cached {
+                let age_ms = result.timestamp.elapsed().as_millis();
+                // Accept if result is recent (< 60s) and covers most of our audio
+                // (streaming sends all accumulated audio, so sample counts should be close)
+                let coverage = result.sample_count as f64 / sample_count.max(1) as f64;
+                if age_ms < 60_000 && coverage > 0.5 && !result.text.is_empty() {
+                    log::info!(
+                        "✅ Reusing streaming result (age: {}ms, coverage: {:.0}%, waited {}ms): '{}'",
+                        age_ms, coverage * 100.0, lock_wait_ms,
+                        if result.text.len() > 100 { format!("{}...", &result.text[..100]) } else { result.text.clone() }
+                    );
+                    let text = result.text.clone();
+                    drop(cached);
+                    drop(engine);
+                    state.final_pending.store(false, Ordering::SeqCst);
+                    return Ok(TranscriptionResult { text, duration_ms: lock_wait_ms as u64 });
+                }
+            }
+        }
+    }
+
+    // Run full transcription
+    let start = std::time::Instant::now();
     log::info!("Starting Whisper transcription of {} samples ({:.1}s)...",
-        audio_buffer.len(),
-        audio_buffer.len() as f32 / 16000.0);
+        sample_count, sample_count as f32 / 16000.0);
 
     let text = engine
         .transcribe(&audio_buffer)
         .map_err(|e| {
+            state.final_pending.store(false, Ordering::SeqCst);
             log::error!("Transcription error: {}", e);
             format!("Transcription failed: {}", e)
         })?;
 
     let duration_ms = start.elapsed().as_millis() as u64;
+    drop(engine);
+    state.final_pending.store(false, Ordering::SeqCst);
 
-    log::info!("✅ Transcription complete in {}ms: '{}'",
-        duration_ms,
+    log::info!("✅ Transcription complete in {}ms (waited {}ms for lock): '{}'",
+        duration_ms, lock_wait_ms,
         if text.len() > 100 { format!("{}...", &text[..100]) } else { text.clone() });
 
     Ok(TranscriptionResult { text, duration_ms })
@@ -169,6 +207,15 @@ pub async fn transcribe_streaming(
         return Ok(());
     }
 
+    // Skip if final transcription is waiting — don't compete for the lock
+    {
+        let state: tauri::State<'_, AppState> = app.state();
+        if state.final_pending.load(Ordering::SeqCst) {
+            log::info!("[Streaming] Skipping - final transcription is pending");
+            return Ok(());
+        }
+    }
+
     // Emit a "processing" event immediately
     let _ = app.emit("transcription-processing", ());
 
@@ -179,8 +226,14 @@ pub async fn transcribe_streaming(
     tokio::task::spawn_blocking(move || {
         let state: tauri::State<'_, AppState> = app_clone.state();
 
+        // Bail if final transcription started while we were queued
+        if state.final_pending.load(Ordering::SeqCst) {
+            log::info!("[Streaming] Aborting - final transcription is pending");
+            return;
+        }
+
         // Try to acquire the lock (non-blocking check first)
-        let engine: std::sync::MutexGuard<'_, crate::ml::WhisperEngine> = match state.whisper_engine.try_lock() {
+        let mut engine: std::sync::MutexGuard<'_, crate::ml::WhisperEngine> = match state.whisper_engine.try_lock() {
             Ok(guard) => guard,
             Err(_) => {
                 log::debug!("[Streaming] Whisper engine busy, skipping this chunk");
@@ -198,6 +251,16 @@ pub async fn transcribe_streaming(
             Ok(text) => {
                 let text: String = text;
                 let duration_ms = start.elapsed().as_millis();
+
+                // Store result for potential reuse by final transcription
+                if let Ok(mut cached) = state.last_streaming_result.lock() {
+                    *cached = Some(StreamingResult {
+                        text: text.clone(),
+                        sample_count,
+                        timestamp: std::time::Instant::now(),
+                    });
+                }
+
                 if !text.is_empty() {
                     log::info!(
                         "[Streaming] ✓ Partial transcription in {}ms: '{}'",

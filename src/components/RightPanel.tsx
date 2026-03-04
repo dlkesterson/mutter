@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
 	List,
 	Link,
-	Search,
 	GitBranch,
 	HelpCircle,
 	Sparkles,
@@ -17,19 +16,17 @@ import {
 import { emitMutterEvent } from '@/events';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
-export type RightPanelTab = 'outline' | 'backlinks' | 'search' | 'graph';
+export type RightPanelTab = 'outline' | 'backlinks' | 'graph';
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
 	outline: 'Outline',
 	backlinks: 'Backlinks',
-	search: 'Search',
 	graph: 'Graph',
 };
 
 const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 	{ id: 'outline', icon: <List size={20} />, label: 'Outline' },
 	{ id: 'backlinks', icon: <Link size={20} />, label: 'Backlinks' },
-	{ id: 'search', icon: <Search size={20} />, label: 'Search' },
 	{ id: 'graph', icon: <GitBranch size={20} />, label: 'Graph' },
 ];
 
@@ -57,7 +54,7 @@ export function RightPanel({
 	activeTab,
 	onTabChange,
 	children,
-	availableTabs = ['outline', 'backlinks', 'search', 'graph'],
+	availableTabs = ['outline', 'backlinks', 'graph'],
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);

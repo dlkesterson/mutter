@@ -36,7 +36,7 @@ export function useDialogManager() {
 			case 'ai-query':
 			case 'query':
 			case 'search':
-				setRightPanel('search');
+				// Search panel removed from right panel; no-op
 				break;
 			case 'backlinks':
 				setRightPanel('backlinks');

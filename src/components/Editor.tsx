@@ -63,7 +63,7 @@ interface PartialTranscription {
 
 export default function Editor({
 	filePath,
-	audioState,
+	audioState: _audioState,
 	onContentSaved,
 	onContentChange,
 	onDirtyChange,
@@ -622,8 +622,10 @@ export default function Editor({
 
 		// Small delay to allow fade-out animation
 		setTimeout(() => {
+			console.time('[Editor] load file');
 			readTextFile(filePath)
 				.then((text) => {
+					console.timeEnd('[Editor] load file');
 					setContent(text);
 					setSavedContent(text);
 					if (viewRef.current) {
@@ -638,7 +640,11 @@ export default function Editor({
 					// Fade back in after content loads
 					setTimeout(() => setIsLoadingFile(false), 50);
 				})
-				.catch(console.error);
+				.catch((err) => {
+					console.error('[Editor] Failed to load file:', err);
+					console.timeEnd('[Editor] load file');
+					setIsLoadingFile(false);
+				});
 		}, 100);
 	}, [filePath]);
 
@@ -686,6 +692,12 @@ export default function Editor({
 
 	useEffect(() => {
 		if (!viewReady || !viewRef.current) return;
+		// Don't compute handle positions while editor is fading out for a file load —
+		// the scroller has zero/collapsed bounds during the opacity-0 transition.
+		if (isLoadingFile) {
+			setContentRect(null);
+			return;
+		}
 
 		const updateContentRect = () => {
 			// Use scrollDOM which contains both gutters and content
@@ -694,6 +706,8 @@ export default function Editor({
 			if (cmScroller && container) {
 				const scrollerBounds = cmScroller.getBoundingClientRect();
 				const containerBounds = container.getBoundingClientRect();
+				// Skip if scroller hasn't laid out yet (zero width during transitions)
+				if (scrollerBounds.width < 1 || containerBounds.width < 1) return;
 				// Ensure minimum margin of 4px so handles are always visible/draggable
 				setContentRect({
 					left: Math.max(4, scrollerBounds.left - containerBounds.left),
@@ -702,22 +716,28 @@ export default function Editor({
 			}
 		};
 
-		// Update on resize
-		updateContentRect();
+		// Small delay to let CodeMirror finish layout after file load
+		const timer = setTimeout(updateContentRect, 50);
 		const observer = new ResizeObserver(updateContentRect);
 		observer.observe(editorRef.current!);
+		// Also observe the CodeMirror scroller — its layout changes on document swap
+		// even when the outer container stays the same size
+		if (viewRef.current.scrollDOM) {
+			observer.observe(viewRef.current.scrollDOM);
+		}
 
 		return () => {
+			clearTimeout(timer);
 			observer.disconnect();
 		};
-	}, [viewReady, contentMaxWidth]);
+	}, [viewReady, contentMaxWidth, isLoadingFile]);
 
 	return (
 		<div className='flex-1 flex flex-col overflow-hidden bg-background relative w-full'>
 			<div
 				ref={editorRef}
 				className={`flex-1 overflow-auto transition-opacity duration-200 w-full ${
-					audioState === 'processing' || isLoadingFile ? 'opacity-0' : 'opacity-100'
+					isLoadingFile ? 'opacity-0' : 'opacity-100'
 				}`}
 			/>
 

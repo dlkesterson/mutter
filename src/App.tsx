@@ -27,7 +27,7 @@ import { TabBar } from './components/TabBar';
 import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 import { BacklinksPanel } from './components/BacklinksPanel';
-import { SearchPanel } from './components/SearchPanel';
+
 import { OutlinePanel } from './components/OutlinePanel';
 import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
@@ -394,12 +394,32 @@ function App() {
 										onNavigate={(target, _blockId, newTab) => {
 											if (!vaultPath) return;
 											const normalizedVault = normalizePath(vaultPath);
-											const targetPath = target.endsWith(
-												'.md',
-											)
-												? target
-												: target + '.md';
-											const fullPath = `${normalizedVault}/${targetPath}`;
+											const m = vaultMeta.manifest;
+
+											// Resolve via vault index (handles subdirectories, case-insensitive)
+											let relPath: string | null = null;
+											if (m) {
+												const withMd = target.endsWith('.md') ? target : `${target}.md`;
+												if (m.path_index[withMd]) {
+													relPath = withMd;
+												} else {
+													const lowerTarget = target.toLowerCase().replace(/\.md$/i, '');
+													for (const path of Object.keys(m.path_index)) {
+														const filename = path.split('/').pop()?.replace(/\.md$/i, '') ?? '';
+														if (filename.toLowerCase() === lowerTarget) {
+															relPath = path;
+															break;
+														}
+													}
+												}
+											}
+
+											// Fallback to flat path if vault index lookup fails
+											if (!relPath) {
+												relPath = target.endsWith('.md') ? target : `${target}.md`;
+											}
+
+											const fullPath = `${normalizedVault}/${relPath}`;
 
 											if (newTab) {
 												handleOpenInNewTab(fullPath);
@@ -455,11 +475,6 @@ function App() {
 							{rightPanel === 'backlinks' && (
 								<BacklinksPanel
 									noteId={vaultMeta.activeNoteId}
-									onNavigate={navigateToRelPath}
-								/>
-							)}
-							{rightPanel === 'search' && (
-								<SearchPanel
 									onNavigate={navigateToRelPath}
 								/>
 							)}
