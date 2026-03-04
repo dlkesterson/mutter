@@ -22,7 +22,8 @@ I built this because I found myself constantly breaking my flow to toggle format
 * **Graph View:** Visualize links between your notes with an interactive force-directed graph.
 * **Transclusions:** Embed content from other notes with `![[Note]]` or `![[Note#blockId]]` syntax.
 * **Stream Mode (Experimental):** Optionally post-process transcriptions with Claude, OpenAI, or Ollama to clean up filler words and add structure. API keys stored locally, never in the repo.
-* **Wiki Links:** `[[Note]]` linking between notes with backlink tracking.
+* **Wiki Links & Backlinks:** `[[Note]]` linking between notes with a backlinks panel showing what links to the current note.
+* **Search:** Query your vault by title, links (`linked:note`), or properties (`has:links`).
 
 ---
 
@@ -57,7 +58,7 @@ On first run, go to **Settings → Whisper Model Selector** and download a model
 * **Frontend:** React 19, TypeScript, Vite 7, Tailwind CSS v4
 * **Editor:** CodeMirror 6 with custom live preview, block IDs, and transclusion extensions
 * **UI Components:** shadcn/ui
-* **CRDT (Experimental):** Automerge 3.2.1 for vault metadata
+* **Graph:** react-force-graph-2d for note relationship visualization
 
 ## License
 

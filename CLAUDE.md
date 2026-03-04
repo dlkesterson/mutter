@@ -82,7 +82,6 @@ pnpm lint
 - CodeMirror 6 (markdown editor with live preview)
 - Tailwind CSS v4 + shadcn/ui components
 - React Resizable Panels (flexible layout)
-- Automerge 3.2.1 (CRDTs for vault metadata)
 - Web Audio API (voice capture)
 
 **Backend (src-tauri/):**
@@ -107,8 +106,8 @@ pnpm lint
 - `components/ui/` - shadcn/ui component library
 - `components/graph/` - Graph visualization (react-force-graph-2d)
 - `editor/` - CodeMirror extensions (livePreview.ts, theme.ts, commands.ts, autoPairs.ts, transclusionExtension.ts, blockIdExtension.ts)
-- `hooks/` - Custom React hooks (useAudioRecorder.ts, useVaultMetadataCrdt.ts, useGraphData.ts)
-- `graph/` - Link parsing and graph building utilities
+- `hooks/` - Custom React hooks (useAudioRecorder.ts, useVaultIndex.ts, useGraphData.ts)
+- `vault/` - In-memory vault index, link parser, and path utilities
 - `context/` - React contexts (VaultMetadataContext, EditorContextProvider)
 - `services/` - LLM integration (llm-service.ts supports Claude/OpenAI/Ollama), text cleanup with annotation parsing
 
@@ -167,11 +166,11 @@ AI-assisted post-processing of transcriptions. After Whisper completes, optional
 The graph view uses `react-force-graph-2d` to visualize note relationships:
 
 ```
-VaultMetadataDoc (CRDT) → useGraphData hook → GraphView component
+VaultIndex → useGraphData hook → GraphView component
 ```
 
 **Key files:**
-- `src/hooks/useGraphData.ts` - Transforms CRDT notes/edges into graph format (uses `useMemo` for performance)
+- `src/hooks/useGraphData.ts` - Transforms vault index data into graph format (uses `useMemo` for performance)
 - `src/components/graph/GraphView.tsx` - Force-graph wrapper with `React.memo` to prevent resize jank
 - `src/components/graph/GraphPanel.tsx` - Right sidebar panel with debounced resize handling
 - `src/components/graph/graphConfig.ts` - Colors, forces, and performance thresholds
@@ -222,21 +221,6 @@ See `docs/DESIGN_SYSTEM.md` for full details. Key rules:
 - **Dark mode first** - #121212 background
 - **Border-only buttons** by default (filled only for primary actions)
 
-### Automerge Version Pinning
-
-**Important:** Automerge is pinned to 3.2.1 via `pnpm.overrides` in `package.json`:
-
-```json
-"pnpm": {
-  "overrides": {
-    "@automerge/automerge": "3.2.1",
-    "@lezer/common": "1.5.0"
-  }
-}
-```
-
-This ensures CRDT compatibility and prevents CodeMirror plugin crashes from version mismatches.
-
 ### Whisper Model Variants (GGML Format)
 
 Models are downloaded from `ggerganov/whisper.cpp` on HuggingFace in GGML format:
@@ -260,7 +244,7 @@ Models are downloaded from `ggerganov/whisper.cpp` on HuggingFace in GGML format
 
 ### State Management
 
-No global state library. Uses React hooks + props drilling + LocalStorage (`utils/storage.ts`). Automerge for vault metadata (experimental).
+No global state library. Uses React hooks + props drilling + LocalStorage (`utils/storage.ts`). Vault metadata is an in-memory index (`src/vault/vaultIndex.ts`) rebuilt from the filesystem each session.
 
 ### Path Aliases
 
@@ -317,10 +301,6 @@ pnpm tauri:build
 
 **Critical**: `Cargo.toml` has `[profile.dev.package."*"] opt-level = 3` to optimize Whisper inference in debug builds.
 
-### CRDT Sync (Experimental)
-
-Vault metadata uses Automerge 3.2.1. See `docs/CRDT-CONVENTIONS.md` for sync strategy.
-
 ### File Naming Conventions
 
 - **Components**: `PascalCase.tsx` (e.g., `Editor.tsx`)
@@ -347,7 +327,6 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ### Hash-Based Routing
 
 - `#/quick-capture` - Quick capture mode (minimal UI)
-- `#/crdt?doc=<url>` - CRDT spike interface
 
 ## Related Documentation
 
@@ -355,23 +334,21 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 - `docs/USER-GUIDE.md` - Comprehensive user guide (voice dictation, query DSL, shortcuts)
 - `docs/CONFIG_DESIGN.md` - Configuration architecture and XDG standards
 - `docs/DESIGN_SYSTEM.md` - Design principles, typography, spacing, colors
-- `docs/CRDT-CONVENTIONS.md` - Automerge conventions and sync strategy
 - `.github/workflows/ci.yml` - CI checks (lint, test, build, cargo check)
 - `.github/workflows/release.yml` - Release builds via tauri-apps/tauri-action
 
 ## Common Pitfalls
 
-1. **Automerge version mismatch**: Always use 3.2.1 (pinned in pnpm.overrides)
-2. **@lezer/common version mismatch**: Pinned to 1.5.0 to prevent CodeMirror `'tags3'` or `'all'` crashes
-3. **Model not downloaded**: Download model in Settings before using voice
-4. **VAD too sensitive**: Adjust silence threshold if commands cut off early
-5. **Selection required**: Some commands (bold, italic) require text selection first
-6. **Microphone permissions**: Browser/OS must grant microphone access
-7. **File watcher flooding**: The watcher deliberately ignores content modifications to prevent constant reloads while editing
-8. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
-10. **Tab state loss**: Tab state is ephemeral; closing a tab loses unsaved changes unless auto-saved
-11. **Design system violations**: Use 8px spacing multiples; arbitrary spacing breaks the grid
-12. **Auto-save loops**: Editor auto-save effect must check `content !== savedContent` to prevent CRDT spam
+1. **@lezer/common version mismatch**: Pinned to 1.5.0 to prevent CodeMirror `'tags3'` or `'all'` crashes
+2. **Model not downloaded**: Download model in Settings before using voice
+3. **VAD too sensitive**: Adjust silence threshold if commands cut off early
+4. **Selection required**: Some commands (bold, italic) require text selection first
+5. **Microphone permissions**: Browser/OS must grant microphone access
+6. **File watcher flooding**: The watcher deliberately ignores content modifications to prevent constant reloads while editing
+7. **Stream Mode API keys**: Store in `~/.config/mutter/credentials.json`, NOT in settings.json (which may sync)
+8. **Tab state loss**: Tab state is ephemeral; closing a tab loses unsaved changes unless auto-saved
+9. **Design system violations**: Use 8px spacing multiples; arbitrary spacing breaks the grid
+10. **Auto-save loops**: Editor auto-save effect must check `content !== savedContent` to prevent save spam
 
 
 ## Debugging
@@ -382,5 +359,5 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 
 **Voice dictation**: Open Voice Log dialog (right sidebar) to see transcription history.
 
-**CRDT state**: Check `<vault-path>/.mutter/state.json` and `.mutter/crdt/*/snapshots/`
+**Vault index**: The in-memory index is rebuilt from files each session — no persistent state to debug.
 
