@@ -7,7 +7,7 @@
  */
 
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
-import { parseLinks } from '@/graph/linkParser';
+import { parseLinks } from './linkParser';
 import type { GraphEdge, NoteEntry } from '@/types/vault';
 
 /**

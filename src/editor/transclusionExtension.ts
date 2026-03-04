@@ -22,7 +22,7 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 import { StateField, StateEffect, Range } from '@codemirror/state';
-import { parseLinks, ParsedLink } from '@/graph/linkParser';
+import { parseLinks, ParsedLink } from '@/vault/linkParser';
 
 /**
  * Render basic markdown to DOM elements (safe, no innerHTML)
