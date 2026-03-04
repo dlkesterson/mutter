@@ -10,9 +10,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Download, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useToast } from '@/hooks/use-toast';
+import { isModelDownloaded, loadWhisperModel, downloadWhisperModel } from '@/services/whisper';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
 
 interface WhisperModel {
@@ -96,12 +96,7 @@ export function WhisperModelSelector({
 
 			for (const model of WHISPER_MODELS) {
 				try {
-					const isDownloaded = await invoke<boolean>(
-						'is_model_downloaded',
-						{
-							modelName: model.id,
-						},
-					);
+					const isDownloaded = await isModelDownloaded(model.id);
 					if (isDownloaded) {
 						downloaded.add(model.id);
 
@@ -109,9 +104,7 @@ export function WhisperModelSelector({
 						// But only if the dialog is NOT open (meaning app startup)
 						if (savedModelId === model.id && !open) {
 							try {
-								await invoke('load_whisper_model', {
-									modelName: model.id,
-								});
+								await loadWhisperModel(model.id);
 								console.log(
 									`Auto-loaded saved model: ${model.id}`,
 								);
@@ -156,9 +149,7 @@ export function WhisperModelSelector({
 			});
 
 			// Use the new GGML download command
-			await invoke('download_whisper_model', {
-				modelName: model.id,
-			});
+			await downloadWhisperModel(model.id);
 
 			setDownloadedModels((prev) => new Set(prev).add(model.id));
 
@@ -192,9 +183,7 @@ export function WhisperModelSelector({
 				description: `Loading ${model.name}...`,
 			});
 
-			await invoke('load_whisper_model', {
-				modelName: model.id,
-			});
+			await loadWhisperModel(model.id);
 
 			toast({
 				title: 'Model Loaded',

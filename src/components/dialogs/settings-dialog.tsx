@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { useTheme } from '@/components/ThemeProvider';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
+import { emitMutterEvent } from '@/events';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
@@ -129,10 +130,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 								onValueChange={async (val) => {
 									setFontSize(val);
 									await setStorageItem('editor_font_size', val);
-									// Notify editor to update font size
-									if ((window as any).updateEditorFontSize) {
-										(window as any).updateEditorFontSize(val);
-									}
+									emitMutterEvent('mutter:update-editor-font-size', { size: val });
 								}}
 							>
 								<SelectTrigger
@@ -161,9 +159,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 									type='checkbox'
 									defaultChecked
 									onChange={(e) => {
-										if ((window as any).toggleMinimap) {
-											(window as any).toggleMinimap(e.target.checked);
-										}
+										emitMutterEvent('mutter:toggle-minimap', { enabled: e.target.checked });
 									}}
 									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
 								/>
@@ -219,7 +215,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 										setVoiceEnabled(enabled);
 										setStorageItem('voice_enabled', enabled);
 										// Notify App.tsx to update voice UI visibility
-										window.dispatchEvent(new CustomEvent('mutter:voice-settings-changed'));
+										emitMutterEvent('mutter:voice-settings-changed');
 									}}
 									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
 								/>

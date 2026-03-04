@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { emitMutterEvent } from '../events';
 
 interface NavigationHistoryOptions {
     maxHistorySize?: number;
@@ -121,10 +122,7 @@ export function useNavigationHistory(options: NavigationHistoryOptions = {}) {
                 e.preventDefault();
                 const path = goBack();
                 if (path) {
-                    // Dispatch event for App to handle navigation
-                    window.dispatchEvent(new CustomEvent('mutter:navigate-history', {
-                        detail: { path, direction: 'back' }
-                    }));
+                    emitMutterEvent('mutter:navigate-history', { path, direction: 'back' });
                 }
             }
             // Alt+Right for forward
@@ -132,9 +130,7 @@ export function useNavigationHistory(options: NavigationHistoryOptions = {}) {
                 e.preventDefault();
                 const path = goForward();
                 if (path) {
-                    window.dispatchEvent(new CustomEvent('mutter:navigate-history', {
-                        detail: { path, direction: 'forward' }
-                    }));
+                    emitMutterEvent('mutter:navigate-history', { path, direction: 'forward' });
                 }
             }
         };

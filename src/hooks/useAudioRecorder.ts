@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import {
+    type TranscriptionResult,
+    transcribeAudio,
+    transcribeStreaming,
+    processAudioChunk,
+} from '../services/whisper';
 
-export interface TranscriptionResult {
-    text: string;
-    duration_ms: number;
-}
+export type { TranscriptionResult };
 
 interface AudioRecorderOptions {
     onSilenceDetected?: () => void;
@@ -203,9 +205,7 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
                         console.log(`[Streaming] Sending ${currentLength} samples for partial transcription`);
                         try {
                             // Send ALL accumulated audio for better context
-                            await invoke('transcribe_streaming', {
-                                audioBuffer: [...audioBufferRef.current]
-                            });
+                            await transcribeStreaming([...audioBufferRef.current]);
                             lastStreamingLengthRef.current = currentLength;
                         } catch (e) {
                             console.error('[Streaming] Error:', e);
@@ -227,7 +227,7 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
                 }
 
                 // Always send to VAD for silence detection, even when not collecting
-                invoke('process_audio_chunk', { pcmData });
+                processAudioChunk(pcmData);
 
                 // Update waveform visualization data (keep last ~1 second)
                 const maxSamples = 16000; // 1 second at 16kHz
@@ -296,7 +296,7 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
         if (audioBufferRef.current.length > 0) {
             try {
                 console.log('🎯 Starting final transcription...');
-                const result = await invoke<TranscriptionResult>('transcribe_audio', { audioBuffer: audioBufferRef.current });
+                const result = await transcribeAudio(audioBufferRef.current);
                 const frontendDuration = performance.now() - frontendStartTime;
                 console.log(`⚡ Total frontend time: ${frontendDuration.toFixed(2)}ms (includes Rust time: ${result.duration_ms.toFixed(2)}ms)`);
                 return result;

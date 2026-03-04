@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileNode } from '../types';
 import { ChevronRight, Folder, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMutterEvent } from '@/events';
 import { ContextMenu, useContextMenu, contextMenuIcons } from './ContextMenu';
 import { invoke } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -281,42 +282,33 @@ export const FileTree: React.FC<FileTreeProps> = ({
 	const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
 
 	// Listen for "reveal in explorer" events from tab context menu
-	useEffect(() => {
-		const handleReveal = (event: CustomEvent<{ path: string }>) => {
-			const { path } = event.detail;
+	useMutterEvent('mutter:reveal-in-explorer', ({ path }) => {
+		// Expand parent folders to reveal the file
+		const parentFolders = getParentFolders(path);
+		setExpandedFolders(prev => {
+			const next = new Set(prev);
+			for (const folder of parentFolders) {
+				next.add(folder);
+			}
+			return next;
+		});
 
-			// Expand parent folders to reveal the file
-			const parentFolders = getParentFolders(path);
-			setExpandedFolders(prev => {
-				const next = new Set(prev);
-				for (const folder of parentFolders) {
-					next.add(folder);
-				}
-				return next;
-			});
+		// Highlight the file briefly
+		setHighlightedPath(path);
 
-			// Highlight the file briefly
-			setHighlightedPath(path);
+		// Scroll to the element after a brief delay for expansion
+		setTimeout(() => {
+			const element = document.querySelector(`[data-file-path="${CSS.escape(path)}"]`);
+			if (element) {
+				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
+		}, 100);
 
-			// Scroll to the element after a brief delay for expansion
-			setTimeout(() => {
-				const element = document.querySelector(`[data-file-path="${CSS.escape(path)}"]`);
-				if (element) {
-					element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-				}
-			}, 100);
-
-			// Clear highlight after animation
-			setTimeout(() => {
-				setHighlightedPath(null);
-			}, 2000);
-		};
-
-		window.addEventListener('mutter:reveal-in-explorer', handleReveal as EventListener);
-		return () => {
-			window.removeEventListener('mutter:reveal-in-explorer', handleReveal as EventListener);
-		};
-	}, []);
+		// Clear highlight after animation
+		setTimeout(() => {
+			setHighlightedPath(null);
+		}, 2000);
+	});
 
 	// Auto-expand folders to show the active file
 	// This ensures when navigating via backlinks, quick switcher, or tabs,

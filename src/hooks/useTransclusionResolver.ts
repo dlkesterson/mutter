@@ -7,6 +7,7 @@
  */
 
 import { useCallback } from 'react';
+import { emitMutterEvent } from '@/events';
 import { useVaultMetadata } from '@/context/VaultMetadataContext';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { findNoteIdByPath } from '@/crdt/manifestDoc';
@@ -149,11 +150,7 @@ export function useTransclusionResolver(
    */
   const jumpToSource = useCallback(
     (target: string, blockId: string | null) => {
-      window.dispatchEvent(
-        new CustomEvent('mutter:navigate', {
-          detail: { target, blockId },
-        })
-      );
+      emitMutterEvent('mutter:navigate', { target, blockId });
     },
     []
   );
@@ -164,11 +161,7 @@ export function useTransclusionResolver(
    */
   const editInPlace = useCallback(
     (target: string, blockId: string | null) => {
-      window.dispatchEvent(
-        new CustomEvent('mutter:edit-embed', {
-          detail: { target, blockId },
-        })
-      );
+      emitMutterEvent('mutter:edit-embed', { target, blockId });
     },
     []
   );

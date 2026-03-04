@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { useMutterEvent } from '@/events';
 import { FileTree } from './FileTree';
 import { LEDMatrix } from './LEDMatrix';
 import { FileNode, SearchResult } from '@/types';
@@ -123,17 +124,10 @@ export function Sidebar({
 		};
 	}, [vaultPath]);
 
-	useEffect(() => {
-		const handleCreateNoteShortcut = () => {
-			if (vaultPath) {
-				handleCreateNote();
-			}
-		};
-
-		window.addEventListener('mutter:create-note', handleCreateNoteShortcut);
-		return () => {
-			window.removeEventListener('mutter:create-note', handleCreateNoteShortcut);
-		};
+	useMutterEvent('mutter:create-note', () => {
+		if (vaultPath) {
+			handleCreateNote();
+		}
 	}, [vaultPath]);
 
 	const loadVaultPath = async () => {

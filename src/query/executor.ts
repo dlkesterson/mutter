@@ -7,6 +7,7 @@
 import type { ParsedQuery, FilterTerm, TextTerm, FilterOperator } from './parser';
 import type { VaultMetadataDoc, VaultNote } from '@/crdt/vaultMetadataDoc';
 import { getBacklinks } from '@/crdt/vaultMetadataDoc';
+import { emitMutterEvent } from '@/events';
 
 export interface QueryTiming {
   parseMs: number;
@@ -208,11 +209,11 @@ export function executeQuery(
 
   // Emit performance event for monitoring
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('mutter:query-executed', {
-        detail: { executionTimeMs: timing.totalMs, timing, noteCount: totalCount },
-      })
-    );
+    emitMutterEvent('mutter:query-executed', {
+      executionTimeMs: timing.totalMs,
+      timing,
+      noteCount: totalCount,
+    });
   }
 
   return {

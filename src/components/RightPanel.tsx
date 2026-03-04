@@ -14,6 +14,7 @@ import {
 	HelpCircle,
 	Sparkles,
 } from 'lucide-react';
+import { emitMutterEvent } from '@/events';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
 export type RightPanelTab = 'outline' | 'backlinks' | 'search' | 'graph';
@@ -83,15 +84,11 @@ export function RightPanel({
 	const handleActivityBarClick = (id: string) => {
 		// Handle footer items (actions, not panel tabs)
 		if (id === 'clean-up-text') {
-			window.dispatchEvent(
-				new CustomEvent('mutter:execute-command', { detail: { command: 'cleanup-text' } })
-			);
+			emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
 			return;
 		}
 		if (id === 'commands-help') {
-			window.dispatchEvent(
-				new CustomEvent('mutter:open-dialog', { detail: { dialog: 'commands' } })
-			);
+			emitMutterEvent('mutter:open-dialog', { dialog: 'commands' });
 			return;
 		}
 

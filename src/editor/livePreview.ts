@@ -1,5 +1,6 @@
 import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { StateField, Range } from '@codemirror/state';
+import { emitMutterEvent } from '../events';
 
 class ImageWidget extends WidgetType {
     constructor(
@@ -211,9 +212,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     const newTab = e.ctrlKey || e.metaKey;
 
                     // Dispatch custom event for the Editor to handle navigation
-                    window.dispatchEvent(new CustomEvent('mutter:navigate-wikilink', {
-                        detail: { target: linkTarget, blockId, newTab }
-                    }));
+                    emitMutterEvent('mutter:navigate-wikilink', { target: linkTarget, blockId, newTab });
                 }
             }
         }
