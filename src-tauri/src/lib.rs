@@ -4,13 +4,10 @@ mod config;
 mod device;
 mod file_watcher;
 mod ml;
-mod registry;
-mod system;
 mod vault_crdt_fs;
 mod vault_state;
 
 use commands::*;
-use system::*;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::ShortcutState;
 use std::sync::{Arc, Mutex};
@@ -139,12 +136,10 @@ pub fn run() {
             close_quick_capture,
             transcribe_audio,
             transcribe_streaming,
-            classify_text,
             get_file_tree,
             create_note,
             rename_note,
             search_notes,
-            get_current_context,
             download_model,
             download_whisper_model,
             is_model_downloaded,

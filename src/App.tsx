@@ -1,8 +1,12 @@
 import { useCallback, useState, useEffect } from 'react';
 import { FileText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { useAudioRecorder } from './hooks/useAudioRecorder';
+import { emitMutterEvent, useMutterEvent } from './events';
+import { hasLoadedModel, loadWhisperModel } from './services/whisper';
 import { useNavigationHistory } from './hooks/useNavigationHistory';
+import { useTabManager } from './hooks/useTabManager';
+import { useDialogManager } from './hooks/useDialogManager';
+import { useVoicePipeline } from './hooks/useVoicePipeline';
 import Editor from './components/Editor';
 import { ImageViewer } from './components/ImageViewer';
 import { Omnibox } from './components/Omnibox';
@@ -14,14 +18,12 @@ import { SettingsDialog } from './components/dialogs/settings-dialog';
 import { WhisperModelSelector } from './components/WhisperModelSelector';
 import { StreamingTranscription } from './components/StreamingTranscription';
 import { Toaster } from './components/ui/toaster';
-import { useToast } from './hooks/use-toast';
 import { getStorageItem, setStorageItem } from './utils/storage';
-import { VoiceLogEntry } from './types';
 import { QuickCapture } from './components/QuickCapture';
 import { Sidebar } from './components/Sidebar';
 import { CrdtSpike } from './components/CrdtSpike';
 import { useVaultMetadataCrdt } from '@/hooks/useVaultMetadataCrdt';
-import { TabBar, Tab } from './components/TabBar';
+import { TabBar } from './components/TabBar';
 import { EditorContextProvider } from '@/context/EditorContextProvider';
 import { VaultMetadataProvider } from '@/context/VaultMetadataContext';
 import { BacklinksPanel } from './components/BacklinksPanel';
@@ -30,94 +32,69 @@ import { OutlinePanel } from './components/OutlinePanel';
 import { GraphPanel, GraphDialog } from './components/graph';
 import { StatusBar } from './components/StatusBar';
 import { TextCleanupDialog } from './components/dialogs/TextCleanupDialog';
-import { CommandsDialog } from './components/dialogs/CommandsDialog';
-import { RightPanel, type RightPanelTab } from './components/RightPanel';
-
-type DialogType =
-	| 'files'
-	| 'voice-log'
-	| 'settings'
-	| 'text-cleanup'
-	| 'commands'
-	| null;
+import { RightPanel } from './components/RightPanel';
 
 const CRDT_WS_URL_KEY = 'mutter:crdt_ws_url';
 
 function App() {
-	const [tabs, setTabs] = useState<Tab[]>([]);
-	const [activeTabId, setActiveTabId] = useState<string | null>(null);
-	const activeTab = tabs.find((t) => t.id === activeTabId);
-	const currentFile = activeTab?.path || null;
-
-	const [vaultPath, setVaultPath] = useState<string | null>(null);
-	const [audioState, setAudioState] = useState<
-		'idle' | 'listening' | 'processing' | 'executing'
-	>('idle');
-	const [streamingTranscription, setStreamingTranscription] =
-		useState<string>('');
-	const [isInitialized, setIsInitialized] = useState(false);
-	const [voiceLogEntries, setVoiceLogEntries] = useState<VoiceLogEntry[]>([]);
-	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-	const [openDialog, setOpenDialog] = useState<DialogType>(null);
-	const [fileDialogQuery, setFileDialogQuery] = useState<string>('');
-	const [isQuickCapture, setIsQuickCapture] = useState(false);
-	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
-
-	// Right panel state - simplified since RightPanel handles its own collapsed/width state
-	const [rightPanel, setRightPanel] = useState<RightPanelTab | null>(null);
-	// Graph dialog state
-	const [graphDialogOpen, setGraphDialogOpen] = useState(false);
-	// Text cleanup dialog state
-	const [textCleanupData, setTextCleanupData] = useState<{
-		text: string;
-		selectionRange: { from: number; to: number } | null;
-	} | null>(null);
-
-	// Editor content for status bar and outline
-	const [editorContent, setEditorContent] = useState<string>('');
-
 	// Navigation history
 	const { canGoBack, canGoForward, recordNavigation, goBack, goForward } =
 		useNavigationHistory();
 
-	// Toast notifications
-	const { toast } = useToast();
+	// Tab management
+	const {
+		tabs,
+		activeTabId,
+		activeTab,
+		currentFile,
+		setActiveTabId,
+		handleFileSelect,
+		handleOpenInNewTab,
+		handleTabClose,
+		handleTabReorder,
+		handleCloseOthers,
+		handleCloseToRight,
+		handleCloseAll,
+		handleTogglePin,
+		handleTabDirtyChange,
+		handleNoteRename,
+		handleTabDoubleClick,
+	} = useTabManager({ onNavigate: recordNavigation });
 
-	// Voice settings
-	const [voiceEnabled, setVoiceEnabled] = useState(true);
-	const [autoStopEnabled, setAutoStopEnabled] = useState(true);
-	const [autoStopTimeoutMs, setAutoStopTimeoutMs] = useState(3000);
+	// Dialog/panel state
+	const {
+		openDialog,
+		setOpenDialog,
+		fileDialogQuery,
+		setFileDialogQuery,
+		modelSelectorOpen,
+		setModelSelectorOpen,
+		graphDialogOpen,
+		setGraphDialogOpen,
+		textCleanupData,
+		setTextCleanupData,
+		rightPanel,
+		setRightPanel,
+	} = useDialogManager();
 
-	// Load voice settings from storage
-	useEffect(() => {
-		const loadSettings = async () => {
-			const voiceOn = await getStorageItem<boolean>('voice_enabled');
-			const enabled = await getStorageItem<boolean>('auto_stop_enabled');
-			const timeout = await getStorageItem<number>(
-				'auto_stop_timeout_ms',
-			);
+	// Voice pipeline
+	const {
+		audioState,
+		streamingTranscription,
+		voiceLogEntries,
+		voiceEnabled,
+		recentAudioSamples,
+		handleVoiceCommand,
+		toggleListening,
+	} = useVoicePipeline({ onModelSelectorOpen: () => setModelSelectorOpen(true) });
 
-			if (voiceOn !== null) setVoiceEnabled(voiceOn);
-			if (enabled !== null) setAutoStopEnabled(enabled);
-			if (timeout !== null) setAutoStopTimeoutMs(timeout);
-		};
+	const [vaultPath, setVaultPath] = useState<string | null>(null);
+	const [isInitialized, setIsInitialized] = useState(false);
+	const [isQuickCapture, setIsQuickCapture] = useState(false);
+	const [isCrdtSpike, setIsCrdtSpike] = useState(false);
 
-		loadSettings();
-
-		// Listen for voice settings changes from settings dialog
-		const handleVoiceSettingsChange = () => {
-			loadSettings();
-		};
-		window.addEventListener(
-			'mutter:voice-settings-changed',
-			handleVoiceSettingsChange,
-		);
-		return () =>
-			window.removeEventListener(
-				'mutter:voice-settings-changed',
-				handleVoiceSettingsChange,
-			);
-	}, []);
+	// Editor content for status bar and outline
+	const [editorContent, setEditorContent] = useState<string>('');
 
 	useEffect(() => {
 		const syncModeFromHash = () => {
@@ -131,88 +108,6 @@ function App() {
 		return () => window.removeEventListener('hashchange', syncModeFromHash);
 	}, []);
 
-	// Listen for dialog/panel open events from voice commands and Editor
-	useEffect(() => {
-		const handleOpenDialog = (
-			event: CustomEvent<{ dialog: string; [key: string]: any }>,
-		) => {
-			const { dialog } = event.detail;
-			console.log(
-				'[App] Received mutter:open-dialog:',
-				dialog,
-				event.detail,
-			);
-
-			switch (dialog) {
-				case 'ai-query':
-				case 'query':
-				case 'search':
-					setRightPanel('search');
-					break;
-				case 'backlinks':
-					setRightPanel('backlinks');
-					break;
-				case 'insert-embed':
-					// This could open a dedicated dialog in the future
-					console.log(`[App] Dialog ${dialog} not yet implemented`);
-					break;
-				case 'text-cleanup':
-					setTextCleanupData({
-						text: event.detail.text || '',
-						selectionRange: event.detail.selectionRange || null,
-					});
-					setOpenDialog('text-cleanup');
-					break;
-				case 'commands':
-					setOpenDialog('commands');
-					break;
-				default:
-					console.warn('[App] Unknown dialog:', dialog);
-			}
-		};
-
-		// Listen for settings open events (e.g., from SyncStatusIndicator)
-		const handleOpenSettings = () => {
-			setOpenDialog('settings');
-		};
-
-		window.addEventListener(
-			'mutter:open-dialog',
-			handleOpenDialog as EventListener,
-		);
-		window.addEventListener('mutter:open-settings', handleOpenSettings);
-		return () => {
-			window.removeEventListener(
-				'mutter:open-dialog',
-				handleOpenDialog as EventListener,
-			);
-			window.removeEventListener(
-				'mutter:open-settings',
-				handleOpenSettings,
-			);
-		};
-	}, []);
-
-	const {
-		startRecording,
-		stopRecording,
-		setAutoStopCallback,
-		recentAudioSamples,
-	} = useAudioRecorder({
-		onSilenceDetected: () => {
-			console.log('🔇 Silence detected');
-		},
-		onStreamingTranscription: (text: string) => {
-			console.log('📝 Streaming transcription:', text);
-			setStreamingTranscription(text);
-		},
-		autoStopOnSilence: autoStopEnabled,
-		silenceTimeoutMs: autoStopTimeoutMs,
-		// Enable live streaming transcription (shows words every 4 seconds while recording)
-		enableStreaming: true,
-		streamingIntervalMs: 4000,
-	});
-
 	if (isQuickCapture) {
 		return <QuickCapture />;
 	}
@@ -221,131 +116,10 @@ function App() {
 		return <CrdtSpike />;
 	}
 
-	const addVoiceLogEntry = (
-		entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>,
-	) => {
-		setVoiceLogEntries((prev) => [
-			...prev,
-			{
-				...entry,
-				id: `${Date.now()}-${Math.random()}`,
-				timestamp: new Date(),
-			},
-		]);
-	};
-
-	const handleFileSelect = (
-		path: string,
-		permanent: boolean = false,
-		fromHistory: boolean = false,
-	) => {
-		// Record navigation unless coming from back/forward
-		if (!fromHistory) {
-			recordNavigation(path);
-		}
-
-		setTabs((prevTabs) => {
-			const existingTab = prevTabs.find((t) => t.path === path);
-			if (existingTab) {
-				setActiveTabId(existingTab.id);
-				if (permanent && existingTab.isPreview) {
-					return prevTabs.map((t) =>
-						t.id === existingTab.id
-							? { ...t, isPreview: false }
-							: t,
-					);
-				}
-				return prevTabs;
-			}
-
-			const activeTab = prevTabs.find((t) => t.id === activeTabId);
-
-			// Don't reuse pinned tabs - open in new tab instead
-			if (activeTab?.isPinned) {
-				const newTab: Tab = {
-					id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-					path,
-					title: path.split('/').pop() || 'Untitled',
-					isPreview: !permanent,
-				};
-				setActiveTabId(newTab.id);
-				return [...prevTabs, newTab];
-			}
-
-			// Reuse preview tab if available and not dirty
-			if (
-				activeTab &&
-				activeTab.isPreview &&
-				!permanent &&
-				!activeTab.isDirty
-			) {
-				return prevTabs.map((t) => {
-					if (t.id === activeTabId) {
-						return {
-							...t,
-							path,
-							title: path.split('/').pop() || 'Untitled',
-							isPreview: true,
-						};
-					}
-					return t;
-				});
-			}
-
-			const newTab: Tab = {
-				id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-				path,
-				title: path.split('/').pop() || 'Untitled',
-				isPreview: !permanent,
-			};
-			setActiveTabId(newTab.id);
-			return [...prevTabs, newTab];
-		});
-	};
-
-	// Open a file in a new tab (always creates new, never reuses)
-	const handleOpenInNewTab = useCallback(
-		(path: string) => {
-			recordNavigation(path);
-
-			// Check if already open - if so, just switch to it
-			const existingTab = tabs.find((t) => t.path === path);
-			if (existingTab) {
-				setActiveTabId(existingTab.id);
-				return;
-			}
-
-			// Always create a new permanent tab
-			const newTab: Tab = {
-				id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-				path,
-				title: path.split('/').pop() || 'Untitled',
-				isPreview: false, // Permanent tab
-			};
-			setTabs((prev) => [...prev, newTab]);
-			setActiveTabId(newTab.id);
-		},
-		[tabs, recordNavigation],
-	);
-
 	// Handle navigation history events (from keyboard shortcuts)
-	useEffect(() => {
-		const handleNavigateHistory = (
-			e: CustomEvent<{ path: string; direction: string }>,
-		) => {
-			handleFileSelect(e.detail.path, false, true);
-		};
-
-		window.addEventListener(
-			'mutter:navigate-history',
-			handleNavigateHistory as EventListener,
-		);
-		return () =>
-			window.removeEventListener(
-				'mutter:navigate-history',
-				handleNavigateHistory as EventListener,
-			);
-	}, []);
+	useMutterEvent('mutter:navigate-history', ({ path }) => {
+		handleFileSelect(path, false, true);
+	});
 
 	// Handle back/forward button clicks
 	const handleGoBack = useCallback(() => {
@@ -353,23 +127,14 @@ function App() {
 		if (path) {
 			handleFileSelect(path, false, true);
 		}
-	}, [goBack]);
+	}, [goBack, handleFileSelect]);
 
 	const handleGoForward = useCallback(() => {
 		const path = goForward();
 		if (path) {
 			handleFileSelect(path, false, true);
 		}
-	}, [goForward]);
-
-	// Handle tab pinning
-	const handleTogglePin = (id: string) => {
-		setTabs((prev) =>
-			prev.map((tab) =>
-				tab.id === id ? { ...tab, isPinned: !tab.isPinned } : tab,
-			),
-		);
-	};
+	}, [goForward, handleFileSelect]);
 
 	// Zoom handling
 	useEffect(() => {
@@ -397,83 +162,6 @@ function App() {
 		window.addEventListener('keydown', handleZoom);
 		return () => window.removeEventListener('keydown', handleZoom);
 	}, []);
-
-	const handleTabClose = (id: string, e: React.MouseEvent) => {
-		e.stopPropagation();
-		const newTabs = tabs.filter((t) => t.id !== id);
-		setTabs(newTabs);
-
-		if (activeTabId === id) {
-			if (newTabs.length > 0) {
-				setActiveTabId(newTabs[newTabs.length - 1].id);
-			} else {
-				setActiveTabId(null);
-			}
-		}
-	};
-
-	const handleTabReorder = (fromIndex: number, toIndex: number) => {
-		const newTabs = [...tabs];
-		const [movedTab] = newTabs.splice(fromIndex, 1);
-		newTabs.splice(toIndex, 0, movedTab);
-		setTabs(newTabs);
-	};
-
-	const handleCloseOthers = (id: string) => {
-		const tab = tabs.find((t) => t.id === id);
-		if (tab) {
-			setTabs([tab]);
-			setActiveTabId(id);
-		}
-	};
-
-	const handleCloseToRight = (id: string) => {
-		const index = tabs.findIndex((t) => t.id === id);
-		if (index !== -1) {
-			const newTabs = tabs.slice(0, index + 1);
-			setTabs(newTabs);
-			// If the active tab was closed, switch to the rightmost remaining tab
-			if (activeTabId && !newTabs.find((t) => t.id === activeTabId)) {
-				setActiveTabId(newTabs[newTabs.length - 1].id);
-			}
-		}
-	};
-
-	const handleCloseAll = () => {
-		setTabs([]);
-		setActiveTabId(null);
-	};
-
-	const handleTabDirtyChange = (path: string, isDirty: boolean) => {
-		setTabs((prev) =>
-			prev.map((tab) => {
-				if (tab.path === path) {
-					// If becoming dirty, also pin the tab (remove preview status)
-					return {
-						...tab,
-						isDirty,
-						isPreview: isDirty ? false : tab.isPreview,
-					};
-				}
-				return tab;
-			}),
-		);
-	};
-
-	const handleNoteRename = (oldPath: string, newPath: string) => {
-		setTabs((prev) =>
-			prev.map((tab) => {
-				if (tab.path === oldPath) {
-					return {
-						...tab,
-						path: newPath,
-						title: newPath.split('/').pop() || 'Untitled',
-					};
-				}
-				return tab;
-			}),
-		);
-	};
 
 	useEffect(() => {
 		// Initialize app on startup
@@ -581,7 +269,7 @@ function App() {
 			try {
 				// Always check if a model is actually loaded, regardless of saved preference
 				// The saved preference might exist but the model file could be missing/corrupt
-				const hasModel = await invoke<boolean>('has_loaded_model');
+				const hasModel = await hasLoadedModel();
 
 				if (hasModel) {
 					console.log(
@@ -600,9 +288,7 @@ function App() {
 						`[Model Check] Attempting to load saved model: ${savedModelId}`,
 					);
 					try {
-						await invoke('load_whisper_model', {
-							modelName: savedModelId,
-						});
+						await loadWhisperModel(savedModelId);
 						console.log(
 							`[Model Check] ✓ Successfully loaded saved model: ${savedModelId}`,
 						);
@@ -652,7 +338,7 @@ function App() {
 			// Ctrl/Cmd + N to create new note (dispatches event to Sidebar)
 			if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
 				e.preventDefault();
-				window.dispatchEvent(new CustomEvent('mutter:create-note'));
+				emitMutterEvent('mutter:create-note');
 			}
 			// Ctrl/Cmd + , for settings (common pattern)
 			if ((e.ctrlKey || e.metaKey) && e.key === ',') {
@@ -667,11 +353,7 @@ function App() {
 			) {
 				e.preventDefault();
 				// Dispatch event to get text from editor
-				window.dispatchEvent(
-					new CustomEvent('mutter:execute-command', {
-						detail: { command: 'cleanup-text' },
-					}),
-				);
+				emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
 			}
 		};
 
@@ -679,131 +361,6 @@ function App() {
 		return () => window.removeEventListener('keydown', handleKeyDown);
 	}, [activeTabId]);
 
-	const handleVoiceCommand = async (
-		command: string,
-		transcription: string,
-	) => {
-		console.log('Voice command:', command, transcription);
-		// Execute the command via Editor's handler
-		if ((window as any).handleTranscription) {
-			setAudioState('executing');
-			await (window as any).handleTranscription(transcription || command);
-			setAudioState('idle');
-		}
-	};
-
-	const toggleListening = async () => {
-		if (audioState === 'listening') {
-			try {
-				// Clear auto-stop callback to prevent double insertion
-				setAutoStopCallback(null);
-
-				setAudioState('processing');
-				const result = await stopRecording();
-				if (result) {
-					if ((window as any).handleTranscription) {
-						setAudioState('executing');
-						await (window as any).handleTranscription(result.text);
-					}
-				}
-			} catch (error) {
-				console.error('Voice input error:', error);
-			} finally {
-				// Always reset to idle, even if there's an error
-				setAudioState('idle');
-				setStreamingTranscription(''); // Clear streaming text
-			}
-		} else {
-			try {
-				// Check if Whisper model is loaded before starting recording
-				const hasModel = await invoke<boolean>('has_loaded_model');
-				if (!hasModel) {
-					toast({
-						title: 'No Whisper Model',
-						description:
-							'Please select a speech-to-text model in Settings first.',
-						variant: 'destructive',
-					});
-					setModelSelectorOpen(true);
-					return;
-				}
-
-				setStreamingTranscription(''); // Clear previous streaming text
-
-				// Set the auto-stop callback BEFORE starting recording to avoid race condition
-				setAutoStopCallback(async () => {
-					console.log('🛑 Auto-stopping recording after 3s silence');
-					try {
-						setAudioState('processing');
-						const result = await stopRecording();
-						if (result) {
-							if ((window as any).handleTranscription) {
-								setAudioState('executing');
-								await (window as any).handleTranscription(
-									result.text,
-								);
-							}
-						}
-					} catch (error) {
-						console.error('Auto-stop error:', error);
-					} finally {
-						setAudioState('idle');
-						setStreamingTranscription('');
-						// Clear the callback after it fires to prevent re-use
-						setAutoStopCallback(null);
-					}
-				});
-
-				// Now start recording with callback already set
-				await startRecording();
-				setAudioState('listening');
-			} catch (error) {
-				console.error('Failed to start recording:', error);
-				setAudioState('idle');
-			}
-		}
-	};
-
-	const handleSystemCommand = async (action: any) => {
-		console.log('System command:', action);
-
-		if (action.OpenNote) {
-			const query = action.OpenNote.name;
-			if (!query) {
-				setOpenDialog('files');
-				return;
-			}
-
-			// Try to find the note directly
-			try {
-				const vaultPath = await getStorageItem<string>('vault_path');
-				if (vaultPath) {
-					const results = await invoke<any[]>('search_notes', {
-						query,
-						vaultPath,
-					});
-					if (results.length > 0) {
-						// If we have a good match, open it
-						// For now, just open the first one if it's a very strong match or unique
-						// But to be safe, let's open the dialog with the search query
-						setFileDialogQuery(query);
-						setOpenDialog('files');
-					} else {
-						setFileDialogQuery(query);
-						setOpenDialog('files');
-					}
-				} else {
-					setOpenDialog('files');
-				}
-			} catch (e) {
-				console.error('Failed to search notes:', e);
-				setOpenDialog('files');
-			}
-		} else if (action.Search) {
-			setFileDialogQuery(action.Search.query);
-			setOpenDialog('files');
-		}
-	};
 
 	return (
 		<EditorContextProvider>
@@ -830,16 +387,7 @@ function App() {
 						tabs={tabs}
 						activeTabId={activeTabId}
 						onTabClick={setActiveTabId}
-						onTabDoubleClick={(id) => {
-							// Double-click converts preview tab to permanent
-							setTabs((prev) =>
-								prev.map((tab) =>
-									tab.id === id && tab.isPreview
-										? { ...tab, isPreview: false }
-										: tab,
-								),
-							);
-						}}
+						onTabDoubleClick={handleTabDoubleClick}
 						onTabClose={handleTabClose}
 						onTabReorder={handleTabReorder}
 						onCloseOthers={handleCloseOthers}
@@ -847,12 +395,7 @@ function App() {
 						onCloseAll={handleCloseAll}
 						onTogglePin={handleTogglePin}
 						onRevealInExplorer={(path) => {
-							// Dispatch event for FileTree to scroll to and highlight the file
-							window.dispatchEvent(
-								new CustomEvent('mutter:reveal-in-explorer', {
-									detail: { path },
-								}),
-							);
+							emitMutterEvent('mutter:reveal-in-explorer', { path });
 						}}
 						canGoBack={canGoBack}
 						canGoForward={canGoForward}
@@ -905,8 +448,6 @@ function App() {
 									<Editor
 										filePath={currentFile}
 										audioState={audioState}
-										onVoiceLogEntry={addVoiceLogEntry}
-										onSystemCommand={handleSystemCommand}
 										onContentSaved={(content) =>
 											vaultMeta.recordContent(content)
 										}
@@ -991,14 +532,7 @@ function App() {
 								<OutlinePanel
 									content={editorContent}
 									onNavigate={(line, from) => {
-										window.dispatchEvent(
-											new CustomEvent(
-												'mutter:scroll-to-line',
-												{
-													detail: { line, from },
-												},
-											),
-										);
+										emitMutterEvent('mutter:scroll-to-line', { line, from });
 									}}
 								/>
 							)}
@@ -1067,8 +601,6 @@ function App() {
 						onOpenChange={(open) => !open && setOpenDialog(null)}
 						entries={voiceLogEntries.map((e) => ({
 							transcription: e.transcript,
-							command: e.interpretation,
-							confidence: e.confidence,
 						}))}
 					/>
 					<SettingsDialog
@@ -1087,23 +619,10 @@ function App() {
 							text={textCleanupData.text}
 							selectionRange={textCleanupData.selectionRange}
 							onApply={(cleanedText, range) => {
-								// Dispatch event to Editor to apply the cleaned text
-								window.dispatchEvent(
-									new CustomEvent(
-										'mutter:apply-text-cleanup',
-										{
-											detail: { cleanedText, range },
-										},
-									),
-								);
+								emitMutterEvent('mutter:apply-text-cleanup', { cleanedText, range });
 							}}
 						/>
 					)}
-
-					<CommandsDialog
-						open={openDialog === 'commands'}
-						onOpenChange={(open) => !open && setOpenDialog(null)}
-					/>
 
 					<WhisperModelSelector
 						open={modelSelectorOpen}
