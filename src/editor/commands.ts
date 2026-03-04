@@ -28,7 +28,6 @@ export interface FormatType {
 export interface EditorAction {
     Undo?: boolean;
     Redo?: boolean;
-    UndoVoiceCommand?: boolean;
     NewLine?: boolean;
     Delete?: boolean;
     SelectAll?: boolean;

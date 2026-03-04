@@ -244,7 +244,7 @@ describe('Error Handling', () => {
       expect(() => {
         const { result } = renderHook(() => useUserProfile());
         act(() => {
-          result.current.recordCommandExecution('cmd');
+          result.current.setExpertiseLevel('intermediate');
         });
       }).not.toThrow();
 
