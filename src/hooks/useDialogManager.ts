@@ -30,7 +30,6 @@ export function useDialogManager() {
 	// Listen for dialog/panel open events from voice commands and Editor
 	useMutterEvent('mutter:open-dialog', (detail) => {
 		const { dialog } = detail;
-		console.log('[App] Received mutter:open-dialog:', dialog, detail);
 
 		switch (dialog) {
 			case 'ai-query':
@@ -42,7 +41,6 @@ export function useDialogManager() {
 				setRightPanel('backlinks');
 				break;
 			case 'insert-embed':
-				console.log(`[App] Dialog ${dialog} not yet implemented`);
 				break;
 			case 'text-cleanup':
 				setTextCleanupData({
@@ -52,7 +50,7 @@ export function useDialogManager() {
 				setOpenDialog('text-cleanup');
 				break;
 			default:
-				console.warn('[App] Unknown dialog:', dialog);
+				break;
 		}
 	});
 

@@ -157,15 +157,11 @@ export class VaultIndex {
     const index = new VaultIndex(vaultPath);
     const normalizedVault = normalizePath(vaultPath);
 
-    console.time('[VaultIndex] buildFromVault');
-
     // Phase 1: Collect all markdown files and register notes
     const mdFiles = await collectMarkdownFiles(normalizedVault);
     for (const relPath of mdFiles) {
       index.registerNote(relPath);
     }
-
-    console.log(`[VaultIndex] Registered ${index.notes.size} notes`);
 
     // Phase 2: Parse links from each file and build edges
     const readPromises = mdFiles.map(async (relPath) => {
@@ -175,16 +171,12 @@ export class VaultIndex {
       try {
         const content = await readTextFile(`${normalizedVault}/${relPath}`);
         index.buildEdgesForNote(noteId, content);
-      } catch (err) {
+      } catch {
         // File may have been deleted between listing and reading
-        console.warn(`[VaultIndex] Failed to read ${relPath}:`, err);
       }
     });
 
     await Promise.all(readPromises);
-
-    console.log(`[VaultIndex] Built ${index.edges.size} edges`);
-    console.timeEnd('[VaultIndex] buildFromVault');
 
     return index;
   }

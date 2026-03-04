@@ -269,10 +269,7 @@ export default function Editor({
 
 	// Handle transcription results — always insert text at cursor
 	const handleTranscription = (text: string) => {
-		if (!viewRef.current) {
-			console.warn('Editor not ready for transcription');
-			return;
-		}
+		if (!viewRef.current) return;
 
 		// Clear ghost text
 		viewRef.current.dispatch({
@@ -281,7 +278,6 @@ export default function Editor({
 
 		// Check if editor has content (file is loaded)
 		if (viewRef.current.state.doc.length === 0 && !filePath) {
-			console.warn('No file loaded. Please create or open a file first.');
 			alert('Please create or open a file before using voice dictation.');
 			return;
 		}
@@ -328,12 +324,7 @@ export default function Editor({
 
 	// Listen for command execution events (keyboard shortcuts, etc.)
 	useMutterEvent('mutter:execute-command', ({ command }) => {
-		console.log('[Editor] Received mutter:execute-command:', command);
-
-		if (!viewRef.current) {
-			console.warn('[Editor] No view available for command execution');
-			return;
-		}
+		if (!viewRef.current) return;
 
 		switch (command) {
 			case 'insert-embed':
@@ -358,7 +349,7 @@ export default function Editor({
 				break;
 			}
 			default:
-				console.warn('[Editor] Unknown command:', command);
+				break;
 		}
 	}, [noteId]);
 
@@ -622,10 +613,8 @@ export default function Editor({
 
 		// Small delay to allow fade-out animation
 		setTimeout(() => {
-			console.time('[Editor] load file');
 			readTextFile(filePath)
 				.then((text) => {
-					console.timeEnd('[Editor] load file');
 					setContent(text);
 					setSavedContent(text);
 					if (viewRef.current) {
@@ -642,7 +631,6 @@ export default function Editor({
 				})
 				.catch((err) => {
 					console.error('[Editor] Failed to load file:', err);
-					console.timeEnd('[Editor] load file');
 					setIsLoadingFile(false);
 				});
 		}, 100);

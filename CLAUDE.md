@@ -65,13 +65,7 @@ pnpm lint
 
 ### Model Management
 
-```bash
-# Download Whisper models (run from project root)
-./download-model.sh
-
-# Or download specific model from within the app:
-# Settings → Whisper Model Selector → Choose model → Download
-```
+Download Whisper models from within the app: **Settings → Whisper Model Selector → Choose model → Download**
 
 ## Architecture
 
@@ -115,7 +109,7 @@ pnpm lint
 - `ml.rs` - Whisper speech-to-text inference via whisper-rs
 - `audio.rs` - Audio processing (VAD, ring buffer)
 - `config.rs` - Settings management (XDG config files)
-- `commands.rs` - Tauri command exports
+- `commands/` - Tauri command modules (transcription, model management, vault operations)
 - `file_watcher.rs` - File system change detection
 
 ### Voice Dictation Pipeline
@@ -331,9 +325,6 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ## Related Documentation
 
 - `README.md` - User-facing documentation with quick start guide
-- `docs/USER-GUIDE.md` - Comprehensive user guide (voice dictation, query DSL, shortcuts)
-- `docs/CONFIG_DESIGN.md` - Configuration architecture and XDG standards
-- `docs/DESIGN_SYSTEM.md` - Design principles, typography, spacing, colors
 - `.github/workflows/ci.yml` - CI checks (lint, test, build, cargo check)
 - `.github/workflows/release.yml` - Release builds via tauri-apps/tauri-action
 

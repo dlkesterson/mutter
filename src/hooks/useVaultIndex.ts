@@ -74,7 +74,6 @@ export function useVaultIndex(params: {
         setReady(true);
         setLoadingPhase('ready');
         setRevision((r) => r + 1);
-        console.log(`[VaultIndex] Ready with ${index.notes.size} notes, ${index.edges.size} edges`);
       } catch (e) {
         if (cancelled) return;
         console.error('[VaultIndex] Build error:', e);
@@ -104,7 +103,6 @@ export function useVaultIndex(params: {
       if (cancelled || rebuildInFlightRef.current) return;
       rebuildInFlightRef.current = true;
 
-      console.log('[VaultIndex] Vault changed, rebuilding...');
       try {
         const index = await VaultIndex.buildFromVault(vaultPath);
         if (cancelled) return;

@@ -105,11 +105,8 @@ export function WhisperModelSelector({
 						if (savedModelId === model.id && !open) {
 							try {
 								await loadWhisperModel(model.id);
-								console.log(
-									`Auto-loaded saved model: ${model.id}`,
-								);
-							} catch (e) {
-								console.error('Failed to auto-load model', e);
+							} catch {
+								// Model auto-load failed — user can retry from selector
 							}
 						}
 					}

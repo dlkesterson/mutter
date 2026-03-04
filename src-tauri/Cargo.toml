@@ -1,10 +1,10 @@
 [package]
 name = "mutter"
 version = "0.3.0"
-description = "Voice-first markdown editor with semantic commands"
-authors = ["you"]
+description = "Voice-first markdown editor"
+authors = ["Dylan Kesterson"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/dlkesterson/mutter"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -21,8 +21,6 @@ tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-base64 = "0.22"
-uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tauri = { version = "2.9.4", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
@@ -30,17 +28,15 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2.6"
 tauri-plugin-shell = "2"
 tauri-plugin-clipboard-manager = "2"
-byteorder = "1.5.0"
 tauri-plugin-global-shortcut = "2.3.1"
 tauri-plugin-window-state = "2"
 walkdir = "2.5.0"
 
 # Audio processing
-hound = "3.5"
 ringbuf = "0.3"
 
-# Whisper speech-to-text via whisper.cpp (CUDA GPU acceleration)
-whisper-rs = { version = "0.14", features = ["cuda"] }
+# Whisper speech-to-text via whisper.cpp
+whisper-rs = "0.14"
 
 # File system watcher
 notify = "6.1"
@@ -49,16 +45,17 @@ notify-debouncer-full = "0.3"
 # Utilities
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
-thiserror = "2.0"
 reqwest = { version = "0.12", features = ["stream"] }
 futures-util = "0.3"
 rand = "0.8"
-dirs = "5.0"
 
 # WebView dependencies for Linux
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
 gtk = "0.18"
+
+[features]
+cuda = ["whisper-rs/cuda"]
 
 # Optimize dependencies even in debug mode for ML performance
 [profile.dev.package."*"]

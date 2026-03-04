@@ -201,10 +201,6 @@ export function applyFillerAnnotations(
 			);
 			line = before + after;
 			removedCount++;
-
-			console.log(
-				`[TextCleanup] Removed "${annotation.textToRemove}" from line ${lineNum}`
-			);
 		}
 
 		// Clean up any resulting double spaces
@@ -287,9 +283,6 @@ export function applyAnnotations(
 		if (annotation.type === 'heading') {
 			// Skip if there's already a heading at or near this position
 			if (hasNearbyHeading(lines, insertIndex)) {
-				console.log(
-					`[TextCleanup] Skipping heading at line ${annotation.line} - existing heading nearby`
-				);
 				continue;
 			}
 
@@ -301,9 +294,6 @@ export function applyAnnotations(
 		} else if (annotation.type === 'break') {
 			// Skip if there's already a blank line at this position
 			if (hasNearbyBlankLine(lines, insertIndex)) {
-				console.log(
-					`[TextCleanup] Skipping break at line ${annotation.line} - already has blank line`
-				);
 				continue;
 			}
 
@@ -346,9 +336,6 @@ export function applyAnnotationsHybrid(
 		// Skip annotations targeting structural elements (they should be preserved)
 		const element = elements[index];
 		if (element.type === 'heading' || element.type === 'horizontal-rule' || element.type === 'blank') {
-			console.log(
-				`[TextCleanup] Skipping annotation at ${annotation.line} - targets structural element`
-			);
 			continue;
 		}
 
@@ -543,8 +530,6 @@ async function cleanupWithFillerAnnotationMode(
 ): Promise<CleanupResult> {
 	const prompt = buildFillerAnnotationPrompt(text);
 
-	console.log('[TextCleanup] Using filler annotation mode');
-
 	try {
 		const result = await queryLLM(prompt, llmSettings);
 		const processingTimeMs = Math.round(performance.now() - startTime);
@@ -559,22 +544,13 @@ async function cleanupWithFillerAnnotationMode(
 			};
 		}
 
-		console.log('[TextCleanup] Filler annotation response:', result);
-
 		// Parse annotations from LLM response
 		const annotations = parseFillerAnnotations(result);
-		console.log(
-			`[TextCleanup] Parsed ${annotations.length} filler annotations`
-		);
 
 		// Apply filler removals
-		const { cleaned, removedCount, skippedCount } = applyFillerAnnotations(
+		const { cleaned } = applyFillerAnnotations(
 			text,
 			annotations
-		);
-
-		console.log(
-			`[TextCleanup] Removed ${removedCount} fillers, skipped ${skippedCount}`
 		);
 
 		return {
@@ -611,10 +587,6 @@ async function cleanupWithAnnotationMode(
 	const prompt = buildStructureAnnotationPrompt(text);
 	const usingHybridMode = shouldUseHybridMode(text);
 
-	console.log(
-		`[TextCleanup] Using annotation mode (${usingHybridMode ? 'hybrid' : 'line-based'})`
-	);
-
 	try {
 		const result = await queryLLM(prompt, llmSettings);
 		const processingTimeMs = Math.round(performance.now() - startTime);
@@ -629,13 +601,8 @@ async function cleanupWithAnnotationMode(
 			};
 		}
 
-		console.log('[TextCleanup] Annotation response:', result);
-
 		// Parse annotations from LLM response
 		const annotations = parseAnnotations(result);
-		console.log(
-			`[TextCleanup] Parsed ${annotations.length} annotations`
-		);
 
 		// Apply annotations using appropriate mode
 		const cleaned = usingHybridMode
@@ -674,8 +641,6 @@ async function cleanupWithFullTextMode(
 	startTime: number
 ): Promise<CleanupResult> {
 	const prompt = buildCleanupPrompt(text, options);
-
-	console.log('[TextCleanup] Using full-text mode');
 
 	try {
 		const rawResult = await queryLLM(prompt, llmSettings);

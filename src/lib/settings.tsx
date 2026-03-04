@@ -393,7 +393,5 @@ export async function migrateFromIndexedDB(): Promise<{
 	await invoke('save_credentials_cmd', { credentials });
 	await invoke('save_state_cmd', { state });
 
-	console.log('Migration completed successfully');
-
 	return { settings, credentials, state };
 }

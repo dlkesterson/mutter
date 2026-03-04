@@ -55,11 +55,7 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 		setAutoStopCallback,
 		recentAudioSamples,
 	} = useAudioRecorder({
-		onSilenceDetected: () => {
-			console.log('🔇 Silence detected');
-		},
 		onStreamingTranscription: (text: string) => {
-			console.log('📝 Streaming transcription:', text);
 			setStreamingTranscription(text);
 		},
 		autoStopOnSilence: autoStopEnabled,
@@ -118,7 +114,6 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 				setStreamingTranscription('');
 
 				setAutoStopCallback(async () => {
-					console.log('🛑 Auto-stopping recording after 3s silence');
 					try {
 						setAudioState('processing');
 						const result = await stopRecording();

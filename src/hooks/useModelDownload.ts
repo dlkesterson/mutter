@@ -33,7 +33,6 @@ export function useModelDownload() {
                 modelName,
                 url,
             });
-            console.log('Model downloaded to:', path);
             return path;
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);

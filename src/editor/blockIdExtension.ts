@@ -81,28 +81,7 @@ export function findBlockInView(view: EditorView, blockId: string): BlockInfo | 
   return blocks.find(b => b.id === blockId) || null;
 }
 
-/**
- * Debug flag to show block IDs (for development only)
- * Access via window.__MUTTER_DEBUG__.showBlockIds = true
- */
 let debugShowBlockIds = false;
-
-// Expose debug toggle
-if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).__MUTTER_DEBUG__ =
-    (window as unknown as Record<string, unknown>).__MUTTER_DEBUG__ || {};
-  Object.defineProperty(
-    (window as unknown as Record<string, Record<string, unknown>>).__MUTTER_DEBUG__,
-    'showBlockIds',
-    {
-      get: () => debugShowBlockIds,
-      set: (value: boolean) => {
-        debugShowBlockIds = value;
-        console.log(`[BlockIds] Debug visibility: ${value ? 'ON' : 'OFF'}`);
-      },
-    }
-  );
-}
 
 /**
  * Plugin that ALWAYS hides block IDs from the user

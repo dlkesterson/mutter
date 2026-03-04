@@ -1,7 +1,7 @@
 {
   "name": "mutter",
   "version": "0.3.0",
-  "description": "Voice-first markdown editor with semantic commands",
+  "description": "Voice-first markdown editor",
   "type": "module",
   "scripts": {
     "dev": "vite",

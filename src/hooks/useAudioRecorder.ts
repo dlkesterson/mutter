@@ -66,22 +66,14 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     }, [isRecording]);
 
     useEffect(() => {
-        console.log('[useAudioRecorder] Setting up VAD event listeners');
-
         const unlisten = listen('vad-silence-detected', () => {
-            console.log('[VAD Event] Received vad-silence-detected, isRecording:', isRecordingRef.current);
-
             if (isRecordingRef.current) {
-                console.log('[VAD Event] ✓ Starting auto-stop timer');
-
                 // PAUSE audio collection to prevent recording silence
                 // This stops Whisper from hallucinating on silent audio
-                console.log('[VAD Event] ⏸️  Pausing audio collection (silence detected)');
                 isCollectingAudioRef.current = false;
 
                 // Clear any existing timeout
                 if (silenceTimeoutRef.current) {
-                    console.log('[VAD Event] Clearing existing timeout');
                     clearTimeout(silenceTimeoutRef.current);
                 }
 
@@ -90,38 +82,25 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
                 const timeoutMs = silenceTimeoutMsRef.current;
 
                 if (shouldAutoStop && autoStopCallbackRef.current) {
-                    console.log(`[VAD Event] ✓ Scheduling auto-stop in ${timeoutMs}ms`);
                     silenceTimeoutRef.current = setTimeout(() => {
-                        console.log(`[Auto-Stop] ⏱️ Triggering auto-stop after ${timeoutMs}ms of silence`);
                         if (autoStopCallbackRef.current) {
                             autoStopCallbackRef.current();
                         }
                     }, timeoutMs);
-                } else {
-                    console.warn('[VAD Event] ⚠️ Cannot schedule auto-stop:', {
-                        shouldAutoStop,
-                        hasCallback: !!autoStopCallbackRef.current
-                    });
                 }
 
                 // Also call the optional callback
                 const onSilence = onSilenceDetectedRef.current;
                 if (onSilence) onSilence();
-            } else {
-                console.log('[VAD Event] ⚠️ Ignoring silence event - not recording');
             }
         });
 
         // Listen for speech start to cancel auto-stop
         const unlistenSpeech = listen('vad-speech-start', () => {
-            console.log('[VAD Event] Received vad-speech-start');
-
             // RESUME audio collection - user is speaking again
-            console.log('[VAD Event] ▶️  Resuming audio collection (speech detected)');
             isCollectingAudioRef.current = true;
 
             if (silenceTimeoutRef.current) {
-                console.log('[VAD Event] ✓ Speech detected - canceling auto-stop timer');
                 clearTimeout(silenceTimeoutRef.current);
                 silenceTimeoutRef.current = null;
             }
@@ -137,50 +116,14 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
     const startRecording = useCallback(async () => {
         try {
-            console.log('🎤 Requesting microphone access...');
-
             // Simplified constraints - let browser choose optimal settings
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: true
             });
             streamRef.current = stream;
 
-            // Log audio track info
-            const audioTrack = stream.getAudioTracks()[0];
-            const settings = audioTrack.getSettings();
-            const constraints = audioTrack.getConstraints();
-            const capabilities = audioTrack.getCapabilities ? audioTrack.getCapabilities() : null;
-
-            console.log('🎤 Audio track info:', {
-                label: audioTrack.label,
-                readyState: audioTrack.readyState,
-                enabled: audioTrack.enabled,
-                muted: audioTrack.muted,
-                settings: settings,
-                constraints: constraints,
-                capabilities: capabilities
-            });
-
-            // Check if track is actually active
-            if (audioTrack.readyState !== 'live') {
-                console.error('⚠️ Audio track is not live! readyState:', audioTrack.readyState);
-            }
-            if (audioTrack.muted) {
-                console.error('⚠️ Audio track is muted!');
-            }
-
             const audioContext = new AudioContext({ sampleRate: 16000 });
             audioContextRef.current = audioContext;
-
-            console.log('🎧 AudioContext info:', {
-                requested: 16000,
-                actual: audioContext.sampleRate,
-                mismatch: audioContext.sampleRate !== 16000
-            });
-
-            if (audioContext.sampleRate !== 16000) {
-                console.warn('⚠️  Sample rate mismatch! Browser using', audioContext.sampleRate, 'Hz instead of 16000 Hz');
-            }
 
             const source = audioContext.createMediaStreamSource(stream);
             sourceRef.current = source;
@@ -196,13 +139,11 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
             // Start periodic streaming transcription if enabled
             if (enableStreamingRef.current) {
-                console.log(`[Streaming] Starting periodic transcription every ${streamingIntervalMsRef.current}ms`);
                 streamingIntervalRef.current = setInterval(async () => {
                     const currentLength = audioBufferRef.current.length;
                     // Only transcribe if we have new audio (at least 2 seconds more than last time)
                     const newSamples = currentLength - lastStreamingLengthRef.current;
                     if (newSamples >= 32000 && isRecordingRef.current) {
-                        console.log(`[Streaming] Sending ${currentLength} samples for partial transcription`);
                         try {
                             // Send ALL accumulated audio for better context
                             await transcribeStreaming([...audioBufferRef.current]);
@@ -261,8 +202,6 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
     }, []);
 
     const stopRecording = useCallback(async (): Promise<TranscriptionResult | null> => {
-        const frontendStartTime = performance.now();
-
         // Clear any pending silence timeout
         if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
@@ -271,7 +210,6 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
         // Clear streaming transcription interval
         if (streamingIntervalRef.current) {
-            console.log('[Streaming] Stopping periodic transcription');
             clearInterval(streamingIntervalRef.current);
             streamingIntervalRef.current = null;
         }
@@ -295,10 +233,7 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
         // Final transcription
         if (audioBufferRef.current.length > 0) {
             try {
-                console.log('🎯 Starting final transcription...');
                 const result = await transcribeAudio(audioBufferRef.current);
-                const frontendDuration = performance.now() - frontendStartTime;
-                console.log(`⚡ Total frontend time: ${frontendDuration.toFixed(2)}ms (includes Rust time: ${result.duration_ms.toFixed(2)}ms)`);
                 return result;
             } catch (e) {
                 console.error("Transcription failed", e);
@@ -310,7 +245,6 @@ export function useAudioRecorder(options?: AudioRecorderOptions) {
 
     // Allow setting the auto-stop callback from outside
     const setAutoStopCallback = useCallback((callback: (() => void) | null) => {
-        console.log('[useAudioRecorder] ✓ Auto-stop callback set:', callback ? 'function' : 'null');
         autoStopCallbackRef.current = callback;
     }, []);
 

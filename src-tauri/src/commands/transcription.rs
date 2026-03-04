@@ -86,7 +86,7 @@ pub async fn update_vad_settings(
 pub async fn transcribe_audio(
     audio_buffer: Vec<f32>,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
 ) -> Result<TranscriptionResult, String> {
     let sample_count = audio_buffer.len();
     log::info!("Transcribing audio buffer: {} samples ({:.1}s)",
@@ -94,27 +94,6 @@ pub async fn transcribe_audio(
 
     // Signal streaming transcription to not start new work
     state.final_pending.store(true, Ordering::SeqCst);
-
-    // --- START DEBUG BLOCK ---
-    if let Ok(app_dir) = app.path().app_data_dir() {
-        let debug_path = app_dir.join("debug_recording.wav");
-        let spec = hound::WavSpec {
-            channels: 1,
-            sample_rate: 16000,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-
-        if let Ok(mut writer) = hound::WavWriter::create(&debug_path, spec) {
-            for &sample in &audio_buffer {
-                let amplitude = (sample * i16::MAX as f32) as i16;
-                writer.write_sample(amplitude).ok();
-            }
-            writer.finalize().ok();
-            log::info!("Saved debug audio to: {:?}", debug_path);
-        }
-    }
-    // --- END DEBUG BLOCK ---
 
     let wait_start = std::time::Instant::now();
 

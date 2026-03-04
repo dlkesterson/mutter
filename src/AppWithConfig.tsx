@@ -26,23 +26,12 @@ export function AppWithConfig() {
 
 			try {
 				setMigrationState('migrating');
-				console.log('📦 Migrating settings from IndexedDB to file-based config...');
-
-				// Run migration
-				const result = await migrateFromIndexedDB();
-
-				console.log('✅ Migration complete:', {
-					settingsKeys: Object.keys(result.settings),
-					hasCredentials: !!result.credentials.ai_providers.claude.api_key ||
-						!!result.credentials.ai_providers.openai.api_key,
-					stateKeys: Object.keys(result.state),
-				});
+				await migrateFromIndexedDB();
 
 				// Mark migration as complete
 				localStorage.setItem('config_migrated_v1', 'true');
 				setMigrationState('complete');
 			} catch (err) {
-				console.error('❌ Migration failed:', err);
 				setError(err instanceof Error ? err.message : String(err));
 				setMigrationState('error');
 

@@ -82,20 +82,10 @@ export function TextCleanupDialog({
 			timeoutMs,
 		);
 
-		console.log(
-			'[TextCleanup] Starting cleanup with timeout:',
-			timeoutMs,
-			'ms, provider:',
-			provider,
-		);
 		const cleanupResult = await cleanupText(
 			text,
 			{ removeFillers, addStructure },
 			llmSettings,
-		);
-		console.log(
-			'[TextCleanup] Cleanup complete:',
-			cleanupResult.error || 'success',
 		);
 
 		setResult(cleanupResult);

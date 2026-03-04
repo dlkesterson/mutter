@@ -154,30 +154,25 @@ function App() {
 		if (isQuickCapture) return; // Skip initialization in quick-capture mode
 		// Initialize app on startup
 		const initialize = async () => {
-			console.time('[App] initialize total');
 			try {
 				// Register global hotkey
 				try {
 					await invoke('register_global_hotkey', {
 						shortcut: 'CommandOrControl+Shift+Space',
 					});
-				} catch (e) {
-					console.error('Failed to register hotkey', e);
+				} catch {
+					// Hotkey registration can fail on some platforms
 				}
 
 				setIsInitialized(true);
-				console.timeEnd('[App] initialize total');
 
 				// Restore last opened file
-				console.time('[App] restore last file');
 				const lastFile =
 					await getStorageItem<string>('last_opened_file');
 				if (lastFile) {
 					handleFileSelect(lastFile);
 				}
-				console.timeEnd('[App] restore last file');
 			} catch (error) {
-				console.timeEnd('[App] initialize total');
 				console.error('Failed to initialize:', error);
 				setIsInitialized(true);
 			}
@@ -212,40 +207,23 @@ function App() {
 		const checkModel = async () => {
 			try {
 				const hasModel = await hasLoadedModel();
-
-				if (hasModel) {
-					console.log(
-						'[Model Check] Whisper model is loaded and ready',
-					);
-					return;
-				}
+				if (hasModel) return;
 
 				const savedModelId = await getStorageItem<string>(
 					'selected_whisper_model',
 				);
 
 				if (savedModelId) {
-					console.log(
-						`[Model Check] Attempting to load saved model: ${savedModelId}`,
-					);
 					try {
 						await loadWhisperModel(savedModelId);
-						console.log(
-							`[Model Check] Successfully loaded saved model: ${savedModelId}`,
-						);
 						return;
-					} catch (loadError) {
-						console.error(
-							`[Model Check] Failed to load saved model ${savedModelId}:`,
-							loadError,
-						);
+					} catch {
+						// Saved model failed to load — fall through to selector
 					}
 				}
 
-				console.log('[Model Check] No model loaded, opening selector');
 				setModelSelectorOpen(true);
-			} catch (err) {
-				console.error('Failed to check model status:', err);
+			} catch {
 				setModelSelectorOpen(true);
 			}
 		};

@@ -87,9 +87,6 @@ export function Sidebar({
 			loadFileTree(vaultPath);
 
 			invoke('start_vault_watcher', { vaultPath })
-				.then(() => {
-					console.log('File watcher started for:', vaultPath);
-				})
 				.catch((error) => {
 					console.error('Failed to start file watcher:', error);
 				});
@@ -115,7 +112,6 @@ export function Sidebar({
 		if (!vaultPath) return;
 
 		const unlisten = listen('vault-changed', () => {
-			console.log('Vault structure changed, reloading file tree');
 			loadFileTree(vaultPath);
 		});
 
@@ -142,16 +138,12 @@ export function Sidebar({
 
 	const loadFileTree = async (path: string) => {
 		setIsLoading(true);
-		console.time('[Sidebar] loadFileTree');
 		try {
 			const nodes = await invoke<FileNode[]>('get_file_tree', {
 				vaultPath: path,
 			});
-			console.timeEnd('[Sidebar] loadFileTree');
-			console.log(`[Sidebar] File tree loaded: ${countNodes(nodes)} nodes`);
 			setFileTree(nodes);
 		} catch (error) {
-			console.timeEnd('[Sidebar] loadFileTree');
 			console.error('Failed to load file tree:', error);
 		} finally {
 			setIsLoading(false);
