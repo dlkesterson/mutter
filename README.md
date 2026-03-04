@@ -4,9 +4,8 @@ Most markdown editors expect your hands on the keyboard 100% of the time. **Mutt
 
 It's built with a Rust backend (Tauri v2) to keep things fast and runs Whisper models locally via whisper.cpp, so your voice data never leaves your machine.
 
-<!-- Replace these src URLs with GitHub asset URLs after uploading via a GitHub issue -->
 <p align="center">
-  <video src="demo-assets/videos/demo-editing.webm" width="720" autoplay loop muted playsinline>
+  <video src="https://github.com/user-attachments/assets/0f5d7bd1-926a-4e6d-bc30-fe1702aaede5" width="720" autoplay loop muted playsinline>
     Your browser does not support video. <a href="demo-assets/videos/demo-editing.webm">Watch the editing demo</a>.
   </video>
 </p>
@@ -24,7 +23,7 @@ I built this because I found myself constantly breaking my flow to toggle format
 ## Features
 
 <p align="center">
-  <video src="demo-assets/videos/demo-voice.webm" width="720" autoplay loop muted playsinline>
+  <video src="https://github.com/user-attachments/assets/ebd6be6b-e696-4929-9f61-5ffaf78b5193" width="720" autoplay loop muted playsinline>
     Your browser does not support video. <a href="demo-assets/videos/demo-voice.webm">Watch the voice dictation demo</a>.
   </video>
 </p>
