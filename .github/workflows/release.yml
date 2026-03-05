@@ -129,6 +129,7 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
