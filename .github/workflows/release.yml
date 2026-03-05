@@ -80,7 +80,7 @@ jobs:
           fi
 
   build:
-    name: Build (${{ matrix.platform }})
+    name: Build (${{ matrix.name }})
     needs: [lint, test, version]
     if: needs.version.outputs.tag_exists == 'false'
     permissions:
@@ -89,13 +89,17 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - platform: ubuntu-22.04
+          - name: linux
+            platform: ubuntu-22.04
             target: ''
-          - platform: windows-latest
+          - name: windows
+            platform: windows-latest
             target: ''
-          - platform: macos-latest
+          - name: macos-arm64
+            platform: macos-latest
             target: aarch64-apple-darwin
-          - platform: macos-latest
+          - name: macos-x64
+            platform: macos-latest
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.platform }}
     steps:
@@ -123,17 +127,9 @@ jobs:
 
       - name: Configure whisper.cpp build flags (macOS)
         if: matrix.platform == 'macos-latest'
-        env:
-          TARGET: ${{ matrix.target }}
         run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
-          if [ "$TARGET" = "x86_64-apple-darwin" ]; then
-            echo "CMAKE_C_FLAGS=-march=x86-64" >> "$GITHUB_ENV"
-            echo "CMAKE_CXX_FLAGS=-march=x86-64" >> "$GITHUB_ENV"
-          else
-            echo "CMAKE_C_FLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
-            echo "CMAKE_CXX_FLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
-          fi
 
       - uses: pnpm/action-setup@v4
 
