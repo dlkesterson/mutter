@@ -258,12 +258,7 @@ function App() {
 	// Handle keyboard shortcuts for dialogs and tabs
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
-				e.preventDefault();
-				setOpenDialog('files');
-			}
-			// Ctrl+P opens file navigator (quick switcher)
-			if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+			if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'p')) {
 				e.preventDefault();
 				setOpenDialog('files');
 			}
