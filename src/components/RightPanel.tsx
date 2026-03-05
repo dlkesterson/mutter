@@ -10,7 +10,6 @@ import {
 	List,
 	Link,
 	GitBranch,
-	HelpCircle,
 	Sparkles,
 } from 'lucide-react';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
@@ -31,7 +30,6 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 
 const FOOTER_ITEMS: ActivityBarItem[] = [
 	{ id: 'clean-up-text', icon: <Sparkles size={20} />, label: 'Clean Up Text' },
-	{ id: 'commands-help', icon: <HelpCircle size={20} />, label: 'Commands & Shortcuts' },
 ];
 
 const PANEL_MIN_WIDTH = 180;
@@ -49,8 +47,6 @@ export interface RightPanelProps {
 	availableTabs?: RightPanelTab[];
 	/** Callback for cleanup-text action */
 	onCleanupText?: () => void;
-	/** Callback for commands/help action */
-	onOpenHelp?: () => void;
 }
 
 export function RightPanel({
@@ -59,7 +55,6 @@ export function RightPanel({
 	children,
 	availableTabs = ['outline', 'backlinks', 'graph'],
 	onCleanupText,
-	onOpenHelp,
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
@@ -89,11 +84,6 @@ export function RightPanel({
 			onCleanupText?.();
 			return;
 		}
-		if (id === 'commands-help') {
-			onOpenHelp?.();
-			return;
-		}
-
 		const tabId = id as RightPanelTab;
 		// Toggle: if already active, collapse; otherwise activate
 		if (activeTab === tabId) {

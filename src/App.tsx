@@ -9,7 +9,6 @@ import { useVoicePipeline } from './hooks/useVoicePipeline';
 import Editor from './components/Editor';
 import type { EditorHandle } from './components/Editor';
 import { ImageViewer } from './components/ImageViewer';
-import { Omnibox } from './components/Omnibox';
 import { isImageFile } from './utils/fileTypes';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { FileNavigatorDialog } from './components/dialogs/file-navigator-dialog';
@@ -263,6 +262,11 @@ function App() {
 				e.preventDefault();
 				setOpenDialog('files');
 			}
+			// Ctrl+P opens file navigator (quick switcher)
+			if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+				e.preventDefault();
+				setOpenDialog('files');
+			}
 			if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
 				e.preventDefault();
 				if (activeTabId) {
@@ -440,12 +444,6 @@ function App() {
 								filePath={currentFile}
 								isRecording={audioState === 'listening'}
 								isDirty={activeTab?.isDirty}
-							/>
-
-							<Omnibox
-								onDialogOpen={setOpenDialog}
-								isListening={audioState === 'listening'}
-								onToggleListening={toggleListening}
 							/>
 
 							{voiceEnabled && (
