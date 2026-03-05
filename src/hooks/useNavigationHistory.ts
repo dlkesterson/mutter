@@ -6,14 +6,14 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { emitMutterEvent } from '../events';
 
 interface NavigationHistoryOptions {
     maxHistorySize?: number;
+    onNavigate?: (path: string) => void;
 }
 
 export function useNavigationHistory(options: NavigationHistoryOptions = {}) {
-    const { maxHistorySize = 50 } = options;
+    const { maxHistorySize = 50, onNavigate: onNavigateCb } = options;
 
     // History is an array of file paths
     const [history, setHistory] = useState<string[]>([]);
@@ -122,7 +122,7 @@ export function useNavigationHistory(options: NavigationHistoryOptions = {}) {
                 e.preventDefault();
                 const path = goBack();
                 if (path) {
-                    emitMutterEvent('mutter:navigate-history', { path, direction: 'back' });
+                    onNavigateCb?.(path);
                 }
             }
             // Alt+Right for forward
@@ -130,14 +130,14 @@ export function useNavigationHistory(options: NavigationHistoryOptions = {}) {
                 e.preventDefault();
                 const path = goForward();
                 if (path) {
-                    emitMutterEvent('mutter:navigate-history', { path, direction: 'forward' });
+                    onNavigateCb?.(path);
                 }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [goBack, goForward]);
+    }, [goBack, goForward, onNavigateCb]);
 
     return {
         history,

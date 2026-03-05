@@ -2,11 +2,9 @@
  * Dialog Manager Hook
  *
  * Manages dialog/panel open state extracted from App.tsx.
- * Listens for mutter:open-dialog and mutter:open-settings events.
  */
 
-import { useState } from 'react';
-import { useMutterEvent } from '../events';
+import { useState, useCallback } from 'react';
 import type { RightPanelTab } from '../components/RightPanel';
 
 export type DialogType =
@@ -27,37 +25,10 @@ export function useDialogManager() {
 	} | null>(null);
 	const [rightPanel, setRightPanel] = useState<RightPanelTab | null>(null);
 
-	// Listen for dialog/panel open events from voice commands and Editor
-	useMutterEvent('mutter:open-dialog', (detail) => {
-		const { dialog } = detail;
-
-		switch (dialog) {
-			case 'ai-query':
-			case 'query':
-			case 'search':
-				// Search panel removed from right panel; no-op
-				break;
-			case 'backlinks':
-				setRightPanel('backlinks');
-				break;
-			case 'insert-embed':
-				break;
-			case 'text-cleanup':
-				setTextCleanupData({
-					text: (detail as any).text || '',
-					selectionRange: (detail as any).selectionRange || null,
-				});
-				setOpenDialog('text-cleanup');
-				break;
-			default:
-				break;
-		}
-	});
-
-	// Listen for settings open events
-	useMutterEvent('mutter:open-settings', () => {
-		setOpenDialog('settings');
-	});
+	const openTextCleanup = useCallback((data: { text: string; selectionRange: { from: number; to: number } | null }) => {
+		setTextCleanupData(data);
+		setOpenDialog('text-cleanup');
+	}, []);
 
 	return {
 		openDialog,
@@ -72,5 +43,6 @@ export function useDialogManager() {
 		setTextCleanupData,
 		rightPanel,
 		setRightPanel,
+		openTextCleanup,
 	};
 }

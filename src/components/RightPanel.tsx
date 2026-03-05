@@ -13,7 +13,6 @@ import {
 	HelpCircle,
 	Sparkles,
 } from 'lucide-react';
-import { emitMutterEvent } from '@/events';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
 export type RightPanelTab = 'outline' | 'backlinks' | 'graph';
@@ -48,6 +47,10 @@ export interface RightPanelProps {
 	children: ReactNode;
 	/** Available tabs (some may be hidden based on context) */
 	availableTabs?: RightPanelTab[];
+	/** Callback for cleanup-text action */
+	onCleanupText?: () => void;
+	/** Callback for commands/help action */
+	onOpenHelp?: () => void;
 }
 
 export function RightPanel({
@@ -55,6 +58,8 @@ export function RightPanel({
 	onTabChange,
 	children,
 	availableTabs = ['outline', 'backlinks', 'graph'],
+	onCleanupText,
+	onOpenHelp,
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
@@ -81,11 +86,11 @@ export function RightPanel({
 	const handleActivityBarClick = (id: string) => {
 		// Handle footer items (actions, not panel tabs)
 		if (id === 'clean-up-text') {
-			emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
+			onCleanupText?.();
 			return;
 		}
 		if (id === 'commands-help') {
-			emitMutterEvent('mutter:open-dialog', { dialog: 'commands' });
+			onOpenHelp?.();
 			return;
 		}
 

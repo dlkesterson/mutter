@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { EditorView, keymap } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
 import { basicSetup } from 'codemirror';
@@ -9,7 +9,7 @@ import { readTextFile, writeTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { showMinimap } from '@replit/codemirror-minimap';
-import { livePreviewPlugin, cursorPosField } from '../editor/livePreview';
+import { createLivePreviewPlugin, cursorPosField } from '../editor/livePreview';
 import { editorThemeExtension } from '../editor/theme';
 import { executeCommand } from '../editor/commands';
 import { flashEffect, addFlash } from '../editor/flashEffect';
@@ -27,7 +27,6 @@ import { extractBlocks, findBlockById } from '../editor/blockIds';
 import { transclusionExtension } from '../editor/transclusionExtension';
 import { pasteImageExtension } from '../editor/pasteImageExtension';
 import '../editor/transclusion.css';
-import { emitMutterEvent, useMutterEvent } from '../events';
 import { useToast } from '../hooks/use-toast';
 import { useEditorContextSync } from '../hooks/useEditorContextSync';
 import { useVaultMetadata } from '../context/VaultMetadataContext';
@@ -40,6 +39,15 @@ const FONT_SIZE_MAP: Record<string, string> = {
 	'20': '1.25rem',
 	'22': '1.375rem',
 };
+
+export interface EditorHandle {
+	insertText(text: string): void;
+	scrollToLine(line: number): void;
+	applyTextCleanup(cleanedText: string, range: { from: number; to: number } | null): void;
+	getCleanupData(): { text: string; selectionRange: { from: number; to: number } | null } | null;
+	setMinimapEnabled(enabled: boolean): void;
+	setFontSize(size: string): void;
+}
 
 interface EditorProps {
 	filePath: string | null;
@@ -61,7 +69,7 @@ interface PartialTranscription {
 	timestamp: number;
 }
 
-export default function Editor({
+const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({
 	filePath,
 	audioState: _audioState,
 	onContentSaved,
@@ -70,7 +78,7 @@ export default function Editor({
 	noteId,
 	vaultPath,
 	onNavigate,
-}: EditorProps) {
+}, ref) {
 	const { toast } = useToast();
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
@@ -238,17 +246,6 @@ export default function Editor({
 		});
 	}, [editorFontSize]);
 
-	// Listen for minimap toggle from settings
-	useMutterEvent('mutter:toggle-minimap', ({ enabled }) => {
-		setMinimapEnabled(enabled);
-		setStorageItem('minimap_enabled', enabled);
-	});
-
-	// Listen for font size changes from settings
-	useMutterEvent('mutter:update-editor-font-size', ({ size }) => {
-		setEditorFontSize(size);
-	});
-
 	// Listen for partial transcription events (Ghost Text)
 	useEffect(() => {
 		const unlisten = listen<PartialTranscription>(
@@ -317,82 +314,58 @@ export default function Editor({
 		});
 	};
 
-	// Listen for transcription results from voice pipeline
-	useMutterEvent('mutter:transcription-result', ({ text }) => {
-		handleTranscription(text);
-	});
-
-	// Listen for command execution events (keyboard shortcuts, etc.)
-	useMutterEvent('mutter:execute-command', ({ command }) => {
-		if (!viewRef.current) return;
-
-		switch (command) {
-			case 'insert-embed':
-				emitMutterEvent('mutter:open-dialog', { dialog: 'insert-embed' });
-				break;
-			case 'cleanup-text': {
-				const view = viewRef.current;
-				const selection = view.state.selection.main;
-				const hasSelection = selection.from !== selection.to;
-				const textToClean = hasSelection
-					? view.state.doc.sliceString(selection.from, selection.to)
-					: view.state.doc.toString();
-				const range = hasSelection
-					? { from: selection.from, to: selection.to }
-					: null;
-
-				emitMutterEvent('mutter:open-dialog', {
-					dialog: 'text-cleanup',
-					text: textToClean,
-					selectionRange: range,
+	// Expose imperative methods to parent via ref
+	useImperativeHandle(ref, () => ({
+		insertText(text: string) {
+			handleTranscription(text);
+		},
+		scrollToLine(line: number) {
+			if (!viewRef.current) return;
+			const doc = viewRef.current.state.doc;
+			const lineNumber = Math.max(1, Math.min(line, doc.lines));
+			const lineInfo = doc.line(lineNumber);
+			viewRef.current.dispatch({
+				selection: { anchor: lineInfo.from },
+				effects: EditorView.scrollIntoView(lineInfo.from, { y: 'start' }),
+			});
+			viewRef.current.focus();
+		},
+		applyTextCleanup(cleanedText: string, range: { from: number; to: number } | null) {
+			if (!viewRef.current) return;
+			const view = viewRef.current;
+			if (range) {
+				view.dispatch({
+					changes: { from: range.from, to: range.to, insert: cleanedText },
 				});
-				break;
+			} else {
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: cleanedText },
+				});
 			}
-			default:
-				break;
-		}
-	}, [noteId]);
-
-	// Listen for scroll-to-line events from OutlinePanel
-	useMutterEvent('mutter:scroll-to-line', ({ line }) => {
-		if (!viewRef.current) return;
-
-		const doc = viewRef.current.state.doc;
-		const lineNumber = Math.max(1, Math.min(line, doc.lines));
-		const lineInfo = doc.line(lineNumber);
-
-		viewRef.current.dispatch({
-			selection: { anchor: lineInfo.from },
-			effects: EditorView.scrollIntoView(lineInfo.from, { y: 'start' }),
-		});
-
-		viewRef.current.focus();
-	});
-
-	// Listen for text cleanup apply events
-	useMutterEvent('mutter:apply-text-cleanup', ({ cleanedText, range }) => {
-		if (!viewRef.current) return;
-		const view = viewRef.current;
-
-		if (range) {
-			view.dispatch({
-				changes: { from: range.from, to: range.to, insert: cleanedText },
-			});
-		} else {
-			view.dispatch({
-				changes: { from: 0, to: view.state.doc.length, insert: cleanedText },
-			});
-		}
-
-		view.focus();
-	});
-
-	// Listen for wiki link navigation events from livePreview
-	useMutterEvent('mutter:navigate-wikilink', ({ target, blockId, newTab }) => {
-		if (onNavigate) {
-			onNavigate(target, blockId, newTab);
-		}
-	}, [onNavigate]);
+			view.focus();
+		},
+		getCleanupData() {
+			if (!viewRef.current) return null;
+			const view = viewRef.current;
+			const selection = view.state.selection.main;
+			const hasSelection = selection.from !== selection.to;
+			return {
+				text: hasSelection
+					? view.state.doc.sliceString(selection.from, selection.to)
+					: view.state.doc.toString(),
+				selectionRange: hasSelection
+					? { from: selection.from, to: selection.to }
+					: null,
+			};
+		},
+		setMinimapEnabled(enabled: boolean) {
+			setMinimapEnabled(enabled);
+			setStorageItem('minimap_enabled', enabled);
+		},
+		setFontSize(size: string) {
+			setEditorFontSize(size);
+		},
+	}));
 
 	useEffect(() => {
 		if (!editorRef.current) return;
@@ -439,7 +412,11 @@ export default function Editor({
 					})
 				),
 				cursorPosField,
-				livePreviewPlugin,
+				createLivePreviewPlugin({
+					onNavigateWikilink: (target, blockId, newTab) => {
+						onNavigateRef.current?.(target, blockId, newTab);
+					},
+				}),
 				blockIdExtensionWithStyles,
 				flashEffect,
 				markdownAutoPairExtension,
@@ -758,4 +735,6 @@ export default function Editor({
 			)}
 		</div>
 	);
-}
+});
+
+export default Editor;

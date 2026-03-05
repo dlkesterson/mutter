@@ -1,6 +1,9 @@
 import { EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { StateField, Range } from '@codemirror/state';
-import { emitMutterEvent } from '../events';
+
+export interface LivePreviewConfig {
+	onNavigateWikilink?: (target: string, blockId: string | null, newTab: boolean) => void;
+}
 
 // Hoisted regex constants — avoid re-compilation on every line/cursor move.
 // These are /g regexes, so lastIndex must be reset before each use.
@@ -170,8 +173,9 @@ export const cursorPosField = StateField.define<number>({
     },
 });
 
-// Live preview plugin - hides markdown syntax when cursor is not inside
-export const livePreviewPlugin = ViewPlugin.fromClass(
+// Live preview plugin factory - hides markdown syntax when cursor is not inside
+function createLivePreviewPlugin(config: LivePreviewConfig = {}) {
+    return ViewPlugin.fromClass(
     class {
         decorations: DecorationSet;
         view: EditorView;
@@ -223,8 +227,7 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
                     // Ctrl+click (or Cmd+click on Mac) opens in new tab
                     const newTab = e.ctrlKey || e.metaKey;
 
-                    // Dispatch custom event for the Editor to handle navigation
-                    emitMutterEvent('mutter:navigate-wikilink', { target: linkTarget, blockId, newTab });
+                    config.onNavigateWikilink?.(linkTarget, blockId, newTab);
                 }
             }
         }
@@ -444,6 +447,12 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
         decorations: (v) => v.decorations,
     }
 ).extension;
+}
+
+// Default static export for backward compatibility
+export const livePreviewPlugin = createLivePreviewPlugin();
+
+export { createLivePreviewPlugin };
 
 // Ensure cursor tracking field is included
 export const livePreviewExtension = [cursorPosField, livePreviewPlugin];

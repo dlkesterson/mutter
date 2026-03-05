@@ -6,7 +6,6 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { emitMutterEvent, useMutterEvent } from '../events';
 import { hasLoadedModel } from '../services/whisper';
 import { useAudioRecorder } from './useAudioRecorder';
 import { useToast } from './use-toast';
@@ -17,9 +16,10 @@ export type AudioState = 'idle' | 'listening' | 'processing' | 'executing';
 
 interface UseVoicePipelineOptions {
 	onModelSelectorOpen: () => void;
+	onTranscriptionResult: (text: string) => void;
 }
 
-export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOptions) {
+export function useVoicePipeline({ onModelSelectorOpen, onTranscriptionResult }: UseVoicePipelineOptions) {
 	const { toast } = useToast();
 
 	const [audioState, setAudioState] = useState<AudioState>('idle');
@@ -44,10 +44,6 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 	useEffect(() => {
 		loadVoiceSettings();
 	}, [loadVoiceSettings]);
-
-	useMutterEvent('mutter:voice-settings-changed', () => {
-		loadVoiceSettings();
-	});
 
 	const {
 		startRecording,
@@ -86,9 +82,7 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 				const result = await stopRecording();
 				if (result) {
 					setAudioState('executing');
-					emitMutterEvent('mutter:transcription-result', {
-						text: result.text,
-					});
+					onTranscriptionResult(result.text);
 					addVoiceLogEntry(result.text);
 				}
 			} catch (error) {
@@ -119,9 +113,7 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 						const result = await stopRecording();
 						if (result) {
 							setAudioState('executing');
-							emitMutterEvent('mutter:transcription-result', {
-								text: result.text,
-							});
+							onTranscriptionResult(result.text);
 						addVoiceLogEntry(result.text);
 						}
 					} catch (error) {
@@ -148,6 +140,7 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 		addVoiceLogEntry,
 		toast,
 		onModelSelectorOpen,
+		onTranscriptionResult,
 	]);
 
 	return {
@@ -157,5 +150,6 @@ export function useVoicePipeline({ onModelSelectorOpen }: UseVoicePipelineOption
 		voiceEnabled,
 		recentAudioSamples,
 		toggleListening,
+		reloadVoiceSettings: loadVoiceSettings,
 	};
 }
