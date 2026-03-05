@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/select';
 import { useTheme } from '@/components/ThemeProvider';
 import { getStorageItem, setStorageItem } from '@/utils/storage';
-import { emitMutterEvent } from '@/events';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useSettings, useCredentials } from '@/lib/settings';
 import {
@@ -26,9 +25,12 @@ import {
 interface SettingsDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	onMinimapToggle?: (enabled: boolean) => void;
+	onFontSizeChange?: (size: string) => void;
+	onVoiceSettingsChanged?: () => void;
 }
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({ open, onOpenChange, onMinimapToggle, onFontSizeChange, onVoiceSettingsChanged }: SettingsDialogProps) {
 	const { theme, setTheme } = useTheme();
 	const [fontSize, setFontSize] = useState('16');
 	const { profile, setExpertiseLevel } = useUserProfile();
@@ -129,7 +131,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 								onValueChange={async (val) => {
 									setFontSize(val);
 									await setStorageItem('editor_font_size', val);
-									emitMutterEvent('mutter:update-editor-font-size', { size: val });
+									onFontSizeChange?.(val);
 								}}
 							>
 								<SelectTrigger
@@ -158,7 +160,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 									type='checkbox'
 									defaultChecked
 									onChange={(e) => {
-										emitMutterEvent('mutter:toggle-minimap', { enabled: e.target.checked });
+										onMinimapToggle?.(e.target.checked);
 									}}
 									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
 								/>
@@ -213,8 +215,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 										const enabled = e.target.checked;
 										setVoiceEnabled(enabled);
 										setStorageItem('voice_enabled', enabled);
-										// Notify App.tsx to update voice UI visibility
-										emitMutterEvent('mutter:voice-settings-changed');
+										onVoiceSettingsChanged?.();
 									}}
 									className='h-4 w-4 rounded border-primary text-primary focus:ring-primary accent-primary'
 								/>

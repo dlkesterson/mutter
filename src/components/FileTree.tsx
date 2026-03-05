@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FileNode } from '../types';
 import { ChevronRight, Folder, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useMutterEvent } from '@/events';
 import { ContextMenu, useContextMenu, contextMenuIcons } from './ContextMenu';
 import { invoke } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -15,6 +14,8 @@ interface FileTreeProps {
 	onFileTreeUpdate?: () => void;
 	className?: string;
 	activePath?: string | null;
+	revealPath?: string | null;
+	onRevealComplete?: () => void;
 }
 
 interface FileTreeNodeProps {
@@ -275,16 +276,20 @@ export const FileTree: React.FC<FileTreeProps> = ({
 	onFileTreeUpdate,
 	className,
 	activePath,
+	revealPath,
+	onRevealComplete,
 }) => {
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 	const [editingPath, setEditingPath] = useState<string | null>(null);
 	const [highlightedPath, setHighlightedPath] = useState<string | null>(null);
 	const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
 
-	// Listen for "reveal in explorer" events from tab context menu
-	useMutterEvent('mutter:reveal-in-explorer', ({ path }) => {
+	// Handle reveal-in-explorer requests from parent
+	useEffect(() => {
+		if (!revealPath) return;
+
 		// Expand parent folders to reveal the file
-		const parentFolders = getParentFolders(path);
+		const parentFolders = getParentFolders(revealPath);
 		setExpandedFolders(prev => {
 			const next = new Set(prev);
 			for (const folder of parentFolders) {
@@ -294,11 +299,11 @@ export const FileTree: React.FC<FileTreeProps> = ({
 		});
 
 		// Highlight the file briefly
-		setHighlightedPath(path);
+		setHighlightedPath(revealPath);
 
 		// Scroll to the element after a brief delay for expansion
 		setTimeout(() => {
-			const element = document.querySelector(`[data-file-path="${CSS.escape(path)}"]`);
+			const element = document.querySelector(`[data-file-path="${CSS.escape(revealPath)}"]`);
 			if (element) {
 				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 			}
@@ -308,7 +313,9 @@ export const FileTree: React.FC<FileTreeProps> = ({
 		setTimeout(() => {
 			setHighlightedPath(null);
 		}, 2000);
-	});
+
+		onRevealComplete?.();
+	}, [revealPath, onRevealComplete]);
 
 	// Auto-expand folders to show the active file
 	// This ensures when navigating via backlinks, quick switcher, or tabs,

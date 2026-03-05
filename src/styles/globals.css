@@ -1,4 +1,4 @@
-/* IBM Plex Fonts - Design System Typography (MUST come before Tailwind) */
+/* IBM Plex Fonts */
 @import '@fontsource/ibm-plex-sans/300.css'; /* Light */
 @import '@fontsource/ibm-plex-sans/400.css'; /* Regular */
 @import '@fontsource/ibm-plex-sans/500.css'; /* Medium */
@@ -219,7 +219,7 @@
 	--color-sidebar-border: hsl(var(--sidebar-border));
 	--color-sidebar-ring: hsl(var(--sidebar-ring));
 
-	/* Border Radius (minimal, 4-8px per design system) */
+	/* Border Radius */
 	--radius-sm: 4px;
 	--radius-md: 6px;
 	--radius-lg: 8px;
@@ -262,7 +262,7 @@
 	background-color: rgba(250, 204, 21, 0.3); /* yellow-400/30 */
 }
 
-/* Minimap Styles - Subtle, unobtrusive (Design System) */
+/* Minimap Styles */
 .cm-minimap {
 	position: absolute;
 	right: 0;
@@ -321,7 +321,6 @@
 }
 
 .cm-line {
-	/* Ensure line height matches design system */
 	line-height: var(--line-height-normal); /* 1.5 */
 }
 
@@ -394,7 +393,7 @@
 	opacity: 0.5;
 }
 
-/* Button Styles (Design System: Border-only, minimal) */
+/* Button Styles */
 .btn-rams {
 	/* Dieter Rams style: border-only, no fill */
 	border: 1px solid hsl(var(--border));

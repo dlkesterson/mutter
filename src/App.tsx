@@ -1,15 +1,14 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { FileText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { emitMutterEvent, useMutterEvent } from './events';
 import { hasLoadedModel, loadWhisperModel } from './services/whisper';
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import { useTabManager } from './hooks/useTabManager';
 import { useDialogManager } from './hooks/useDialogManager';
 import { useVoicePipeline } from './hooks/useVoicePipeline';
 import Editor from './components/Editor';
+import type { EditorHandle } from './components/Editor';
 import { ImageViewer } from './components/ImageViewer';
-import { Omnibox } from './components/Omnibox';
 import { isImageFile } from './utils/fileTypes';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { FileNavigatorDialog } from './components/dialogs/file-navigator-dialog';
@@ -21,6 +20,7 @@ import { Toaster } from './components/ui/toaster';
 import { getStorageItem, setStorageItem } from './utils/storage';
 import { QuickCapture } from './components/QuickCapture';
 import { Sidebar } from './components/Sidebar';
+import type { SidebarHandle } from './components/Sidebar';
 import { useVaultIndex } from '@/hooks/useVaultIndex';
 import { normalizePath } from '@/vault/vaultIndex';
 import { TabBar } from './components/TabBar';
@@ -35,9 +35,18 @@ import { TextCleanupDialog } from './components/dialogs/TextCleanupDialog';
 import { RightPanel } from './components/RightPanel';
 
 function App() {
-	// Navigation history
+	// Refs for imperative child APIs
+	const editorRef = useRef<EditorHandle>(null);
+	const sidebarRef = useRef<SidebarHandle>(null);
+
+	// Use a ref to break the circular dependency between useNavigationHistory and useTabManager
+	const handleFileSelectRef = useRef<(path: string, permanent?: boolean, isHistory?: boolean) => void>(null);
+
+	// Navigation history — keyboard shortcuts call handleFileSelectRef directly
 	const { canGoBack, canGoForward, recordNavigation, goBack, goForward } =
-		useNavigationHistory();
+		useNavigationHistory({
+			onNavigate: (path) => handleFileSelectRef.current?.(path, false, true),
+		});
 
 	// Tab management
 	const {
@@ -59,6 +68,11 @@ function App() {
 		handleTabDoubleClick,
 	} = useTabManager({ onNavigate: recordNavigation });
 
+	// Keep the ref in sync
+	useEffect(() => {
+		handleFileSelectRef.current = handleFileSelect;
+	}, [handleFileSelect]);
+
 	// Dialog/panel state
 	const {
 		openDialog,
@@ -73,7 +87,16 @@ function App() {
 		setTextCleanupData,
 		rightPanel,
 		setRightPanel,
+		openTextCleanup,
 	} = useDialogManager();
+
+	// Helper: open text cleanup dialog using editor state
+	const triggerTextCleanup = useCallback(() => {
+		const data = editorRef.current?.getCleanupData();
+		if (data) {
+			openTextCleanup(data);
+		}
+	}, [openTextCleanup]);
 
 	// Voice pipeline
 	const {
@@ -83,7 +106,11 @@ function App() {
 		voiceEnabled,
 		recentAudioSamples,
 		toggleListening,
-	} = useVoicePipeline({ onModelSelectorOpen: () => setModelSelectorOpen(true) });
+		reloadVoiceSettings,
+	} = useVoicePipeline({
+		onModelSelectorOpen: () => setModelSelectorOpen(true),
+		onTranscriptionResult: (text) => editorRef.current?.insertText(text),
+	});
 
 	const [vaultPath, setVaultPath] = useState<string | null>(null);
 	const [isInitialized, setIsInitialized] = useState(false);
@@ -91,11 +118,6 @@ function App() {
 
 	// Editor content for status bar and outline
 	const [editorContent, setEditorContent] = useState<string>('');
-
-	// Handle navigation history events (from keyboard shortcuts)
-	useMutterEvent('mutter:navigate-history', ({ path }) => {
-		handleFileSelect(path, false, true);
-	});
 
 	// Handle back/forward button clicks
 	const handleGoBack = useCallback(() => {
@@ -236,7 +258,7 @@ function App() {
 	// Handle keyboard shortcuts for dialogs and tabs
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+			if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'p')) {
 				e.preventDefault();
 				setOpenDialog('files');
 			}
@@ -250,7 +272,7 @@ function App() {
 			}
 			if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
 				e.preventDefault();
-				emitMutterEvent('mutter:create-note');
+				sidebarRef.current?.createNote();
 			}
 			if ((e.ctrlKey || e.metaKey) && e.key === ',') {
 				e.preventDefault();
@@ -262,7 +284,7 @@ function App() {
 				e.key.toLowerCase() === 'l'
 			) {
 				e.preventDefault();
-				emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
+				triggerTextCleanup();
 			}
 		};
 
@@ -301,7 +323,7 @@ function App() {
 						onCloseAll={handleCloseAll}
 						onTogglePin={handleTogglePin}
 						onRevealInExplorer={(path) => {
-							emitMutterEvent('mutter:reveal-in-explorer', { path });
+							sidebarRef.current?.revealInExplorer(path);
 						}}
 						canGoBack={canGoBack}
 						canGoForward={canGoForward}
@@ -312,6 +334,7 @@ function App() {
 					{/* Main content area with sidebars */}
 					<div className='flex flex-1 overflow-hidden'>
 						<Sidebar
+							ref={sidebarRef}
 							activePath={currentFile}
 							onFileSelect={handleFileSelect}
 							onOpenInNewTab={handleOpenInNewTab}
@@ -351,6 +374,7 @@ function App() {
 							) : (
 								<>
 									<Editor
+										ref={editorRef}
 										filePath={currentFile}
 										audioState={audioState}
 										onContentSaved={(content) =>
@@ -417,12 +441,6 @@ function App() {
 								isDirty={activeTab?.isDirty}
 							/>
 
-							<Omnibox
-								onDialogOpen={setOpenDialog}
-								isListening={audioState === 'listening'}
-								onToggleListening={toggleListening}
-							/>
-
 							{voiceEnabled && (
 								<VoiceIndicator
 									state={audioState}
@@ -441,12 +459,13 @@ function App() {
 						<RightPanel
 							activeTab={rightPanel}
 							onTabChange={setRightPanel}
+							onCleanupText={triggerTextCleanup}
 						>
 							{rightPanel === 'outline' && (
 								<OutlinePanel
 									content={editorContent}
-									onNavigate={(line, from) => {
-										emitMutterEvent('mutter:scroll-to-line', { line, from });
+									onNavigate={(line) => {
+										editorRef.current?.scrollToLine(line);
 									}}
 								/>
 							)}
@@ -491,6 +510,9 @@ function App() {
 					<SettingsDialog
 						open={openDialog === 'settings'}
 						onOpenChange={(open) => !open && setOpenDialog(null)}
+						onMinimapToggle={(enabled) => editorRef.current?.setMinimapEnabled(enabled)}
+						onFontSizeChange={(size) => editorRef.current?.setFontSize(size)}
+						onVoiceSettingsChanged={reloadVoiceSettings}
 					/>
 					{textCleanupData && (
 						<TextCleanupDialog
@@ -504,7 +526,7 @@ function App() {
 							text={textCleanupData.text}
 							selectionRange={textCleanupData.selectionRange}
 							onApply={(cleanedText, range) => {
-								emitMutterEvent('mutter:apply-text-cleanup', { cleanedText, range });
+								editorRef.current?.applyTextCleanup(cleanedText, range);
 							}}
 						/>
 					)}

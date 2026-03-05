@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { useMutterEvent } from '@/events';
 import { FileTree } from './FileTree';
 import { LEDMatrix } from './LEDMatrix';
 import { FileNode, SearchResult } from '@/types';
@@ -20,6 +19,11 @@ import {
 } from 'lucide-react';
 
 export type LeftPanelTab = 'files' | 'search';
+
+export interface SidebarHandle {
+	createNote(): void;
+	revealInExplorer(path: string): void;
+}
 
 interface SidebarProps {
 	activePath: string | null;
@@ -50,7 +54,7 @@ const PANEL_MIN_WIDTH = 150;
 const PANEL_MAX_WIDTH = 500;
 const PANEL_DEFAULT_WIDTH = 220;
 
-export function Sidebar({
+export const Sidebar = forwardRef<SidebarHandle, SidebarProps>(function Sidebar({
 	activePath,
 	onFileSelect,
 	onOpenInNewTab,
@@ -62,7 +66,7 @@ export function Sidebar({
 	activeNoteId: _activeNoteId,
 	audioSamples = [],
 	isRecording = false,
-}: SidebarProps) {
+}, ref) {
 	// Panel state
 	const [activeTab, setActiveTab] = useState<LeftPanelTab | null>('files');
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
@@ -120,11 +124,19 @@ export function Sidebar({
 		};
 	}, [vaultPath]);
 
-	useMutterEvent('mutter:create-note', () => {
-		if (vaultPath) {
-			handleCreateNote();
-		}
-	}, [vaultPath]);
+	// Reveal-in-explorer state (passed to FileTree)
+	const [revealPath, setRevealPath] = useState<string | null>(null);
+
+	useImperativeHandle(ref, () => ({
+		createNote() {
+			if (vaultPath) {
+				handleCreateNote();
+			}
+		},
+		revealInExplorer(path: string) {
+			setRevealPath(path);
+		},
+	}));
 
 	const loadVaultPath = async () => {
 		const path = await getStorageItem<string>('vault_path');
@@ -431,6 +443,8 @@ export function Sidebar({
 									onFileTreeUpdate={() => loadFileTree(vaultPath)}
 									className="h-full px-1 py-1"
 									activePath={activePath}
+									revealPath={revealPath}
+									onRevealComplete={() => setRevealPath(null)}
 								/>
 							</>
 						)}
@@ -448,4 +462,4 @@ export function Sidebar({
 			)}
 		</div>
 	);
-}
+});

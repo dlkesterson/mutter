@@ -10,10 +10,8 @@ import {
 	List,
 	Link,
 	GitBranch,
-	HelpCircle,
 	Sparkles,
 } from 'lucide-react';
-import { emitMutterEvent } from '@/events';
 import { ActivityBar, ACTIVITY_BAR_WIDTH, type ActivityBarItem } from '@/components/ui/activity-bar';
 
 export type RightPanelTab = 'outline' | 'backlinks' | 'graph';
@@ -32,7 +30,6 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
 
 const FOOTER_ITEMS: ActivityBarItem[] = [
 	{ id: 'clean-up-text', icon: <Sparkles size={20} />, label: 'Clean Up Text' },
-	{ id: 'commands-help', icon: <HelpCircle size={20} />, label: 'Commands & Shortcuts' },
 ];
 
 const PANEL_MIN_WIDTH = 180;
@@ -48,6 +45,8 @@ export interface RightPanelProps {
 	children: ReactNode;
 	/** Available tabs (some may be hidden based on context) */
 	availableTabs?: RightPanelTab[];
+	/** Callback for cleanup-text action */
+	onCleanupText?: () => void;
 }
 
 export function RightPanel({
@@ -55,6 +54,7 @@ export function RightPanel({
 	onTabChange,
 	children,
 	availableTabs = ['outline', 'backlinks', 'graph'],
+	onCleanupText,
 }: RightPanelProps) {
 	// Panel width state
 	const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
@@ -81,14 +81,9 @@ export function RightPanel({
 	const handleActivityBarClick = (id: string) => {
 		// Handle footer items (actions, not panel tabs)
 		if (id === 'clean-up-text') {
-			emitMutterEvent('mutter:execute-command', { command: 'cleanup-text' });
+			onCleanupText?.();
 			return;
 		}
-		if (id === 'commands-help') {
-			emitMutterEvent('mutter:open-dialog', { dialog: 'commands' });
-			return;
-		}
-
 		const tabId = id as RightPanelTab;
 		// Toggle: if already active, collapse; otherwise activate
 		if (activeTab === tabId) {
