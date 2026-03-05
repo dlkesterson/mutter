@@ -130,7 +130,13 @@ jobs:
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
-          echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
+          # GGML_NATIVE=OFF must reach cmake as -DGGML_NATIVE=OFF, but
+          # whisper-rs-sys only forwards CMAKE_* and WHISPER_* env vars.
+          # Workaround: use CMAKE_PROJECT_INCLUDE_BEFORE to inject a cmake
+          # file that force-sets the cache variable before whisper.cpp's
+          # option() processes it.
+          echo 'set(GGML_NATIVE OFF CACHE BOOL "" FORCE)' > /tmp/ggml-no-native.cmake
+          echo "CMAKE_PROJECT_INCLUDE_BEFORE=/tmp/ggml-no-native.cmake" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
 
